@@ -55,7 +55,8 @@ pub struct FerrumApp {
 /// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
 /// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
 /// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`),
-/// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`).
+/// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
+/// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -121,6 +122,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "diff" => out.push(Command::DevStep(DevStep::Diff(arg.into()))),
             "details" => out.push(details::dev_step(arg)),
             "flow" => out.extend(crate::flow::dev_steps(arg, tab)),
+            "gitflow" => out.extend(crate::ui::gitflow::dev_step(arg, tab)),
+            "bisect" => out.extend(crate::ui::bisect::dev_step(arg, tab)),
+            "patch" => out.extend(crate::ui::patches::dev_step(arg, tab)),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -410,6 +414,10 @@ impl FerrumApp {
                 }
             }
             JobOutput::OpenRepo(path) => self.open(path),
+            JobOutput::Clipboard(text) => {
+                self.ctx_handle().copy_text(text);
+                self.info(t!("Copied to the clipboard"));
+            }
             JobOutput::SubmodulesOutOfDate(list) => {
                 if tab == Some(self.active) {
                     self.ask_submodule_update(list);
@@ -844,6 +852,9 @@ impl FerrumApp {
                         cmds.run(Op::SubmoduleUpdate);
                         ui.close();
                     }
+                    ui.separator();
+                    crate::ui::gitflow::menu(ui, tab, cmds);
+                    crate::ui::patches::menu(ui, tab, cmds);
                 });
                 ui.separator();
                 if show(Tb::Branch)
@@ -1082,6 +1093,12 @@ impl eframe::App for FerrumApp {
             cmds.push(c);
         }
         self.shortcuts(&ctx, &mut cmds);
+        if self.dialog.is_none()
+            && let Some(tab) = self.tabs.get(self.active)
+        {
+            crate::ui::patches::dropped_files(&ctx, &mut cmds);
+            crate::ui::patches::paste(&ctx, tab, &mut cmds);
+        }
         crate::ui::diff_prefs::share_with_prefs(
             &ctx,
             &mut self.settings.diff,

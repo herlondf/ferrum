@@ -10,6 +10,7 @@ mod editing;
 mod extras;
 mod file_history;
 mod flow;
+mod fork_tools;
 mod history;
 mod local;
 mod main;
@@ -30,6 +31,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     extras::T,
     file_history::T,
     flow::T,
+    fork_tools::T,
     history::T,
     local::T,
     preferences::T,

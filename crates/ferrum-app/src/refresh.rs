@@ -144,6 +144,7 @@ impl RepoTab {
         swap(&mut self.head, &mut fresh.head);
         swap(&mut self.head_oid, &mut fresh.head_oid);
         swap(&mut self.state, &mut fresh.state);
+        swap(&mut self.bisect, &mut fresh.bisect);
         swap(&mut self.identity, &mut fresh.identity);
         swap(&mut self.status, &mut fresh.status);
         self.reload_change_diff();

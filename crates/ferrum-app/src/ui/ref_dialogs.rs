@@ -320,6 +320,7 @@ pub fn stash_menu(ui: &mut egui::Ui, tab: &RepoTab, s: &StashInfo, cmds: &mut Co
             }
             ui.close();
         }
+        crate::ui::patches::stash_menu(ui, s, cmds);
         if ui.button(t!("Drop…")).clicked() {
             let (r, m) = (s.refname(), &s.message);
             let text = t!("Delete {} ({})? This cannot be undone.", r, m);

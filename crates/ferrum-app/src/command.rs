@@ -264,6 +264,12 @@ pub enum Op {
     Refs(crate::ref_ops::RefOp),
     /// Merge, rebase, cherry-pick and conflict operations with options (see `flow.rs`).
     Flow(crate::flow::FlowOp),
+    /// Git-flow init, start and finish (see `ui::gitflow`).
+    GitFlow(crate::ui::gitflow::GitFlowOp),
+    /// Bisect start, marks and reset (see `ui::bisect`).
+    Bisect(crate::ui::bisect::BisectOp),
+    /// Creating and applying patches (see `ui::patches`).
+    Patch(crate::ui::patches::PatchOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -362,6 +368,9 @@ impl Op {
             }
             Op::Refs(r) => r.label(),
             Op::Flow(f) => f.label(),
+            Op::GitFlow(f) => f.label(),
+            Op::Bisect(b) => b.label(),
+            Op::Patch(p) => p.label(),
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -385,6 +394,7 @@ impl Op {
             Op::Flow(f) if f.status_only() => Refresh::Status,
             Op::CreatePullRequest { .. } => Refresh::None,
             Op::Part(p) => p.refresh(),
+            Op::Patch(p) => p.refresh(),
             _ => Refresh::All,
         }
     }
@@ -396,6 +406,7 @@ impl Op {
                 forge::create_pull_request(hosted, token, pr).map(JobOutput::PullRequestCreated)
             }
             Op::Part(p) => return p.execute(git, progress),
+            Op::Patch(p) => return p.execute(git),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -503,6 +514,9 @@ impl Op {
             }
             Op::Refs(r) => r.run(git, progress),
             Op::Flow(f) => f.run(git, progress),
+            Op::GitFlow(f) => f.run(git),
+            Op::Bisect(b) => b.run(git),
+            Op::Patch(p) => p.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }

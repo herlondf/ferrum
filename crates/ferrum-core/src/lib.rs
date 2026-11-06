@@ -5,6 +5,7 @@
 //! and LFS behave exactly as in the terminal.
 
 pub mod avatar;
+pub mod bisect;
 pub mod browse;
 pub mod cli;
 pub mod config;
@@ -12,6 +13,7 @@ pub mod conflict;
 pub mod diff;
 mod file_log;
 pub mod forge;
+pub mod gitflow;
 pub mod gitignore;
 pub mod graph;
 pub mod integrate;
@@ -21,6 +23,7 @@ pub mod log;
 pub mod message;
 pub mod model;
 pub mod ops;
+pub mod patch;
 pub mod rebase;
 pub mod refs;
 mod repo;

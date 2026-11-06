@@ -158,6 +158,24 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   long operations that finish while the window is in the background raise a
   desktop notification. Window size and position, panel widths and scroll
   positions are remembered.
+- **Git-flow** without the git-flow extension (toolbar ☰ > Git-flow): init
+  with custom branch names and prefixes (stored in the same config keys as
+  git-flow AVH), start and finish features, releases and hotfixes (no-ff,
+  tag with a message, merge back into develop, delete the branch, push), and
+  remove the settings. Flow branches get "Finish…" in their sidebar menu.
+- **Bisect**: start from a commit's menu (or two selected commits), mark
+  commits good / bad / skipped from the history menu or the banner; marked
+  commits are colored in the graph, and the banner shows the commit being
+  tested, a timeline of the marks, the revisions and steps left, the first bad
+  commit once found (all clickable) and Reset.
+- **Patches**: save or copy a commit, several selected commits or a range as
+  one patch (`format-patch`), the local changes or a stash. Apply a patch
+  from a file, by dropping a `.patch`/`.diff`/`.eml` file on the window or
+  by pasting it (Ctrl+V in the history or local changes): a preview lists the
+  commits and files and checks whether it applies cleanly, is already applied
+  or needs a 3-way merge; then commit it (`am`), or only change (and
+  optionally stage) the files (`apply`). A stopped `am` shows the banner
+  with Continue, Skip and Abort.
 - **Update check** once a day against GitHub Releases ("Version X available";
   nothing is downloaded or replaced). Each of these can be turned off in
   Settings.
@@ -180,6 +198,7 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Blame: back / forward | Alt+Left / Alt+Right |
 | Only the current branch in the graph | Ctrl+Shift+A |
 | Show reflog | Ctrl+Shift+. |
+| Apply the patch on the clipboard (history or local changes focused) | Ctrl+V |
 | Collapse / expand the selected merge | Left / Right |
 | Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
 | Large diff window (diff focused) / large commit details (commit list focused) | Space |
@@ -249,7 +268,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `details:compare=0,3`, `details:workdir=1`, `details:popup`, `details:window`,
   see `details::dev_step`;
   merge, rebase and cherry-pick dialogs: `flow:merge=REV`, `flow:rebase=REV`,
-  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`).
+  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`;
+  `gitflow:init|start=feature|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`,
+  `patch:FILE`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,

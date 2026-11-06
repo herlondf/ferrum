@@ -37,6 +37,8 @@ pub enum JobOutput {
     PathHits(Vec<ferrum_core::log::PathHit>),
     /// Submodules that need an update (after a checkout, to ask about it).
     SubmodulesOutOfDate(Vec<String>),
+    /// Text to put on the clipboard (e.g. "Copy as patch").
+    Clipboard(String),
 }
 
 pub type JobResult = Result<JobOutput, String>;

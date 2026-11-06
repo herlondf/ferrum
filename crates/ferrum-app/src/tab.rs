@@ -111,6 +111,8 @@ pub struct RepoTab {
     pub uses_lfs: bool,
     pub hosted: Option<HostedRepo>,
     pub status: WorkingStatus,
+    /// Where a running bisect stands.
+    pub bisect: Option<ferrum_core::bisect::BisectStatus>,
 
     pub commits: Vec<CommitInfo>,
     pub graph: Graph,
@@ -179,6 +181,7 @@ impl RepoTab {
             uses_lfs: false,
             hosted: None,
             status: WorkingStatus::default(),
+            bisect: None,
             commits: Vec::new(),
             graph: Graph::default(),
             labels: HashMap::new(),
@@ -289,6 +292,10 @@ impl RepoTab {
         self.head = self.repo.head_branch();
         self.head_oid = self.repo.head_oid();
         self.state = self.repo.state();
+        self.bisect = match self.state {
+            RepoState::Bisect => self.repo.bisect_status(),
+            _ => None,
+        };
         self.identity = self.repo.identity();
         match self.repo.status() {
             Ok(s) => self.status = s,
