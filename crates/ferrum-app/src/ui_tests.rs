@@ -335,3 +335,42 @@ fn picks_up_changes_made_outside_the_app() {
     frames(&mut h);
     assert_eq!(h.state().tabs[0].commits[0].summary, "from terminal");
 }
+
+#[test]
+fn push_and_pull_through_the_toolbar() {
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "-q", "--bare", "-b", "main"]);
+    let url = remote.path().to_string_lossy().into_owned();
+    let dir = repo();
+    let p = dir.path();
+    git(p, &["checkout", "-q", "--", "a.txt"]);
+    git(p, &["remote", "add", "origin", &url]);
+
+    let mut h = harness(p);
+    frames(&mut h);
+    h.get_by_label("⬆ Push").click();
+    frames(&mut h);
+    // The dialog proposes origin/main and setting the upstream.
+    h.get_by_role_and_label(Role::Button, "Push").click();
+    settle(&mut h);
+    assert_eq!(git(remote.path(), &["log", "--format=%s", "main"]), "first");
+    assert_eq!(
+        git(p, &["rev-parse", "--abbrev-ref", "main@{upstream}"]),
+        "origin/main"
+    );
+
+    // Someone else pushes a commit.
+    let other = tempfile::tempdir().unwrap();
+    git(other.path(), &["clone", "-q", &url, "."]);
+    git(other.path(), &["config", "user.name", "Other"]);
+    git(other.path(), &["config", "user.email", "other@example.com"]);
+    std::fs::write(other.path().join("b.txt"), "b\n").unwrap();
+    git(other.path(), &["add", "-A"]);
+    git(other.path(), &["commit", "-qm", "from someone else"]);
+    git(other.path(), &["push", "-q"]);
+
+    h.get_by_label("⬇ Pull").click();
+    settle(&mut h);
+    assert_eq!(git(p, &["log", "-1", "--format=%s"]), "from someone else");
+    assert!(p.join("b.txt").exists());
+}
