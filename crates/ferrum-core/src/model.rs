@@ -291,6 +291,14 @@ pub struct FileCommit {
     pub old_path: Option<String>,
 }
 
+/// A commit in the history of a range of lines (`git log -L`).
+#[derive(Debug, Clone)]
+pub struct LineCommit {
+    pub commit: CommitInfo,
+    /// How the commit changed the lines (`None` if git showed no diff).
+    pub diff: Option<FileDiff>,
+}
+
 /// One line of `git blame`.
 #[derive(Debug, Clone)]
 pub struct BlameLine {
@@ -301,6 +309,13 @@ pub struct BlameLine {
     pub text: String,
     /// First line of a block from the same commit.
     pub block_start: bool,
+    /// Line number (1-based) in the commit that last changed the line.
+    pub orig_line: u32,
+    /// Path of the file in that commit.
+    pub path: String,
+    /// The commit's parent and the file's path there, when the file existed
+    /// before (`previous` in `git blame --porcelain`).
+    pub previous: Option<(Oid, String)>,
 }
 
 /// Name and email that commits in a repository will use.
