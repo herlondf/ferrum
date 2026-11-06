@@ -136,7 +136,51 @@ fn start_content_search(tab: &mut RepoTab, ctx: &egui::Context) {
     });
 }
 
+/// Up/Down move the selection, Home/End jump to the ends (when no text field has focus).
+fn keyboard_navigation(ui: &egui::Ui, tab: &mut RepoTab) {
+    if ui.ctx().memory(|m| m.focused().is_some()) || egui::Popup::is_any_open(ui.ctx()) {
+        return;
+    }
+    let (up, down, home, end) = ui.input(|i| {
+        (
+            i.key_pressed(egui::Key::ArrowUp),
+            i.key_pressed(egui::Key::ArrowDown),
+            i.key_pressed(egui::Key::Home),
+            i.key_pressed(egui::Key::End),
+        )
+    });
+    if !(up || down || home || end) {
+        return;
+    }
+    let rows: Vec<usize> = match &tab.history.visible {
+        Some(v) => v.clone(),
+        None => (0..tab.commits.len()).collect(),
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let current = tab
+        .history
+        .selected
+        .and_then(|id| tab.index.get(&id))
+        .and_then(|idx| rows.iter().position(|r| r == idx));
+    let next = match (current, up, down, home) {
+        (_, _, _, true) => 0,
+        (None, _, _, _) => 0,
+        (Some(p), true, _, _) => p.saturating_sub(1),
+        (Some(p), _, true, _) => (p + 1).min(rows.len() - 1),
+        _ => rows.len() - 1,
+    };
+    let id = tab.commits[rows[next]].id;
+    if tab.history.selected != Some(id) {
+        tab.history.selected = Some(id);
+        tab.load_commit(id, false);
+        tab.history.scroll_to_selected = true;
+    }
+}
+
 pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
+    keyboard_navigation(ui, tab);
     // The graph only makes sense for the full, unfiltered history.
     let filtered = tab.history.visible.is_some();
     let lanes = if filtered { 0 } else { tab.graph.width.max(1) };
