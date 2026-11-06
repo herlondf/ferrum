@@ -222,3 +222,97 @@ fn print_glyph_candidates() {
     }
     println!("HAVE: {have}\nMISSING: {missing}");
 }
+
+/// A merge stopped by a conflict in a.txt (ours = "ours", theirs = "theirs").
+fn conflicted_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    git(p, &["init", "-q", "-b", "main"]);
+    git(p, &["config", "user.name", "Test"]);
+    git(p, &["config", "user.email", "test@example.com"]);
+    git(p, &["config", "commit.gpgsign", "false"]);
+    std::fs::write(p.join("a.txt"), "top\nbase\nbottom\n").unwrap();
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "base"]);
+    git(p, &["switch", "-q", "-c", "other"]);
+    std::fs::write(p.join("a.txt"), "top\ntheirs\nbottom\n").unwrap();
+    git(p, &["commit", "-qam", "theirs"]);
+    git(p, &["switch", "-q", "main"]);
+    std::fs::write(p.join("a.txt"), "top\nours\nbottom\n").unwrap();
+    git(p, &["commit", "-qam", "ours"]);
+    let merge = Proc::new("git")
+        .current_dir(p)
+        .args(["merge", "other"])
+        .output()
+        .unwrap();
+    assert!(
+        !merge.status.success(),
+        "the merge should stop on a conflict"
+    );
+    dir
+}
+
+#[test]
+fn resolve_conflict_and_continue_merge() {
+    let dir = conflicted_repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label("Resolve conflicts").click();
+    frames(&mut h);
+    h.get_all_by_label("Theirs")
+        .next()
+        .expect("Theirs button")
+        .click();
+    frames(&mut h);
+    h.get_by_label("Mark as resolved").click();
+    settle(&mut h);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "top\ntheirs\nbottom\n"
+    );
+    assert_eq!(
+        git(dir.path(), &["diff", "--name-only", "--diff-filter=U"]),
+        ""
+    );
+
+    h.get_by_label("Continue").click();
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["rev-list", "--parents", "-n1", "HEAD"])
+            .split(' ')
+            .count(),
+        3,
+        "a merge commit"
+    );
+    assert_eq!(git(dir.path(), &["status", "--porcelain"]), "");
+}
+
+#[test]
+fn interactive_rebase_reorder_from_window() {
+    let dir = repo();
+    let p = dir.path();
+    git(p, &["checkout", "-q", "--", "a.txt"]);
+    let base = git(p, &["rev-parse", "HEAD"]);
+    for name in ["A", "B", "C"] {
+        std::fs::write(p.join(format!("{name}.txt")), name).unwrap();
+        git(p, &["add", "-A"]);
+        git(p, &["commit", "-qm", name]);
+    }
+    let mut h = harness(p);
+    frames(&mut h);
+    let ctx = h.ctx.clone();
+    let base = ferrum_core::Oid::from_str(&base).unwrap();
+    h.state_mut()
+        .handle(crate::command::Command::PlanRebase(Some(base)), &ctx);
+    frames(&mut h);
+    // Move the first commit (A) one step down: B, A, C.
+    h.get_all_by_label("⬇")
+        .next()
+        .expect("move down button")
+        .click();
+    frames(&mut h);
+    h.get_by_label("Start rebase").click();
+    settle(&mut h);
+    assert_eq!(git(p, &["log", "--format=%s", "-3"]), "C\nA\nB");
+    assert!(h.state().tabs[0].rebase.is_none(), "the window closes");
+}

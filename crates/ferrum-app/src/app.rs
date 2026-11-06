@@ -18,7 +18,7 @@ use crate::ui::{
 };
 
 pub struct FerrumApp {
-    tabs: Vec<RepoTab>,
+    pub(crate) tabs: Vec<RepoTab>,
     active: usize,
     settings: Settings,
     dialog: Option<Dialog>,
@@ -355,7 +355,7 @@ impl FerrumApp {
 
     // ----- Commands -----
 
-    fn handle(&mut self, cmd: Command, ctx: &egui::Context) {
+    pub(crate) fn handle(&mut self, cmd: Command, ctx: &egui::Context) {
         match cmd {
             Command::Run(op) => match self.tabs.get_mut(self.active) {
                 Some(t) => t.run(op, ctx),
