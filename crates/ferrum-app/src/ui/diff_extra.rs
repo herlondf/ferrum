@@ -291,7 +291,9 @@ fn lfs_cache_id() -> Id {
     Id::unique("lfs-cache")
 }
 
-fn lfs(
+/// Pointer details with download / preview / save of the content. Public so
+/// other views showing a file at a revision (file tree) can reuse it.
+pub fn lfs(
     ui: &mut egui::Ui,
     repo: &Repo,
     file: &FileDiff,
@@ -381,6 +383,9 @@ fn lfs(
         _ => None,
     };
     let (before, after) = (bytes(before, ui), bytes(after, ui));
+    if let Some(b) = after.as_ref().or(before.as_ref()) {
+        save_button(ui, &file.path, b);
+    }
     ui.separator();
     if image_diff::is_image(&file.path) {
         image_diff::show_bytes(
@@ -412,5 +417,27 @@ fn lfs(
             ui.label(t!("Binary content ({}).", format_size(b.len() as u64)))
                 .on_hover_text(exact_bytes(b.len() as u64));
         }
+    }
+}
+
+/// Saves downloaded LFS content to a file chosen by the user.
+fn save_button(ui: &mut egui::Ui, path: &str, bytes: &[u8]) {
+    let id = Id::unique(("lfs-save-error", path));
+    if ui
+        .button(t!("Save as…"))
+        .on_hover_text(t!("Save the content to a file"))
+        .clicked()
+    {
+        let name = std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if let Some(dest) = rfd::FileDialog::new().set_file_name(name).save_file() {
+            let err = std::fs::write(&dest, bytes).err().map(|e| e.to_string());
+            ui.data_mut(|d| d.insert_temp(id, err));
+        }
+    }
+    if let Some(Some(e)) = ui.data(|d| d.get_temp::<Option<String>>(id)) {
+        ui.colored_label(ui.visuals().error_fg_color, e);
     }
 }

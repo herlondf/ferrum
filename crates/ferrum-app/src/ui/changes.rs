@@ -856,6 +856,7 @@ fn file_menu(
         }
         ignore_menu(ui, tab, cmds, &files, &tracked);
     });
+    crate::ui::lfs::file_menu(ui, tab, cmds, &tracked);
     ui.separator();
     if ui.button(t!("Copy relative path")).clicked() {
         cmds.push(Command::Copy(paths.join("\n")));

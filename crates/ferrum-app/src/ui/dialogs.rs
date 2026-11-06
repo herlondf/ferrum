@@ -73,6 +73,9 @@ pub enum Dialog {
     Forge(forge_ui::ForgeDialog),
     /// Branch, tag and stash dialogs (`ui::ref_dialogs`).
     Refs(super::ref_dialogs::RefDialog),
+    Lfs(crate::ui::lfs::LfsDialog),
+    Submodule(crate::ui::submodules::SubmoduleDialog),
+    Worktree(crate::ui::worktrees::WorktreeDialog),
 }
 
 impl Dialog {
@@ -765,6 +768,9 @@ fn body(
         }
         Dialog::Forge(d) => forge_ui::show_dialog(ui, d, tab, settings, cmds),
         Dialog::Refs(d) => super::ref_dialogs::show(ui, d, tab, settings, cmds, enter),
+        Dialog::Lfs(d) => crate::ui::lfs::show_dialog(ui, d, tab, cmds),
+        Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
     }
 }
 

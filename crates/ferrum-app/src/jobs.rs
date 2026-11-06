@@ -35,6 +35,8 @@ pub enum JobOutput {
     SearchHits(std::collections::HashSet<ferrum_core::Oid>),
     /// Commits and files found by a file path search.
     PathHits(Vec<ferrum_core::log::PathHit>),
+    /// Submodules that need an update (after a checkout, to ask about it).
+    SubmodulesOutOfDate(Vec<String>),
 }
 
 pub type JobResult = Result<JobOutput, String>;

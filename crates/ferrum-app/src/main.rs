@@ -14,11 +14,15 @@ mod external;
 mod history_tests;
 mod icon;
 mod jobs;
+#[cfg(test)]
+mod parts_tests;
 mod prefs;
 mod ref_ops;
 mod refresh;
 #[cfg(test)]
 mod refs_tests;
+mod repo_parts;
+mod repo_settings;
 mod settings;
 mod tab;
 mod ui;

@@ -115,6 +115,9 @@ pub struct Settings {
     /// Branch, tag and stash dialog choices.
     #[serde(default)]
     pub refs: crate::ui::ref_dialogs::RefPrefs,
+    /// Submodule options (Settings > Git).
+    #[serde(default)]
+    pub submodules: crate::repo_parts::SubmodulePrefs,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -173,6 +176,7 @@ impl Default for Settings {
             ai: Default::default(),
             diff: Default::default(),
             refs: Default::default(),
+            submodules: Default::default(),
         }
     }
 }

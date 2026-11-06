@@ -41,8 +41,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 remotes(ui, tab, &mut st, cmds);
                 tags(ui, tab, &mut st, cmds);
                 stashes(ui, tab, &mut st, cmds);
-                submodules(ui, tab, &mut st, cmds);
-                worktrees(ui, tab, &mut st, cmds);
+                crate::ui::submodules::section(ui, tab, &mut st, cmds);
+                crate::ui::worktrees::section(ui, tab, &mut st, cmds);
                 st.end();
             });
         });
@@ -145,7 +145,7 @@ fn mark_drop(ui: &egui::Ui, resp: &egui::Response) {
 }
 
 /// A row that is not a folder. Returns its response and a keyboard action.
-fn leaf(
+pub(crate) fn leaf(
     ui: &mut egui::Ui,
     st: &mut SidebarState,
     key: &str,
@@ -160,14 +160,14 @@ fn leaf(
     (resp, action)
 }
 
-struct Header {
-    open: bool,
-    resp: egui::Response,
-    add: bool,
+pub(crate) struct Header {
+    pub open: bool,
+    pub resp: egui::Response,
+    pub add: bool,
 }
 
 /// A collapsible section, remote or folder. `add` is the tooltip of a "+" button.
-fn header(
+pub(crate) fn header(
     ui: &mut egui::Ui,
     st: &mut SidebarState,
     key: &str,
@@ -218,7 +218,7 @@ fn header(
 }
 
 /// Draws the rows inside an open header.
-fn children(
+pub(crate) fn children(
     ui: &mut egui::Ui,
     st: &mut SidebarState,
     key: &str,
@@ -565,6 +565,7 @@ fn branch_row(
     key: &str,
     cmds: &mut Commands,
 ) {
+    let label = &crate::ui::worktrees::branch_label(tab, &b.name, label);
     let rich = if b.is_head {
         RichText::new(format!("✔ {label}")).strong()
     } else {
@@ -598,7 +599,11 @@ fn branch_row(
         }
     }
     let activate = resp.double_clicked() || action == Some(NavAction::Activate);
-    if activate && !b.is_head && !tab.busy() {
+    if activate
+        && !b.is_head
+        && !crate::ui::worktrees::activate_branch(tab, &b.name, cmds)
+        && !tab.busy()
+    {
         cmds.run(Op::Checkout(b.name.clone()));
     }
     resp.context_menu(|ui| local_branch_menu(ui, tab, st, b, cmds));
@@ -659,6 +664,7 @@ fn local_branch_menu(
             cmds.run(Op::Checkout(name.clone()));
             ui.close();
         }
+        crate::ui::worktrees::branch_menu(ui, tab, &name, false, cmds);
         if b.is_head && ui.button(t!("Pull")).clicked() {
             cmds.push(Command::Dialog(Dialog::Pull));
             ui.close();
@@ -1079,6 +1085,7 @@ fn remote_branch_row(
                 checkout(cmds);
                 ui.close();
             }
+            crate::ui::worktrees::branch_menu(ui, tab, &b.name, true, cmds);
             if let Some(cur) = &tab.head {
                 if ui.button(t!("Merge {} into {}…", b.name, cur)).clicked() {
                     cmds.push(Command::Dialog(Dialog::merge(&b.name, &b.name)));
@@ -1244,7 +1251,7 @@ fn tag_row(
     });
 }
 
-// ----- Stashes, submodules, worktrees -----
+// ----- Stashes (submodules and worktrees: see submodules.rs, worktrees.rs) -----
 
 fn stashes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Commands) {
     let title = t!("Stashes ({})", tab.stashes.len());
@@ -1282,140 +1289,6 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
             }
             resp.on_hover_text(s.refname())
                 .context_menu(|ui| ref_dialogs::stash_menu(ui, tab, s, cmds));
-        }
-    });
-}
-
-fn submodules(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Commands) {
-    if tab.submodules.is_empty() {
-        return;
-    }
-    let title = t!("Submodules ({})", tab.submodules.len());
-    let h = header(
-        ui,
-        st,
-        "sec:submodules",
-        false,
-        RichText::new(title),
-        None,
-        None,
-    );
-    h.resp.context_menu(|ui| {
-        if ui
-            .add_enabled(!tab.busy(), egui::Button::new(t!("Update all submodules")))
-            .clicked()
-        {
-            cmds.run(Op::SubmoduleUpdate);
-            ui.close();
-        }
-    });
-    if !h.open {
-        return;
-    }
-    children(ui, st, "sec:submodules", |ui, st| {
-        for s in &tab.submodules {
-            let label = if s.initialized {
-                format!("▣ {}", s.path)
-            } else {
-                t!("☐ {} (not initialized)", s.path)
-            };
-            let key = format!("sub:{}", s.path);
-            let (resp, action) = leaf(ui, st, &key, egui::Button::selectable(false, label));
-            let hint = if s.initialized {
-                t!("Double-click to open in a new tab")
-            } else {
-                t!("Double-click to initialize")
-            };
-            let url = s.url.clone().unwrap_or_default();
-            let resp = resp.on_hover_text(format!("{url}\n{hint}"));
-            if resp.double_clicked() || action == Some(NavAction::Activate) {
-                if s.initialized {
-                    cmds.push(Command::OpenRepo(tab.path().join(&s.path)));
-                } else if !tab.busy() {
-                    cmds.run(Op::SubmoduleUpdate);
-                }
-            }
-            resp.context_menu(|ui| {
-                if s.initialized && ui.button(t!("Open in new tab")).clicked() {
-                    cmds.push(Command::OpenRepo(tab.path().join(&s.path)));
-                    ui.close();
-                }
-                if ui
-                    .add_enabled(!tab.busy(), egui::Button::new(t!("Update all submodules")))
-                    .clicked()
-                {
-                    cmds.run(Op::SubmoduleUpdate);
-                    ui.close();
-                }
-            });
-        }
-    });
-}
-
-fn worktrees(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Commands) {
-    let title = t!("Worktrees ({})", tab.worktrees.len());
-    let h = header(
-        ui,
-        st,
-        "sec:worktrees",
-        false,
-        RichText::new(title),
-        None,
-        Some(t!("Add worktree…")),
-    );
-    if h.add {
-        cmds.push(Command::Dialog(Dialog::worktree_add(tab)));
-    }
-    h.resp
-        .on_hover_text(t!("Extra working folders that share this repository"));
-    if !h.open {
-        return;
-    }
-    children(ui, st, "sec:worktrees", |ui, st| {
-        for w in &tab.worktrees {
-            let name = std::path::Path::new(&w.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or(w.path.clone());
-            let branch = w.branch.clone().unwrap_or_else(|| t!("detached"));
-            let current = std::path::Path::new(&w.path) == tab.path()
-                || tab.path().starts_with(&w.path) && w.is_main;
-            let label = format!("{}{name} ({branch})", if current { "✔ " } else { "" });
-            let key = format!("wt:{}", w.path);
-            let (resp, action) = leaf(ui, st, &key, egui::Button::selectable(false, label));
-            let resp = resp.on_hover_text(&w.path);
-            if resp.double_clicked() || action == Some(NavAction::Activate) {
-                cmds.push(Command::OpenRepo(w.path.clone().into()));
-            }
-            resp.context_menu(|ui| {
-                if ui.button(t!("Open in new tab")).clicked() {
-                    cmds.push(Command::OpenRepo(w.path.clone().into()));
-                    ui.close();
-                }
-                if !w.is_main
-                    && ui
-                        .add_enabled(!tab.busy(), egui::Button::new(t!("Remove…")))
-                        .clicked()
-                {
-                    cmds.push(Command::Dialog(Dialog::confirm(
-                        &t!("Remove worktree"),
-                        &t!(
-                            "Remove the worktree at {}? Uncommitted changes in it will be lost.",
-                            w.path
-                        ),
-                        Op::WorktreeRemove {
-                            path: w.path.clone(),
-                            force: true,
-                        },
-                        true,
-                    )));
-                    ui.close();
-                }
-                if ui.button(t!("Copy path")).clicked() {
-                    cmds.push(Command::Copy(w.path.clone()));
-                    ui.close();
-                }
-            });
         }
     });
 }
