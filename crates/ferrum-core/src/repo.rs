@@ -357,13 +357,17 @@ impl Repo {
         Ok(parse_worktrees(&out))
     }
 
+    /// Blame of `path` as of HEAD.
     pub fn blame(&self, path: &str) -> Result<Vec<BlameLine>> {
-        let blame = self.inner.blame_file(Path::new(path), None)?;
         let head = self.inner.head()?.peel_to_tree()?;
-        let blob = head
-            .get_path(Path::new(path))?
-            .to_object(&self.inner)?
-            .peel_to_blob()?;
+        let entry = head
+            .get_path(Path::new(path))
+            .map_err(|_| Error::Other(format!("{path} is not in the last commit (HEAD).")))?;
+        let blob = entry.to_object(&self.inner)?.peel_to_blob()?;
+        if blob.is_binary() {
+            return Err(Error::Other(format!("{path} is a binary file.")));
+        }
+        let blame = self.inner.blame_file(Path::new(path), None)?;
         let content = lossy(blob.content());
         let mut out = Vec::new();
         let mut last = None;
@@ -392,11 +396,13 @@ impl Repo {
         Ok(out)
     }
 
-    /// Commits that touched `path`, following renames.
-    pub fn file_history(&self, path: &str) -> Result<Vec<CommitInfo>> {
-        let fmt = format!("--format=%H{FS}%P{FS}%an{FS}%ae{FS}%at{FS}%s{RS}");
-        let out = self.git().run(&["log", "--follow", &fmt, "--", path])?;
-        Ok(parse_log(&out))
+    /// Commits that touched `path`, newest first, following renames.
+    pub fn file_history(&self, path: &str) -> Result<Vec<FileCommit>> {
+        let fmt = format!("--format={RS}%H{FS}%P{FS}%an{FS}%ae{FS}%at{FS}%ai{FS}%s");
+        let out = self
+            .git()
+            .run(&["log", "--follow", "--name-status", "-z", &fmt, "--", path])?;
+        Ok(parse_file_log(&out, path))
     }
 
     /// Commits whose changes add or remove `term` (`git log -S`).
@@ -412,6 +418,11 @@ impl Repo {
 
     pub fn blob(&self, id: Oid) -> Result<Vec<u8>> {
         Ok(self.inner.find_blob(id)?.content().to_vec())
+    }
+
+    /// Size of a blob in bytes, without loading its content.
+    pub fn blob_size(&self, id: Oid) -> Result<usize> {
+        Ok(self.inner.odb()?.read_header(id)?.0)
     }
 
     pub fn read_workdir_file(&self, path: &str) -> Result<Vec<u8>> {
@@ -526,29 +537,72 @@ fn collect_diffs(diff: &git2::Diff) -> Result<Vec<FileDiff>> {
     Ok(out)
 }
 
-fn parse_log(out: &str) -> Vec<CommitInfo> {
-    out.split(RS)
-        .map(str::trim)
-        .filter(|r| !r.is_empty())
-        .filter_map(|rec| {
-            let f: Vec<&str> = rec.splitn(6, FS).collect();
-            let [id, parents, author, email, time, summary] = f.as_slice() else {
-                return None;
-            };
-            Some(CommitInfo {
-                id: Oid::from_str(id).ok()?,
-                parents: parents
-                    .split_whitespace()
-                    .filter_map(|p| Oid::from_str(p).ok())
-                    .collect(),
-                author: (*author).to_owned(),
-                email: (*email).to_owned(),
-                time: time.parse().ok()?,
-                offset_minutes: 0,
-                summary: (*summary).to_owned(),
-            })
-        })
-        .collect()
+/// Parses `git log --name-status -z` output whose format starts each record
+/// with `RS`. Commits without a status entry (merges) keep the newer path.
+fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
+    let mut current = path.to_owned();
+    let mut list = Vec::new();
+    for rec in out.split(RS).filter(|r| !r.trim().is_empty()) {
+        let mut parts = rec.split('\0');
+        let header = parts.next().unwrap_or_default();
+        let f: Vec<&str> = header.splitn(7, FS).collect();
+        let [id, parents, author, email, time, date, summary] = f.as_slice() else {
+            continue;
+        };
+        let (Ok(id), Ok(time)) = (Oid::from_str(id), time.parse()) else {
+            continue;
+        };
+        // Status entries: `M path` or `R100 old new`, all NUL-separated.
+        let tokens: Vec<&str> = parts.map(str::trim_start).collect();
+        let mut old_path = None;
+        let mut i = 0;
+        while i < tokens.len() {
+            let status = tokens[i];
+            if status.starts_with(['R', 'C']) && i + 2 < tokens.len() {
+                old_path = Some(tokens[i + 1].to_owned());
+                current = tokens[i + 2].to_owned();
+                i += 3;
+            } else if !status.is_empty() && i + 1 < tokens.len() {
+                current = tokens[i + 1].to_owned();
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+        let commit = CommitInfo {
+            id,
+            parents: parents
+                .split_whitespace()
+                .filter_map(|p| Oid::from_str(p).ok())
+                .collect(),
+            author: (*author).to_owned(),
+            email: (*email).to_owned(),
+            time,
+            offset_minutes: parse_offset(date),
+            summary: (*summary).to_owned(),
+        };
+        list.push(FileCommit {
+            commit,
+            path: current.clone(),
+            old_path: old_path.clone(),
+        });
+        // Older commits know the file by its name before the rename.
+        if let Some(old) = old_path {
+            current = old;
+        }
+    }
+    list
+}
+
+/// Time zone of a date like `2024-05-01 10:00:00 -0300`, in minutes east of UTC.
+fn parse_offset(date: &str) -> i32 {
+    let Some(tz) = date.rsplit(' ').next().filter(|t| t.len() == 5) else {
+        return 0;
+    };
+    let sign = if tz.starts_with('-') { -1 } else { 1 };
+    let hours: i32 = tz[1..3].parse().unwrap_or(0);
+    let minutes: i32 = tz[3..5].parse().unwrap_or(0);
+    sign * (hours * 60 + minutes)
 }
 
 fn parse_worktrees(out: &str) -> Vec<WorktreeInfo> {
@@ -662,12 +716,103 @@ mod tests {
 
         let history = repo.file_history("a.txt").unwrap();
         assert_eq!(history.len(), 2);
-        assert_eq!(history[0].summary, "second");
+        assert_eq!(history[0].commit.summary, "second");
+        assert_eq!(history[0].path, "a.txt");
 
         let blame = repo.blame("a.txt").unwrap();
         assert_eq!(blame.len(), 2);
         assert_ne!(blame[0].commit, blame[1].commit);
         assert!(blame[1].block_start);
+    }
+
+    #[test]
+    fn file_history_follows_renames() {
+        let t = TestRepo::new();
+        t.commit("old.txt", "1\n2\n3\n4\n5\n", "create");
+        t.commit("old.txt", "1\n2\n3\n4\n5\n6\n", "edit old");
+        std::fs::create_dir(t.path().join("dir")).unwrap();
+        t.git.run(&["mv", "old.txt", "dir/new name.txt"]).unwrap();
+        t.git.run(&["commit", "-q", "-m", "rename"]).unwrap();
+        t.commit("dir/new name.txt", "1\n2\n3\n4\n5\n6\n7\n", "edit new");
+        t.commit("other.txt", "x\n", "unrelated");
+
+        let history = t.repo().file_history("dir/new name.txt").unwrap();
+        let got: Vec<_> = history
+            .iter()
+            .map(|h| (h.commit.summary.as_str(), h.path.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("edit new", "dir/new name.txt"),
+                ("rename", "dir/new name.txt"),
+                ("edit old", "old.txt"),
+                ("create", "old.txt"),
+            ]
+        );
+        assert_eq!(history[1].old_path.as_deref(), Some("old.txt"));
+        assert!(history[0].old_path.is_none());
+        assert_eq!(history[3].commit.author, "Test");
+    }
+
+    #[test]
+    fn parses_time_zone_offsets() {
+        assert_eq!(parse_offset("2024-05-01 10:00:00 -0330"), -210);
+        assert_eq!(parse_offset("2024-05-01 10:00:00 +0200"), 120);
+        assert_eq!(parse_offset("garbage"), 0);
+    }
+
+    #[test]
+    fn blame_reports_missing_and_binary_files() {
+        let t = TestRepo::new();
+        t.commit("a.txt", "a\n", "first");
+        std::fs::write(t.path().join("b.bin"), [0u8, 159, 146, 150, 0, 1]).unwrap();
+        t.git.run(&["add", "b.bin"]).unwrap();
+        t.git.run(&["commit", "-q", "-m", "bin"]).unwrap();
+        let repo = t.repo();
+        let missing = repo.blame("nope.txt").unwrap_err().to_string();
+        assert!(missing.contains("not in the last commit"), "{missing}");
+        let binary = repo.blame("b.bin").unwrap_err().to_string();
+        assert!(binary.contains("binary"), "{binary}");
+    }
+
+    /// Which blob ids libgit2 fills in for image-like binary changes.
+    #[test]
+    fn binary_diff_ids_per_source() {
+        let t = TestRepo::new();
+        std::fs::write(t.path().join("i.bin"), [0u8, 1, 2]).unwrap();
+        t.git.run(&["add", "-A"]).unwrap();
+        t.git.run(&["commit", "-q", "-m", "img"]).unwrap();
+        std::fs::write(t.path().join("i.bin"), [0u8, 1, 2, 3]).unwrap();
+        t.git.run(&["add", "-A"]).unwrap();
+        std::fs::write(t.path().join("i.bin"), [0u8, 1, 2, 3, 4]).unwrap();
+        std::fs::write(t.path().join("new.bin"), [0u8, 9]).unwrap();
+        let repo = t.repo();
+        let blob = |s: &str| Oid::from_str(t.git.run(&["rev-parse", s]).unwrap().trim()).unwrap();
+
+        let staged = repo
+            .file_diff(DiffSource::Staged, "i.bin")
+            .unwrap()
+            .unwrap();
+        assert!(staged.binary);
+        assert_eq!(staged.old_id, Some(blob("HEAD:i.bin")));
+        assert_eq!(staged.new_id, Some(blob(":i.bin")));
+
+        let unstaged = repo
+            .file_diff(DiffSource::Unstaged, "i.bin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(unstaged.old_id, Some(blob(":i.bin")));
+        let untracked = repo
+            .file_diff(DiffSource::Unstaged, "new.bin")
+            .unwrap()
+            .unwrap();
+        assert_eq!(untracked.old_id, None);
+
+        let commit = repo.file_diff(DiffSource::Commit(repo.head_oid().unwrap()), "i.bin");
+        let commit = commit.unwrap().unwrap();
+        assert_eq!((commit.old_id, commit.kind), (None, ChangeKind::Added));
+        assert_eq!(commit.new_id, Some(blob("HEAD:i.bin")));
     }
 
     #[test]
