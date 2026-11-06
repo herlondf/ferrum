@@ -5,7 +5,8 @@
 - [x] Sidebar: local branches, remote branches, tags
 - [ ] Sidebar: stashes, remotes
 - [x] Commit history list (all branches)
-- [ ] Commit graph (colored branch lanes)
+- [x] Commit graph (colored branch lanes)
+- [x] Branch and tag labels in the history
 - [x] Commit details (hash, author, date, parents)
 - [ ] Commit details: changed files and diff
 - [ ] Changes view: unstaged/staged, stage files, hunks and lines

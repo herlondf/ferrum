@@ -1,5 +1,8 @@
 //! Git logic for Ferrum, independent of the UI.
 
+pub mod graph;
+
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 pub use git2::Oid;
@@ -26,6 +29,21 @@ pub struct BranchInfo {
     pub upstream: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefKind {
+    Local,
+    Remote,
+    Tag,
+}
+
+/// A branch or tag pointing at a commit, shown as a label in the history.
+#[derive(Debug, Clone)]
+pub struct RefLabel {
+    pub name: String,
+    pub kind: RefKind,
+    pub is_head: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct CommitInfo {
     pub id: Oid,
@@ -34,6 +52,8 @@ pub struct CommitInfo {
     pub email: String,
     /// Seconds since the Unix epoch.
     pub time: i64,
+    /// Time zone of the commit, in minutes east of UTC.
+    pub offset_minutes: i32,
     pub parents: Vec<Oid>,
 }
 
@@ -120,6 +140,46 @@ impl Repo {
         Ok(tags)
     }
 
+    /// Branches and tags grouped by the commit they point at.
+    pub fn ref_labels(&self) -> Result<HashMap<Oid, Vec<RefLabel>>> {
+        let head = self
+            .inner
+            .head()
+            .ok()
+            .and_then(|h| h.name_bytes().to_vec().into());
+        let mut map: HashMap<Oid, Vec<RefLabel>> = HashMap::new();
+        for r in self.inner.references()? {
+            let r = r?;
+            let kind = if r.is_branch() {
+                RefKind::Local
+            } else if r.is_remote() {
+                RefKind::Remote
+            } else if r.is_tag() {
+                RefKind::Tag
+            } else {
+                continue;
+            };
+            let name = lossy(r.shorthand_bytes());
+            if kind == RefKind::Remote && name.ends_with("/HEAD") {
+                continue;
+            }
+            // Annotated tags point at a tag object; peel to the commit.
+            let Ok(commit) = r.peel_to_commit() else {
+                continue;
+            };
+            let is_head = head.as_deref() == Some(r.name_bytes());
+            map.entry(commit.id()).or_default().push(RefLabel {
+                name,
+                kind,
+                is_head,
+            });
+        }
+        for labels in map.values_mut() {
+            labels.sort_by_key(|l| (!l.is_head, l.kind as u8, l.name.clone()));
+        }
+        Ok(map)
+    }
+
     /// Commits reachable from all branches, newest first, up to `limit`.
     pub fn commits(&self, limit: usize) -> Result<Vec<CommitInfo>> {
         let mut walk = self.inner.revwalk()?;
@@ -139,6 +199,7 @@ impl Repo {
                 author: lossy(author.name_bytes()),
                 email: lossy(author.email_bytes()),
                 time: commit.time().seconds(),
+                offset_minutes: commit.time().offset_minutes(),
                 parents: commit.parent_ids().collect(),
             });
         }

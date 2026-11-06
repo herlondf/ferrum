@@ -19,6 +19,9 @@ dev rust cargo clippy --all-targets
 ./target/debug/ferrum [path...] # run on the host
 ```
 
+`FERRUM_SCREENSHOT=out.ppm ./target/debug/ferrum <repo>` saves a screenshot of
+the window and quits, handy for checking UI changes.
+
 The image is based on the same Fedora release as the host, so the binary runs
 directly on the machine.
 
