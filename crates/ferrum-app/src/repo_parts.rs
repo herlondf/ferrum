@@ -154,14 +154,17 @@ pub struct SubmodulePrefs {
 
 /// The operation to queue after `op` so submodules follow the new commit.
 pub fn after(op: &Op, tab: &RepoTab, prefs: &SubmodulePrefs) -> Option<Op> {
-    let moves_head = matches!(
-        op,
-        Op::Checkout(_)
-            | Op::CheckoutRemote { .. }
-            | Op::CheckoutDetached(_)
-            | Op::CherryPick { .. }
-            | Op::Revert { .. }
-    );
+    use crate::flow::FlowOp;
+    fn moves_head(op: &Op) -> bool {
+        match op {
+            Op::Checkout(_) | Op::CheckoutRemote { .. } | Op::CheckoutDetached(_) => true,
+            Op::Flow(FlowOp::CherryPick { .. } | FlowOp::Revert { .. }) => true,
+            // A checkout after stashing or discarding local changes.
+            Op::Flow(FlowOp::WithLocalChanges { op, .. }) => moves_head(op),
+            _ => false,
+        }
+    }
+    let moves_head = moves_head(op);
     if !moves_head || tab.submodules.is_empty() {
         return None;
     }

@@ -14,6 +14,7 @@ mod file_log;
 pub mod forge;
 pub mod gitignore;
 pub mod graph;
+pub mod integrate;
 pub mod lfs;
 pub mod local;
 pub mod log;

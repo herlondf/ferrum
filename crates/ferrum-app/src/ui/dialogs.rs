@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
-use ferrum_core::ops::{MergeMode, ResetMode};
+use ferrum_core::ops::ResetMode;
 use ferrum_core::{BranchKind, Identity};
 
 use crate::command::{Command, Commands, Op};
@@ -27,11 +27,6 @@ pub enum Dialog {
     DeleteTag {
         name: String,
         remote: Option<String>,
-    },
-    Merge {
-        rev: String,
-        label: String,
-        mode: MergeMode,
     },
     Reset {
         rev: String,
@@ -71,6 +66,8 @@ pub enum Dialog {
     Lfs(crate::ui::lfs::LfsDialog),
     Submodule(crate::ui::submodules::SubmoduleDialog),
     Worktree(crate::ui::worktrees::WorktreeDialog),
+    /// Merge, rebase, cherry-pick, revert, reword and local-changes prompts.
+    Flow(crate::ui::flow_dialogs::FlowDialog),
 }
 
 impl Dialog {
@@ -92,11 +89,7 @@ impl Dialog {
     }
 
     pub fn merge(rev: &str, label: &str) -> Self {
-        Dialog::Merge {
-            rev: rev.into(),
-            label: label.into(),
-            mode: crate::prefs::default_merge(),
-        }
+        crate::ui::flow_dialogs::merge(rev, label)
     }
 
     pub fn reset(rev: &str, label: &str, branch: &str, mode: ResetMode) -> Self {
@@ -367,39 +360,6 @@ fn body(
                 None => true,
             }
         }
-        Dialog::Merge { rev, label, mode } => {
-            let current = tab
-                .and_then(|t| t.head.clone())
-                .unwrap_or_else(|| "HEAD".into());
-            ui.heading(t!("Merge {} into {}", label, current));
-            ui.radio_value(
-                mode,
-                MergeMode::Default,
-                t!("Default (fast-forward when possible)"),
-            );
-            ui.radio_value(
-                mode,
-                MergeMode::NoFastForward,
-                t!("Always create a merge commit (--no-ff)"),
-            );
-            ui.radio_value(mode, MergeMode::FastForwardOnly, t!("Fast-forward only"));
-            ui.radio_value(
-                mode,
-                MergeMode::Squash,
-                t!("Squash into staged changes (commit afterwards)"),
-            );
-            match buttons(ui, &t!("Merge"), true, false, enter) {
-                Some(true) => {
-                    run(Op::Merge {
-                        rev: rev.clone(),
-                        mode: *mode,
-                    });
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
         Dialog::Reset {
             rev,
             label,
@@ -651,6 +611,7 @@ fn body(
         Dialog::Lfs(d) => crate::ui::lfs::show_dialog(ui, d, tab, cmds),
         Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Flow(d) => crate::ui::flow_dialogs::show(ui, d, tab, cmds, enter),
     }
 }
 

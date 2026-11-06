@@ -105,46 +105,42 @@ pub fn open_refs(tab: &mut RepoTab, a: &str, b: &str) {
     }
 }
 
-/// Ctrl+click on a commit: picks it (with the selected one) for comparing.
-pub fn pick_commit(tab: &mut RepoTab, id: Oid) {
-    let picked = &mut tab.details.picked;
-    if picked.is_empty()
-        && let Some(sel) = tab.history.selected
-        && sel != id
-    {
-        picked.push(sel);
-    }
-    if let Some(pos) = picked.iter().position(|p| *p == id) {
-        picked.remove(pos);
+/// Compares two commits, the older one first (an ancestor, or the one lower
+/// in the list).
+fn compare_commits(tab: &mut RepoTab, a: Oid, b: Oid) {
+    let older_first = if tab.repo.is_ancestor(a, b) {
+        true
+    } else if tab.repo.is_ancestor(b, a) {
+        false
     } else {
-        picked.push(id);
-    }
-    if picked.len() > 2 {
-        picked.remove(0);
-    }
-    match picked.as_slice() {
+        tab.index.get(&a) > tab.index.get(&b)
+    };
+    let (from, to) = if older_first { (a, b) } else { (b, a) };
+    let (from, to) = (commit_side(tab, from), commit_side(tab, to));
+    open(tab, from, to);
+}
+
+/// After a Ctrl/Shift+click in the history: exactly two selected commits are
+/// compared; with more, the selection is for the multi-commit actions.
+pub fn show_selection(tab: &mut RepoTab) {
+    let many = tab.history.ext.selected_many.clone();
+    match many.as_slice() {
         [a, b] => {
-            let (a, b) = (*a, *b);
-            // Older commit first: an ancestor, or the one lower in the list.
-            let older_first = if tab.repo.is_ancestor(a, b) {
-                true
-            } else if tab.repo.is_ancestor(b, a) {
-                false
-            } else {
-                tab.index.get(&a) > tab.index.get(&b)
-            };
-            let (from, to) = if older_first { (a, b) } else { (b, a) };
-            let (from, to) = (commit_side(tab, from), commit_side(tab, to));
-            open(tab, from, to);
+            tab.details.picked = many.clone();
+            compare_commits(tab, *a, *b);
         }
-        [one] => {
-            let one = *one;
+        _ => {
+            tab.details.picked.clear();
             tab.details.compare = None;
-            tab.history.selected = Some(one);
-            tab.load_commit(one, false);
         }
-        _ => tab.details.compare = None,
     }
+}
+
+/// What a Ctrl+click on a commit row does (for tests).
+#[cfg(test)]
+pub fn pick_commit(tab: &mut RepoTab, id: Oid) {
+    crate::ui::history_flow::click(tab, id, eframe::egui::Modifiers::COMMAND);
+    show_selection(tab);
 }
 
 fn reload(tab: &mut RepoTab, view: &mut CompareView) {

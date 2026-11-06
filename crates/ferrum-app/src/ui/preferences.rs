@@ -268,6 +268,16 @@ pub fn git(ui: &mut egui::Ui, state: &mut State, settings: &mut Settings, cmds: 
                 }
             });
         ui.end_row();
+
+        ui.label(t!("Local changes on checkout"));
+        ui.checkbox(
+            &mut p.ask_local_changes,
+            t!("Always ask to stash or discard them"),
+        )
+        .on_hover_text(t!(
+            "Otherwise Ferrum only asks when the checkout would overwrite them"
+        ));
+        ui.end_row();
     });
 }
 

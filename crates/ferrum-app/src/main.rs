@@ -14,6 +14,9 @@ mod diff_tests;
 mod external;
 #[cfg(test)]
 mod file_history_tests;
+mod flow;
+#[cfg(test)]
+mod flow_tests;
 #[cfg(test)]
 mod history_tests;
 mod icon;

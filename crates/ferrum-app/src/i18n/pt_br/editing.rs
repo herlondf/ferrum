@@ -295,23 +295,13 @@ pub static T: &[(&str, &str)] = &[
     ("1 left", "1 restante"),
     ("{} left", "{} restantes"),
     (
-        "Use theirs for whole file",
-        "Usar a versão deles no arquivo todo",
-    ),
-    (
         "Take their version of the file and mark it resolved",
         "Usar a versão deles do arquivo e marcá-lo como resolvido",
-    ),
-    (
-        "Use ours for whole file",
-        "Usar a nossa versão no arquivo todo",
     ),
     (
         "Take our version of the file and mark it resolved",
         "Usar a nossa versão do arquivo e marcá-lo como resolvido",
     ),
-    ("Use ours", "Usar a nossa versão"),
-    ("Use theirs", "Usar a versão deles"),
     ("ours", "nossa versão"),
     ("theirs", "versão deles"),
     (
@@ -330,10 +320,6 @@ pub static T: &[(&str, &str)] = &[
     ("Show all", "Mostrar tudo"),
     ("Conflict {} of {}", "Conflito {} de {}"),
     ("unresolved", "não resolvido"),
-    ("Ours", "Nossa"),
-    ("Theirs", "Deles"),
-    ("Both (ours first)", "Ambas (nossa primeiro)"),
-    ("Both (theirs first)", "Ambas (deles primeiro)"),
     ("Base (common ancestor)", "Base (ancestral comum)"),
     ("(empty)", "(vazio)"),
     ("Result", "Resultado"),

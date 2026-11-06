@@ -54,7 +54,8 @@ pub struct FerrumApp {
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
 /// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
 /// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
-/// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`).
+/// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`),
+/// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -119,6 +120,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "local" => out.push(Command::DevStep(DevStep::Changes(arg.into()))),
             "diff" => out.push(Command::DevStep(DevStep::Diff(arg.into()))),
             "details" => out.push(details::dev_step(arg)),
+            "flow" => out.extend(crate::flow::dev_steps(arg, tab)),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -459,8 +461,14 @@ impl FerrumApp {
 
     pub(crate) fn handle(&mut self, cmd: Command, ctx: &egui::Context) {
         match cmd {
-            Command::Run(op) => match self.tabs.get_mut(self.active) {
-                Some(t) => {
+            // Checkouts first ask what to do with local changes when needed.
+            Command::Run(op) => match self
+                .tabs
+                .get(self.active)
+                .map(|t| crate::flow::checkout(t, op, self.settings.prefs.ask_local_changes))
+            {
+                Some(Command::Run(op)) => {
+                    let t = &mut self.tabs[self.active];
                     let op = crate::sync::with_options(op, &self.settings.sync);
                     let then = crate::repo_parts::after(&op, t, &self.settings.submodules);
                     t.run(op, ctx);
@@ -468,6 +476,7 @@ impl FerrumApp {
                         t.run(next, ctx);
                     }
                 }
+                Some(prompt) => self.handle(prompt, ctx),
                 None => self.error(t!("Open a repository first.")),
             },
             Command::Undo => {
@@ -569,9 +578,14 @@ impl FerrumApp {
                 }
             }
             Command::PlanRebase(base) => {
+                let h = &self.settings.history;
+                let avatars = (h.show_avatars, h.network_avatars);
                 if let Some(t) = self.tab() {
                     match rebase::plan(t, base) {
-                        Ok(p) => t.rebase = Some(p),
+                        Ok(mut p) => {
+                            p.avatars = avatars;
+                            t.rebase = Some(p);
+                        }
                         Err(e) => t.error(e),
                     }
                 }
@@ -1002,61 +1016,9 @@ impl FerrumApp {
     }
 
     fn banner(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
-        let Some(tab) = self.tabs.get(self.active) else {
-            return;
-        };
-        if tab.state == RepoState::Clean {
-            return;
+        if let Some(tab) = self.tabs.get_mut(self.active) {
+            crate::ui::banner::show(ui, tab, cmds);
         }
-        let conflicts = tab.status.conflicted.len();
-        let fill = ui.visuals().warn_fg_color.gamma_multiply(0.25);
-        egui::Frame::new()
-            .fill(fill)
-            .inner_margin(6.0)
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    let mut text = format!("⚠ {}", crate::util::state_label(tab.state));
-                    if conflicts == 1 {
-                        text.push_str(&t!(" — 1 file with conflicts"));
-                    } else if conflicts > 1 {
-                        text.push_str(&t!(" — {} files with conflicts", conflicts));
-                    }
-                    ui.strong(text);
-                    ui.add_enabled_ui(!tab.busy(), |ui| {
-                        if conflicts > 0 && ui.button(t!("Resolve conflicts")).clicked() {
-                            cmds.push(Command::ResolveConflict(
-                                tab.status.conflicted[0].path.clone(),
-                            ));
-                        }
-                        let can_continue = conflicts == 0 && tab.state != RepoState::Bisect;
-                        if ui
-                            .add_enabled(can_continue, egui::Button::new(t!("Continue")))
-                            .clicked()
-                        {
-                            cmds.run(Op::Continue(tab.state));
-                        }
-                        if matches!(
-                            tab.state,
-                            RepoState::Rebase | RepoState::CherryPick | RepoState::Revert
-                        ) && ui.button(t!("Skip")).clicked()
-                        {
-                            cmds.run(Op::Skip(tab.state));
-                        }
-                        if ui.button(t!("Abort")).clicked() {
-                            let name = crate::util::state_name(tab.state);
-                            // One line, so the translation tests find the key.
-                            #[rustfmt::skip]
-                            let text = t!("Abort the {} in progress? Changes made by it will be thrown away.", name);
-                            cmds.push(Command::Dialog(Dialog::confirm(
-                                &t!("Abort"),
-                                &text,
-                                Op::Abort(tab.state),
-                                true,
-                            )));
-                        }
-                    });
-                });
-            });
     }
 
     fn welcome(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {

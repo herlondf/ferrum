@@ -150,6 +150,41 @@ pub fn has_markers(text: &str) -> bool {
     conflict_count(&parse(text)) > 0
 }
 
+/// A line of `diff_lines`: ' ' unchanged, '-' only in old, '+' only in new.
+pub type DiffLine = (char, String);
+
+/// Line diff of two texts, with `context` unchanged lines around changes
+/// (a `None` entry marks skipped lines).
+pub fn diff_lines(old: &str, new: &str, context: u32) -> Vec<Option<DiffLine>> {
+    let mut opts = git2::DiffOptions::new();
+    opts.context_lines(context);
+    let mut out = Vec::new();
+    let Ok(patch) =
+        git2::Patch::from_buffers(old.as_bytes(), None, new.as_bytes(), None, Some(&mut opts))
+    else {
+        return out;
+    };
+    for h in 0..patch.num_hunks() {
+        if h > 0 {
+            out.push(None);
+        }
+        let n = patch.num_lines_in_hunk(h).unwrap_or(0);
+        for l in 0..n {
+            if let Ok(line) = patch.line_in_hunk(h, l) {
+                let origin = line.origin();
+                if matches!(origin, ' ' | '+' | '-') {
+                    let text = String::from_utf8_lossy(line.content());
+                    out.push(Some((
+                        origin,
+                        text.trim_end_matches(['\n', '\r']).to_owned(),
+                    )));
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,6 +216,22 @@ mod tests {
         let partial = render(&chunks, &[Some(Choice::Ours), None]);
         assert!(has_markers(&partial));
         assert!(partial.starts_with("top\nours 1\nours 2\nmiddle\n<<<<<<< HEAD\n"));
+    }
+
+    #[test]
+    fn diffs_lines() {
+        let d = diff_lines("a\nb\nc\n", "a\nB\nc\n", 1);
+        let lines: Vec<DiffLine> = d.into_iter().flatten().collect();
+        assert_eq!(
+            lines,
+            [
+                (' ', "a".to_owned()),
+                ('-', "b".to_owned()),
+                ('+', "B".to_owned()),
+                (' ', "c".to_owned())
+            ]
+        );
+        assert!(diff_lines("same\n", "same\n", 3).is_empty());
     }
 
     #[test]

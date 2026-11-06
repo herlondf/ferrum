@@ -14,7 +14,7 @@ use crate::tab::RepoTab;
 use crate::ui::dialogs::Dialog;
 use crate::ui::history_model::{self, HistorySettings, SearchMode, label_ref};
 use crate::ui::history_options::{self, cmd};
-use crate::ui::{avatars, issue_links};
+use crate::ui::{avatars, history_flow, issue_links};
 use crate::util::format_date;
 
 const ROW_HEIGHT: f32 = 24.0;
@@ -412,15 +412,21 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
                     toggle = Some(id);
                 } else if let Some(url) = on_link {
                     open_url = Some(url);
-                } else if ui.input(|i| i.modifiers.command) {
-                    // Ctrl+click: pick two commits to compare them.
-                    crate::ui::compare::pick_commit(tab, id);
+                } else if history_flow::click(tab, id, ui.input(|i| i.modifiers)) {
+                    // Ctrl/Shift+click: several commits; two are compared.
+                    crate::ui::compare::show_selection(tab);
                 } else {
                     tab.history.selected = Some(id);
                     tab.load_commit(id, false);
                 }
             }
-            if resp.double_clicked() && !on_toggle {
+            let on_label = pointer.and_then(|p| draw.labels.iter().find(|(r, _)| r.contains(p)));
+            if resp.double_clicked()
+                && let Some((_, l)) = on_label
+            {
+                // The double-clicked branch or tag label.
+                history_flow::checkout_label(tab, l.kind, &l.name, l.is_head, cmds);
+            } else if resp.double_clicked() && !on_toggle {
                 // Check out the local branch at this commit, if there is one.
                 let local = tab
                     .labels
@@ -487,6 +493,8 @@ struct RowHits {
     /// The collapse / expand box of a merge.
     toggle: Option<Rect>,
     links: Vec<(Rect, String)>,
+    /// Branch and tag labels, for double-click checkout.
+    labels: Vec<(Rect, Label)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -504,8 +512,9 @@ fn paint_row(
     let visuals = ui.visuals();
     let ext = &tab.history.ext;
     let commit = &tab.commits[i];
-    let selected =
-        tab.history.selected == Some(commit.id) || tab.details.picked.contains(&commit.id);
+    let selected = tab.history.selected == Some(commit.id)
+        || tab.details.picked.contains(&commit.id)
+        || crate::ui::history_flow::is_picked(tab, commit.id);
     let is_head = tab.head_oid == Some(commit.id);
     let row = &tab.graph.rows[i];
     let unreachable = ext.unreachable.contains(&commit.id);
@@ -517,6 +526,7 @@ fn paint_row(
     let mut hits = RowHits {
         toggle: None,
         links: Vec::new(),
+        labels: Vec::new(),
     };
 
     if selected {
@@ -641,7 +651,10 @@ fn paint_row(
             RefKind::Remote => (lane.gamma_multiply(0.45), Color32::WHITE),
             RefKind::Tag => (Color32::from_rgb(0xd9, 0xb3, 0x4a), Color32::BLACK),
         };
+        let start = x;
         x = draw_badge(&desc, pos2(x, line1), &label.text, fill, fg, label.is_head) + 4.0;
+        let r = Rect::from_x_y_ranges(start..=x - 4.0, line1 - 9.0..=line1 + 9.0);
+        hits.labels.push((r.intersect(desc_rect), label));
     }
 
     // Summary, with the conventional prefix and issue links highlighted.
@@ -830,6 +843,8 @@ fn prefix_color(kind: &str) -> Color32 {
 /// A label to draw: its text and how it looks.
 struct Label {
     text: String,
+    /// The full ref name (`text` may be shortened or decorated).
+    name: String,
     kind: RefKind,
     is_head: bool,
 }
@@ -868,6 +883,7 @@ fn visible_labels(tab: &RepoTab, hs: &HistorySettings, id: Oid) -> Vec<Label> {
         }
         out.push(Label {
             text,
+            name: l.name.clone(),
             kind: l.kind,
             is_head: l.is_head,
         });
@@ -1141,6 +1157,9 @@ pub(crate) fn drag_plan(tab: &RepoTab, chain: &[Oid], src: Oid, target: Drop) ->
 fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) {
     let c: &CommitInfo = &tab.commits[i];
     let id = c.id;
+    if history_flow::multi_menu(ui, tab, id, cmds) {
+        return;
+    }
     let sha = id.to_string();
     let short = c.short_id();
     let labels = tab.labels.get(&id).cloned().unwrap_or_default();
@@ -1184,39 +1203,29 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
         }
         ui.separator();
         if let Some(cur) = &current {
-            let target = labels.iter().find(|l| l.kind != RefKind::Tag).map_or(short.clone(), |l| l.name.clone());
-            let rev = labels.iter().find(|l| l.kind != RefKind::Tag).map_or(sha.clone(), |l| l.name.clone());
+            // A branch name, else a remote branch or tag, else the hash.
+            let best = [RefKind::Local, RefKind::Remote, RefKind::Tag].into_iter().find_map(|k| labels.iter().find(|l| l.kind == k));
+            let target = best.map_or(short.clone(), |l| l.name.clone());
+            let rev = best.map_or(sha.clone(), |l| l.name.clone());
             if tab.head_oid != Some(id) {
                 if ui.button(t!("Merge {} into {}…", target, cur)).clicked() {
                     cmds.push(Command::Dialog(Dialog::merge(&rev, &target)));
                     ui.close();
                 }
                 if ui.button(t!("Rebase {} onto {}…", cur, target)).clicked() {
-                    cmds.push(Command::Dialog(Dialog::confirm(
-                        &t!("Rebase"),
-                        &t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, target, cur),
-                        Op::Rebase { onto: rev.clone() },
-                        false,
-                    )));
+                    cmds.push(Command::Dialog(crate::ui::flow_dialogs::rebase(tab, &rev)));
                     ui.close();
                 }
             }
         }
         let in_head = tab.head_oid.is_some_and(|h| tab.repo.is_ancestor(id, h));
-        if in_head && tab.head_oid != Some(id) && ui.button(t!("Interactive rebase after {}…", short)).clicked() {
-            cmds.push(Command::PlanRebase(Some(id)));
+        history_flow::rebase_menu(ui, tab, c, cmds);
+        if !in_head && ui.button(t!("Cherry-pick {}…", short)).clicked() {
+            cmds.push(Command::Dialog(crate::ui::flow_dialogs::cherry_pick(tab, &[id])));
             ui.close();
         }
-        if in_head && c.parents.is_empty() && ui.button(t!("Interactive rebase from the first commit…")).clicked() {
-            cmds.push(Command::PlanRebase(None));
-            ui.close();
-        }
-        if !in_head && ui.button(t!("Cherry-pick {}", short)).clicked() {
-            cmds.run(Op::CherryPick { id, is_merge });
-            ui.close();
-        }
-        if ui.button(t!("Revert {}", short)).clicked() {
-            cmds.run(Op::Revert { id, is_merge });
+        if ui.button(t!("Revert {}…", short)).clicked() {
+            cmds.push(Command::Dialog(crate::ui::flow_dialogs::revert(tab, id)));
             ui.close();
         }
         // Branches that are not checked out can simply be moved here.
