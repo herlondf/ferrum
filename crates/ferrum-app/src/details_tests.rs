@@ -64,6 +64,13 @@ fn press(h: &mut Harness<'_, FerrumApp>, modifiers: Modifiers, key: Key) {
     h.event(up);
 }
 
+fn link<'a>(h: &'a Harness<'_, FerrumApp>, text: &'a str) -> egui_kittest::Node<'a> {
+    use egui_kittest::kittest::NodeT;
+    h.get_all_by_label(text)
+        .find(|n| n.accesskit_node().role() == eframe::egui::accesskit::Role::Link)
+        .expect("link")
+}
+
 fn copied(h: &Harness<'_, FerrumApp>) -> Option<String> {
     h.output()
         .platform_output
@@ -143,6 +150,15 @@ fn space_opens_the_popup_and_shortcuts_copy() {
     h.key_press(Key::Space);
     frames(&mut h);
     assert!(!h.state().tabs[0].details.popup);
+    // With the details focused, Space opens the large diff instead.
+    h.state_mut().tabs[0].pane.pane = crate::ui::focus::Pane::Details;
+    h.key_press(Key::Space);
+    frames(&mut h);
+    assert!(!h.state().tabs[0].details.popup);
+    assert!(crate::ui::diff_view::large_open(&h.ctx, "commit-diff"));
+    h.key_press(Key::Space);
+    frames(&mut h);
+    h.state_mut().tabs[0].pane.pane = crate::ui::focus::Pane::Commits;
 
     press(&mut h, Modifiers::COMMAND, Key::C);
     assert_eq!(copied(&h), Some(id.to_string()));
@@ -159,6 +175,27 @@ fn space_opens_the_popup_and_shortcuts_copy() {
     h.key_press_modifiers(Modifiers::COMMAND | Modifiers::ALT, Key::D);
     frames(&mut h);
     assert!(h.query_by_label("File Tree").is_some());
+}
+
+#[test]
+fn commit_ids_in_messages_preview_and_select() {
+    let dir = history_repo();
+    let p = dir.path();
+    let first = git(p, &["rev-parse", "--short", "main~1"]);
+    std::fs::write(p.join("a.txt"), "four\n").unwrap();
+    let msg = format!("fourth\n\nUndoes part of {first}.");
+    git(p, &["commit", "-qam", &msg]);
+    let mut h = harness(p);
+    frames(&mut h);
+    select(&mut h, "main");
+    link(&h, &first).hover();
+    frames(&mut h);
+    assert!(h.query_by_label("Click to select it").is_some());
+    assert!(h.query_by_label("first").is_some());
+    link(&h, &first).click();
+    frames(&mut h);
+    let id = h.state().tabs[0].repo.resolve(&first).unwrap();
+    assert_eq!(h.state().tabs[0].history.selected, Some(id));
 }
 
 #[test]

@@ -21,7 +21,16 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Drag commits** on the current branch to reorder or squash them.
 - **Repository statistics**: commits per weekday, hour and author, and a
   treemap of changed folders.
-- **Commit details**: message, files and diff.
+- **Commit details** in tabs (Commit / Changes / File Tree, remembered):
+  author and committer, parent links, the branches and tags that contain the
+  commit, commit ids in the message with a preview on hover, copy id or info,
+  open the commit on GitHub, GitLab, Bitbucket or Gitea-style hosts; changed
+  files as a tree or a list; a large popup (Space in the commit list), a
+  separate window per commit, and a collapsible pane (Ctrl+Alt+D).
+- **File Tree** of any commit: browse the repository at that revision, view
+  text (with syntax colors), images and Git LFS pointers, save a file to disk.
+- **Compare**: Ctrl+click two commits, pick two branches in the sidebar, or
+  compare a commit or stash with the working copy; swap the two sides.
 - **Diff viewer**: unified or side by side, syntax highlighting, changed words
   highlighted, find (Ctrl+F), map of changes, next/previous change, ignore
   whitespace, word wrap, font size, whole file or N context lines, visible
@@ -65,6 +74,9 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   your editor/IDE (VS Code, Zed, Sublime, JetBrains, Neovim, Cursor or a custom
   command); external diff and merge tools (Meld, KDiff3, Beyond Compare,
   P4Merge, VS Code, vimdiff, git's difftool/mergetool or a custom command).
+  Files in local changes, commit details, the compare view and the file tree
+  open in the editor or the file manager; a diff line opens in the editor at
+  that line (right-click); Ctrl+D compares a file in the external diff tool.
 - **Preferences**: global git identity, git executable and verbose git output,
   code font and size, tab width, relative/absolute/long dates, system accent
   color, toolbar buttons, branch name space replacement, default merge type.
@@ -103,7 +115,11 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Show reflog | Ctrl+Shift+. |
 | Collapse / expand the selected merge | Left / Right |
 | Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
-| Large diff window | Space |
+| Large diff window (diff focused) / large commit details (commit list focused) | Space |
+| Copy commit id / commit info (commit list focused) | Ctrl+C / Ctrl+Shift+C |
+| Show / hide the commit details | Ctrl+Alt+D |
+| External diff of the selected file | Ctrl+D |
+| Compare two commits | Ctrl+click the second commit |
 | Refresh | F5 or Ctrl+R |
 | Commit (in the message box) | Ctrl+Enter |
 | Commit and push | Ctrl+Shift+Enter |
@@ -155,7 +171,10 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   and quits (`FERRUM_SCREENSHOT_FRAMES=N` waits longer).
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
   the steps are listed in `startup_commands` in `app.rs` (diff options:
-  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`).
+  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`; details:
+  `details:tree;details:open=src;details:select=src/main.rs`,
+  `details:compare=0,3`, `details:workdir=1`, `details:popup`, `details:window`,
+  see `details::dev_step`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
