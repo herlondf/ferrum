@@ -16,6 +16,7 @@ pub mod gitignore;
 pub mod graph;
 pub mod integrate;
 pub mod lfs;
+pub mod library;
 pub mod local;
 pub mod log;
 pub mod message;
