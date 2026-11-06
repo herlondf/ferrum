@@ -1156,6 +1156,7 @@ dependencies = [
  "image",
  "rfd",
  "serde",
+ "sys-locale",
  "tempfile",
 ]
 

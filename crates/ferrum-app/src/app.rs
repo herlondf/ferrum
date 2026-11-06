@@ -20,14 +20,14 @@ use crate::ui::{
 pub struct FerrumApp {
     pub(crate) tabs: Vec<RepoTab>,
     active: usize,
-    settings: Settings,
+    pub(crate) settings: Settings,
     dialog: Option<Dialog>,
     settings_window: settings_ui::SettingsWindow,
     palette: palette::Palette,
     /// Jobs that do not belong to a tab (clone, init, account checks).
     global_job: Option<Job>,
     message: Option<Message>,
-    applied: Option<(ThemeChoice, f32)>,
+    applied: Option<(ThemeChoice, f32, crate::i18n::Language)>,
     was_focused: bool,
     /// Last time local changes were checked in the background.
     last_poll: Instant,
@@ -208,10 +208,15 @@ impl FerrumApp {
     }
 
     fn apply_look(&mut self, ctx: &egui::Context) {
-        let want = (self.settings.theme, self.settings.zoom.clamp(0.6, 2.0));
+        let want = (
+            self.settings.theme,
+            self.settings.zoom.clamp(0.6, 2.0),
+            self.settings.language,
+        );
         if self.applied == Some(want) {
             return;
         }
+        crate::i18n::set_language(want.2);
         ctx.set_theme(match want.0 {
             ThemeChoice::System => egui::ThemePreference::System,
             ThemeChoice::Light => egui::ThemePreference::Light,

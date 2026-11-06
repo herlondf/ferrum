@@ -87,6 +87,7 @@ pub struct ForgeAccount {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    pub language: crate::i18n::Language,
     pub theme: ThemeChoice,
     pub zoom: f32,
     pub pull: PullChoice,
@@ -102,6 +103,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: crate::i18n::Language::System,
             theme: ThemeChoice::System,
             zoom: 1.0,
             pull: PullChoice::Default,

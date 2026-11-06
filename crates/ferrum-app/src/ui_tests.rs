@@ -10,6 +10,33 @@ use egui_kittest::kittest::{NodeT, Queryable};
 
 use crate::app::FerrumApp;
 
+/// UI source files, for checks over every string the app shows.
+pub const SOURCES: &[&str] = &[
+    include_str!("app.rs"),
+    include_str!("command.rs"),
+    include_str!("tab.rs"),
+    include_str!("util.rs"),
+    include_str!("ui/blame.rs"),
+    include_str!("ui/changes.rs"),
+    include_str!("ui/conflicts.rs"),
+    include_str!("ui/details.rs"),
+    include_str!("ui/dialogs.rs"),
+    include_str!("ui/diff_view.rs"),
+    include_str!("ui/forge.rs"),
+    include_str!("ui/history.rs"),
+    include_str!("ui/image_diff.rs"),
+    include_str!("ui/palette.rs"),
+    include_str!("ui/rebase.rs"),
+    include_str!("ui/settings.rs"),
+    include_str!("ui/sidebar.rs"),
+    include_str!("i18n/mod.rs"),
+    include_str!("i18n/pt_br/mod.rs"),
+    include_str!("i18n/pt_br/common.rs"),
+    include_str!("i18n/pt_br/main.rs"),
+    include_str!("i18n/pt_br/editing.rs"),
+    include_str!("i18n/pt_br/extras.rs"),
+];
+
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Proc::new("git")
         .current_dir(dir)
@@ -42,9 +69,13 @@ fn repo() -> tempfile::TempDir {
 
 fn harness(path: &Path) -> Harness<'static, FerrumApp> {
     let path = path.to_path_buf();
-    Harness::builder()
+    let mut h = Harness::builder()
         .with_size([1400.0, 900.0])
-        .build_eframe(move |cc| FerrumApp::new(cc, vec![path]))
+        .build_eframe(move |cc| FerrumApp::new(cc, vec![path]));
+    // Tests look up English labels, whatever the machine's language.
+    h.state_mut().settings.language = crate::i18n::Language::English;
+    h.step();
+    h
 }
 
 /// Runs a few frames so clicks are handled and the next screen is drawn.
@@ -165,25 +196,7 @@ fn discard_from_context_menu_asks_first() {
 /// so icons look the same on every system (no "tofu" boxes).
 #[test]
 fn ui_characters_have_glyphs() {
-    let sources = [
-        include_str!("app.rs"),
-        include_str!("command.rs"),
-        include_str!("tab.rs"),
-        include_str!("util.rs"),
-        include_str!("ui/blame.rs"),
-        include_str!("ui/changes.rs"),
-        include_str!("ui/conflicts.rs"),
-        include_str!("ui/details.rs"),
-        include_str!("ui/dialogs.rs"),
-        include_str!("ui/diff_view.rs"),
-        include_str!("ui/forge.rs"),
-        include_str!("ui/history.rs"),
-        include_str!("ui/image_diff.rs"),
-        include_str!("ui/palette.rs"),
-        include_str!("ui/rebase.rs"),
-        include_str!("ui/settings.rs"),
-        include_str!("ui/sidebar.rs"),
-    ];
+    let sources = SOURCES;
     // The harness sets up fonts the same way the app does.
     let harness = Harness::new_ui(|_| {});
     let ctx = harness.ctx.clone();

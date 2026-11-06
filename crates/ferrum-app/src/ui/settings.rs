@@ -112,6 +112,16 @@ fn general(ui: &mut egui::Ui, settings: &mut Settings) {
         .num_columns(2)
         .spacing([16.0, 10.0])
         .show(ui, |ui| {
+            ui.label(t!("Language"));
+            egui::ComboBox::from_id_salt("settings-language")
+                .selected_text(settings.language.native_name())
+                .show_ui(ui, |ui| {
+                    for lang in crate::i18n::Language::ALL {
+                        ui.selectable_value(&mut settings.language, lang, lang.native_name());
+                    }
+                });
+            ui.end_row();
+
             ui.label("Theme");
             ui.horizontal(|ui| {
                 for (t, name) in [
