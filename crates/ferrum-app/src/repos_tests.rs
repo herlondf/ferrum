@@ -76,7 +76,7 @@ fn manager_renames_removes_and_opens() {
     h.key_press(Key::Enter);
     frames(&mut h);
     assert_eq!(h.state().tabs.len(), 1);
-    assert_eq!(h.state().tabs[0].path(), b.path());
+    assert_eq!(real(h.state().tabs[0].path()), real(b.path()));
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn tab_menu_closes_others_and_same_names_are_told_apart() {
     h.get_by_label("Close Others").click();
     frames(&mut h);
     assert_eq!(h.state().tabs.len(), 1);
-    assert_eq!(h.state().tabs[0].path(), a.as_path());
+    assert_eq!(real(h.state().tabs[0].path()), real(&a));
     // The closed one can come back.
     handle(&mut h, Command::Repos(RepoCmd::ReopenClosed));
     assert_eq!(h.state().tabs.len(), 2);
@@ -141,8 +141,8 @@ fn workspaces_switch_their_tabs() {
         &mut h,
         Command::Repos(RepoCmd::SwitchWorkspace(String::new())),
     );
-    let paths: Vec<PathBuf> = h.state().tabs.iter().map(|t| t.path().into()).collect();
-    assert_eq!(paths, [a.path()]);
+    let paths: Vec<PathBuf> = h.state().tabs.iter().map(|t| real(t.path())).collect();
+    assert_eq!(paths, [real(a.path())]);
     // Moving a tab to a workspace closes it here.
     handle(
         &mut h,
@@ -158,8 +158,8 @@ fn workspaces_switch_their_tabs() {
     h.key_press(Key::Enter);
     frames(&mut h);
     assert_eq!(h.state().settings.library.workspace, "work/x");
-    let paths: Vec<PathBuf> = h.state().tabs.iter().map(|t| t.path().into()).collect();
-    assert_eq!(paths, [b.path(), a.path()]);
+    let paths: Vec<PathBuf> = h.state().tabs.iter().map(|t| real(t.path())).collect();
+    assert_eq!(paths, [real(b.path()), real(a.path())]);
 }
 
 #[test]
@@ -276,13 +276,29 @@ fn tab_opens_in_its_own_window() {
     handle(&mut h, Command::OpenRepo(b.path().into()));
     handle(&mut h, Command::Repos(RepoCmd::OpenInWindow(1)));
     frames(&mut h);
-    assert_eq!(h.state().repo_state().windows, [b.path()]);
+    let windows: Vec<PathBuf> = h
+        .state()
+        .repo_state()
+        .windows
+        .iter()
+        .map(real)
+        .collect();
+    assert_eq!(windows, [real(b.path())]);
     // The main window moved on to the other tab.
-    assert_eq!(h.state().tabs[h.state().active_index()].path(), a.path());
+    assert_eq!(
+        real(h.state().tabs[h.state().active_index()].path()),
+        real(a.path())
+    );
     // A click in the window acts on the window's tab.
     let count = h.get_all_by_label_contains("All Commits").count();
     assert_eq!(count, 2, "sidebar of the main window and of the tab window");
     // Closing the tab closes its window.
     handle(&mut h, Command::CloseTab(1));
     assert!(h.state().repo_state().windows.is_empty());
+}
+
+/// A path with links resolved (macOS /private/var, Windows spellings).
+fn real(p: impl AsRef<Path>) -> PathBuf {
+    let p = p.as_ref();
+    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
