@@ -367,33 +367,11 @@ impl Repo {
         if blob.is_binary() {
             return Err(Error::Other(format!("{path} is a binary file.")));
         }
-        let blame = self.inner.blame_file(Path::new(path), None)?;
-        let content = lossy(blob.content());
-        let mut out = Vec::new();
-        let mut last = None;
-        for (i, text) in content.lines().enumerate() {
-            let Some(hunk) = blame.get_line(i + 1) else {
-                continue;
-            };
-            let sig = hunk.final_signature();
-            let commit = hunk.final_commit_id();
-            out.push(BlameLine {
-                commit,
-                author: sig
-                    .as_ref()
-                    .map(|s| lossy(s.name_bytes()))
-                    .unwrap_or_default(),
-                time: sig.as_ref().map(|s| s.when().seconds()).unwrap_or_default(),
-                offset_minutes: sig
-                    .as_ref()
-                    .map(|s| s.when().offset_minutes())
-                    .unwrap_or_default(),
-                text: text.to_owned(),
-                block_start: last != Some(commit),
-            });
-            last = Some(commit);
-        }
-        Ok(out)
+        // `git blame` follows renames and moves, unlike libgit2's blame.
+        let out = self
+            .git()
+            .run(&["blame", "--porcelain", "HEAD", "--", path])?;
+        Ok(parse_blame(&out))
     }
 
     /// Commits that touched `path`, newest first, following renames.
@@ -606,6 +584,59 @@ fn parse_offset(date: &str) -> i32 {
     let hours: i32 = tz[1..3].parse().unwrap_or(0);
     let minutes: i32 = tz[3..5].parse().unwrap_or(0);
     sign * (hours * 60 + minutes)
+}
+
+/// Parses `git blame --porcelain`. Each line starts with a header
+/// (`<sha> <orig> <final> [count]`); commit details follow only the first
+/// time a commit appears; the line text comes after a tab.
+fn parse_blame(out: &str) -> Vec<BlameLine> {
+    struct Info {
+        author: String,
+        time: i64,
+        offset_minutes: i32,
+    }
+    let mut commits: HashMap<Oid, Info> = HashMap::new();
+    let mut lines = Vec::new();
+    let mut current: Option<Oid> = None;
+    let mut last: Option<Oid> = None;
+    for line in out.lines() {
+        if let Some(text) = line.strip_prefix('\t') {
+            let Some(commit) = current else { continue };
+            let info = commits.get(&commit);
+            lines.push(BlameLine {
+                commit,
+                author: info.map(|i| i.author.clone()).unwrap_or_default(),
+                time: info.map_or(0, |i| i.time),
+                offset_minutes: info.map_or(0, |i| i.offset_minutes),
+                text: text.to_owned(),
+                block_start: last != Some(commit),
+            });
+            last = Some(commit);
+            continue;
+        }
+        let (key, value) = line.split_once(' ').unwrap_or((line, ""));
+        if key.len() == 40
+            && let Ok(id) = Oid::from_str(key)
+        {
+            current = Some(id);
+            commits.entry(id).or_insert(Info {
+                author: String::new(),
+                time: 0,
+                offset_minutes: 0,
+            });
+            continue;
+        }
+        let Some(info) = current.and_then(|c| commits.get_mut(&c)) else {
+            continue;
+        };
+        match key {
+            "author" => info.author = value.to_owned(),
+            "author-time" => info.time = value.parse().unwrap_or(0),
+            "author-tz" => info.offset_minutes = parse_offset(value),
+            _ => {}
+        }
+    }
+    lines
 }
 
 fn parse_worktrees(out: &str) -> Vec<WorktreeInfo> {
@@ -835,6 +866,28 @@ mod tests {
         };
         assert_eq!(summaries(Some(base)), ["second", "third"]);
         assert_eq!(summaries(None), ["first", "second", "third"]);
+    }
+
+    #[test]
+    fn blame_follows_moves() {
+        let t = TestRepo::new();
+        t.commit("a.txt", "one\ntwo\n", "create");
+        let first = t.repo().head_oid().unwrap();
+        std::fs::create_dir(t.path().join("dir")).unwrap();
+        t.git.run(&["mv", "a.txt", "dir/b.txt"]).unwrap();
+        t.git.run(&["commit", "-q", "-m", "move"]).unwrap();
+        t.commit("dir/b.txt", "one\ntwo\nthree\n", "add line");
+        let blame = t.repo().blame("dir/b.txt").unwrap();
+        let texts: Vec<_> = blame.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(texts, ["one", "two", "three"]);
+        // The first two lines still belong to the commit that created them.
+        assert_eq!(blame[0].commit, first);
+        assert_eq!(blame[1].commit, first);
+        assert!(!blame[1].block_start);
+        assert_ne!(blame[2].commit, first);
+        assert!(blame[2].block_start);
+        assert_eq!(blame[0].author, "Test");
+        assert!(blame[0].time > 0);
     }
 
     #[test]
