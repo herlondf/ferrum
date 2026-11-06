@@ -609,7 +609,9 @@ fn opens_the_repository_in_a_custom_editor() {
         if let Ok(s) = std::fs::read_to_string(&marker)
             && !s.is_empty()
         {
-            assert_eq!(Path::new(s.trim()), dir.path());
+            // Compare real paths: on macOS /var is a link to /private/var.
+            let real = |p: &Path| std::fs::canonicalize(p).unwrap();
+            assert_eq!(real(Path::new(s.trim())), real(dir.path()));
             return;
         }
         std::thread::sleep(Duration::from_millis(20));
