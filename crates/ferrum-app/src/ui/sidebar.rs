@@ -49,7 +49,7 @@ fn views(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
         cmds.push(Command::SetView(View::History));
     }
     if let Some(h) = &tab.hosted {
-        let label = format!("⇄ {}s", capitalize(h.kind.request_name()));
+        let label = format!("🔀 {}s", capitalize(h.kind.request_name()));
         if ui
             .add(egui::Button::selectable(
                 tab.view == View::PullRequests,
@@ -69,7 +69,7 @@ fn capitalize(s: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Groups branch names by their first folder (`feature/x` → `feature`).
+/// Groups branch names by their first folder (`feature/x` -> `feature`).
 fn grouped<'a>(
     branches: impl Iterator<Item = &'a BranchInfo>,
     strip: usize,
@@ -122,10 +122,10 @@ fn branch_row(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, strip: usize, cm
     };
     if let Some((ahead, behind)) = b.ahead_behind {
         if ahead > 0 {
-            text.push_str(&format!("  ↑{ahead}"));
+            text.push_str(&format!("  ⬆{ahead}"));
         }
         if behind > 0 {
-            text.push_str(&format!("  ↓{behind}"));
+            text.push_str(&format!("  ⬇{behind}"));
         }
     }
     let rich = if b.is_head {
@@ -162,11 +162,9 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
             cmds.run(Op::Checkout(name.clone()));
             ui.close();
         }
-        if b.is_head {
-            if ui.button("Pull").clicked() {
-                cmds.push(Command::Dialog(Dialog::Pull));
-                ui.close();
-            }
+        if b.is_head && ui.button("Pull").clicked() {
+            cmds.push(Command::Dialog(Dialog::Pull));
+            ui.close();
         }
         if ui.button(format!("Push {name}…")).clicked() {
             cmds.push(Command::Dialog(Dialog::push(tab, &name)));
@@ -455,8 +453,9 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                     .commit_view
                     .as_ref()
                     .is_some_and(|v| v.is_stash && v.details.info.id == s.id);
-                let resp = ui
-                    .add(egui::Button::selectable(selected, format!("▤ {}", s.message)).truncate());
+                let resp = ui.add(
+                    egui::Button::selectable(selected, format!("📦 {}", s.message)).truncate(),
+                );
                 if resp.clicked() {
                     cmds.push(Command::ShowCommit(s.id));
                 }
@@ -507,7 +506,7 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                 let label = if s.initialized {
                     format!("▣ {}", s.path)
                 } else {
-                    format!("▢ {} (not initialized)", s.path)
+                    format!("☐ {} (not initialized)", s.path)
                 };
                 let resp = ui.add(egui::Button::selectable(false, label).truncate());
                 let resp = resp.on_hover_text(s.url.clone().unwrap_or_default());

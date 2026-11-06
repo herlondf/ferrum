@@ -957,6 +957,7 @@ version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0979c2e37860fcf13a2bea77508607f067a9a6a84ba9bd47b5e298582fb59b86"
 dependencies = [
+ "eframe",
  "egui",
  "kittest",
  "log",
@@ -1149,11 +1150,13 @@ name = "ferrum"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "egui",
  "egui_kittest",
  "ferrum-core",
  "image",
  "rfd",
  "serde",
+ "tempfile",
 ]
 
 [[package]]

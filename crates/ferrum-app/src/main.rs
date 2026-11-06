@@ -4,6 +4,8 @@ mod jobs;
 mod settings;
 mod tab;
 mod ui;
+#[cfg(test)]
+mod ui_tests;
 mod util;
 
 fn main() -> eframe::Result {

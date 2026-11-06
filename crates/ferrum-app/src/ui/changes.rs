@@ -398,18 +398,20 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 amend: tab.changes.amend,
             });
         }
-        if staged == 0 && !tab.status.unstaged.is_empty() && has_message && !tab.changes.amend {
-            if ui
+        if staged == 0
+            && !tab.status.unstaged.is_empty()
+            && has_message
+            && !tab.changes.amend
+            && ui
                 .add_enabled(!tab.busy(), egui::Button::new("Stage all & commit"))
                 .clicked()
-            {
-                tab.changes.committing = true;
-                cmds.run(Op::StageAll);
-                cmds.run(Op::Commit {
-                    message: tab.changes.message.clone(),
-                    amend: false,
-                });
-            }
+        {
+            tab.changes.committing = true;
+            cmds.run(Op::StageAll);
+            cmds.run(Op::Commit {
+                message: tab.changes.message.clone(),
+                amend: false,
+            });
         }
     });
 

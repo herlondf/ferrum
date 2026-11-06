@@ -109,7 +109,7 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 start_content_search(tab, ui.ctx());
             }
         }
-        if !tab.history.search.is_empty() && ui.small_button("✕").on_hover_text("Clear").clicked()
+        if !tab.history.search.is_empty() && ui.small_button("×").on_hover_text("Clear").clicked()
         {
             tab.history.search.clear();
             tab.history.content_hits = None;
@@ -472,6 +472,30 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
         if ui.button(format!("Revert {short}")).clicked() {
             cmds.run(Op::Revert { id, is_merge });
             ui.close();
+        }
+        // Branches that are not checked out can simply be moved here.
+        let movable: Vec<String> = tab
+            .branches
+            .iter()
+            .filter(|b| b.kind == BranchKind::Local && !b.is_head && b.target != Some(id))
+            .map(|b| b.name.clone())
+            .collect();
+        if !movable.is_empty() {
+            ui.menu_button("Move branch to here", |ui| {
+                egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                    for name in movable {
+                        if ui.button(&name).clicked() {
+                            cmds.push(Command::Dialog(Dialog::confirm(
+                                "Move branch",
+                                &format!("Point {name} at {short}? Commits only on {name} may become unreachable (you can undo right after)."),
+                                Op::MoveBranch { name: name.clone(), target: sha.clone() },
+                                false,
+                            )));
+                            ui.close();
+                        }
+                    }
+                });
+            });
         }
         if let Some(cur) = &current {
             ui.menu_button(format!("Reset {cur} to here"), |ui| {

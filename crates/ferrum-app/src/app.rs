@@ -161,6 +161,16 @@ impl FerrumApp {
         }
     }
 
+    /// A git operation or other job is running or queued.
+    #[cfg(test)]
+    pub fn is_busy(&self) -> bool {
+        self.global_job.is_some()
+            || self
+                .tabs
+                .iter()
+                .any(|t| t.job.is_some() || !t.queue.is_empty())
+    }
+
     fn tab(&mut self) -> Option<&mut RepoTab> {
         self.tabs.get_mut(self.active)
     }
@@ -459,7 +469,7 @@ impl FerrumApp {
                                 .map_err(|e| e.to_string())
                         })
                     }
-                    _ => self.error("Log in first (Settings → Accounts)."),
+                    _ => self.error("Log in first (Settings > Accounts)."),
                 }
             }
             Command::VerifyAccount { kind, host, token } => {
@@ -626,7 +636,7 @@ impl FerrumApp {
             let has_remote = !tab.remotes.is_empty();
             ui.add_enabled_ui(!busy, |ui| {
                 if ui
-                    .add_enabled(has_remote, egui::Button::new("⬇ Fetch"))
+                    .add_enabled(has_remote, egui::Button::new("🔄 Fetch"))
                     .on_hover_text("Fetch all remotes (Ctrl+Shift+F)")
                     .clicked()
                 {
@@ -634,7 +644,7 @@ impl FerrumApp {
                 }
                 let pull = ui.add_enabled(
                     has_remote && tab.head.is_some(),
-                    egui::Button::new("⤓ Pull"),
+                    egui::Button::new("⬇ Pull"),
                 );
                 if pull
                     .on_hover_text(format!(
@@ -648,7 +658,7 @@ impl FerrumApp {
                 if ui
                     .add_enabled(
                         has_remote && tab.head.is_some(),
-                        egui::Button::new("⤒ Push"),
+                        egui::Button::new("⬆ Push"),
                     )
                     .on_hover_text("Push (Ctrl+Shift+U)")
                     .clicked()
@@ -656,7 +666,7 @@ impl FerrumApp {
                 {
                     cmds.push(Command::Dialog(Dialog::push(tab, b)));
                 }
-                ui.menu_button("⋯", |ui| {
+                ui.menu_button("☰", |ui| {
                     if ui.button("Pull with options…").clicked() {
                         cmds.push(Command::Dialog(Dialog::Pull));
                         ui.close();
@@ -684,7 +694,7 @@ impl FerrumApp {
                 });
                 ui.separator();
                 if ui
-                    .button("⑂ Branch")
+                    .button("🌿 Branch")
                     .on_hover_text("New branch (Ctrl+B)")
                     .clicked()
                 {
@@ -692,7 +702,7 @@ impl FerrumApp {
                     cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
                 }
                 if ui
-                    .add_enabled(!tab.status.is_empty(), egui::Button::new("▤ Stash"))
+                    .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
                     .on_hover_text("Stash changes (Ctrl+Shift+S)")
                     .clicked()
                 {
@@ -700,7 +710,7 @@ impl FerrumApp {
                 }
                 if let Some(s) = tab.stashes.first()
                     && ui
-                        .button("▤ Pop")
+                        .button("📤 Pop")
                         .on_hover_text(format!("Apply and delete the latest stash: {}", s.message))
                         .clicked()
                 {
@@ -710,14 +720,13 @@ impl FerrumApp {
                     });
                 }
                 let undo = tab.undo.last().map(|u| u.label.clone());
-                let resp = ui.add_enabled(undo.is_some(), egui::Button::new("↶ Undo"));
-                if let Some(label) = undo {
-                    if resp
+                let resp = ui.add_enabled(undo.is_some(), egui::Button::new("↩ Undo"));
+                if let Some(label) = undo
+                    && resp
                         .on_hover_text(format!("Undo: {label} (Ctrl+Z)"))
                         .clicked()
-                    {
-                        cmds.push(Command::Undo);
-                    }
+                {
+                    cmds.push(Command::Undo);
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -740,7 +749,7 @@ impl FerrumApp {
             for (i, tab) in self.tabs.iter().enumerate() {
                 let mut label = tab.name.clone();
                 if let Some(b) = &tab.head {
-                    label.push_str(&format!("  ⑂ {b}"));
+                    label.push_str(&format!("  🌿 {b}"));
                 }
                 if tab.busy() {
                     label.push_str(" ⏳");
@@ -753,7 +762,7 @@ impl FerrumApp {
                 }
                 if resp.middle_clicked()
                     || ui
-                        .small_button("✕")
+                        .small_button("×")
                         .on_hover_text("Close (Ctrl+W)")
                         .clicked()
                 {
@@ -825,7 +834,7 @@ impl FerrumApp {
                     && let Some((a, bh)) = b.ahead_behind
                     && (a > 0 || bh > 0)
                 {
-                    ui.weak(format!("↑{a} ↓{bh}"));
+                    ui.weak(format!("⬆{a} ⬇{bh}"));
                 }
             });
         });

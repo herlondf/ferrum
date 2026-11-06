@@ -1,0 +1,224 @@
+//! End-to-end tests that drive the real app with simulated clicks and typing.
+
+use std::path::Path;
+use std::process::Command as Proc;
+use std::time::Duration;
+
+use eframe::egui::accesskit::Role;
+use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
+
+use crate::app::FerrumApp;
+
+fn git(dir: &Path, args: &[&str]) -> String {
+    let out = Proc::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}
+
+/// A repository with one commit and a modified file.
+fn repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    git(p, &["init", "-q", "-b", "main"]);
+    git(p, &["config", "user.name", "Test"]);
+    git(p, &["config", "user.email", "test@example.com"]);
+    git(p, &["config", "commit.gpgsign", "false"]);
+    std::fs::write(p.join("a.txt"), "one\n").unwrap();
+    git(p, &["add", "-A"]);
+    git(p, &["commit", "-q", "-m", "first"]);
+    std::fs::write(p.join("a.txt"), "one\ntwo\n").unwrap();
+    dir
+}
+
+fn harness(path: &Path) -> Harness<'static, FerrumApp> {
+    let path = path.to_path_buf();
+    Harness::builder()
+        .with_size([1400.0, 900.0])
+        .build_eframe(move |cc| FerrumApp::new(cc, vec![path]))
+}
+
+/// Runs a few frames so clicks are handled and the next screen is drawn.
+fn frames(h: &mut Harness<'_, FerrumApp>) {
+    for _ in 0..4 {
+        h.step();
+    }
+}
+
+/// Steps frames until no git operation is running.
+fn settle(h: &mut Harness<'_, FerrumApp>) {
+    for _ in 0..1000 {
+        h.step();
+        if !h.state().is_busy() {
+            frames(h);
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    panic!("operation did not finish");
+}
+
+#[test]
+fn stage_all_and_commit() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    h.get_by_label("Stage all").click();
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "a.txt"
+    );
+
+    let message = h.get_by_role(Role::MultilineTextInput);
+    message.focus();
+    frames(&mut h);
+    h.get_by_role(Role::MultilineTextInput)
+        .type_text("Second commit");
+    frames(&mut h);
+    h.get_by_label("Commit 1 file").click();
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["log", "-1", "--format=%s"]),
+        "Second commit"
+    );
+    assert_eq!(git(dir.path(), &["status", "--porcelain"]), "");
+    // The message box is cleared after a successful commit.
+    assert_eq!(
+        h.get_by_role(Role::MultilineTextInput)
+            .value()
+            .unwrap_or_default(),
+        ""
+    );
+}
+
+#[test]
+fn create_branch_then_undo() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label("🌿 Branch").click();
+    frames(&mut h);
+    // The dialog's name field has the focus (the history search box is also a text input).
+    let field = h
+        .get_all_by_role(Role::TextInput)
+        .find(|n| n.is_focused())
+        .expect("focused field");
+    field.type_text("feature-x");
+    frames(&mut h);
+    h.get_by_label("Create branch").click();
+    settle(&mut h);
+    assert_eq!(git(dir.path(), &["branch", "--show-current"]), "feature-x");
+
+    h.get_by_label_contains("Undo").click();
+    settle(&mut h);
+    assert_eq!(git(dir.path(), &["branch", "--show-current"]), "main");
+    assert_eq!(git(dir.path(), &["branch", "--list", "feature-x"]), "");
+    // The local change survived both checkouts.
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "one\ntwo\n"
+    );
+}
+
+#[test]
+fn discard_from_context_menu_asks_first() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    // The file row in the list (the diff header also shows the path).
+    let row = h
+        .get_all_by_label_contains("a.txt")
+        .find(|n| n.accesskit_node().role() == Role::Button)
+        .expect("file row");
+    row.click_secondary();
+    frames(&mut h);
+    h.get_by_label("Discard changes…").click();
+    frames(&mut h);
+    // Nothing happens until the dialog is confirmed.
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "one\ntwo\n"
+    );
+    h.get_by_label("Yes, do it").click();
+    settle(&mut h);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+        "one\n"
+    );
+}
+
+/// Every non-ASCII character in the UI code must exist in the bundled fonts,
+/// so icons look the same on every system (no "tofu" boxes).
+#[test]
+fn ui_characters_have_glyphs() {
+    let sources = [
+        include_str!("app.rs"),
+        include_str!("command.rs"),
+        include_str!("tab.rs"),
+        include_str!("util.rs"),
+        include_str!("ui/blame.rs"),
+        include_str!("ui/changes.rs"),
+        include_str!("ui/conflicts.rs"),
+        include_str!("ui/details.rs"),
+        include_str!("ui/dialogs.rs"),
+        include_str!("ui/diff_view.rs"),
+        include_str!("ui/forge.rs"),
+        include_str!("ui/history.rs"),
+        include_str!("ui/image_diff.rs"),
+        include_str!("ui/palette.rs"),
+        include_str!("ui/rebase.rs"),
+        include_str!("ui/settings.rs"),
+        include_str!("ui/sidebar.rs"),
+    ];
+    // The harness sets up fonts the same way the app does.
+    let harness = Harness::new_ui(|_| {});
+    let ctx = harness.ctx.clone();
+    let mut missing: Vec<char> = Vec::new();
+    for src in sources {
+        // Skip comments: only string contents reach the screen.
+        for line in src.lines().filter(|l| !l.trim_start().starts_with("//")) {
+            for c in line.chars().filter(|c| !c.is_ascii() && !c.is_control()) {
+                let has = ctx.fonts_mut(|f| {
+                    f.has_glyph(&eframe::egui::FontId::proportional(13.0), c)
+                        && f.has_glyph(&eframe::egui::FontId::monospace(12.0), c)
+                });
+                if !has && !missing.contains(&c) {
+                    missing.push(c);
+                }
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "characters without a glyph: {missing:?}"
+    );
+}
+
+#[test]
+#[ignore]
+fn print_glyph_candidates() {
+    let harness = Harness::new_ui(|_| {});
+    let candidates = "→←↑↓⬆⬇⬅➡⤓⤒⤵⤴⇄⇅⇆🔀🔁🔄🔃⟳⟲↻↺↶↷↩↪⋯…⋮☰✕✖×❌🗙✗✓✔⑂⎇🌿▤▦▣▢☐☑📦🗃📥📤⏎⇧⇩⇪⬍⏏✚➕＋⚠⏳⌛👤🔍⚙⌘📝🕓📂📁🏷☁🔖⬤●○◯◉·•";
+    let mut have = String::new();
+    let mut missing = String::new();
+    for c in candidates.chars() {
+        let ok = harness
+            .ctx
+            .fonts_mut(|f| f.has_glyph(&eframe::egui::FontId::proportional(13.0), c));
+        if ok { have.push(c) } else { missing.push(c) }
+    }
+    println!("HAVE: {have}\nMISSING: {missing}");
+}

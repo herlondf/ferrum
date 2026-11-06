@@ -238,7 +238,7 @@ pub fn show(
                         painter.text(pos2(x, y), Align2::LEFT_CENTER, prefix, font.clone(), color);
                         let mut text = line.text.replace('\t', "    ");
                         if line.no_newline {
-                            text.push_str("  ⏎̸");
+                            text.push_str("  (no newline at end)");
                         }
                         painter.text(
                             pos2(x + char_w * 2.0, y),

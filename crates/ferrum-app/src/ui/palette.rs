@@ -256,20 +256,47 @@ pub fn show(
                 egui::ScrollArea::vertical()
                     .max_height(360.0)
                     .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        // Leave room for the scroll bar.
+                        let width = ui.available_width() - 12.0;
                         for (i, (_, e)) in matches.iter().enumerate() {
-                            let resp = ui
-                                .horizontal(|ui| {
-                                    let r = ui.add(
-                                        egui::Button::selectable(i == p.selected, &e.label)
-                                            .min_size(egui::vec2(380.0, 0.0)),
-                                    );
-                                    if !e.shortcut.is_empty() {
-                                        ui.weak(e.shortcut);
-                                    }
-                                    r
-                                })
-                                .inner;
-                            if i == p.selected && (up || down) {
+                            let (rect, resp) = ui
+                                .allocate_exact_size(egui::vec2(width, 24.0), egui::Sense::click());
+                            let selected = i == p.selected;
+                            let visuals = ui.visuals();
+                            if selected {
+                                ui.painter()
+                                    .rect_filled(rect, 4.0, visuals.selection.bg_fill);
+                            } else if resp.hovered() {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    4.0,
+                                    visuals.widgets.hovered.weak_bg_fill,
+                                );
+                            }
+                            let color = if selected {
+                                visuals.selection.stroke.color
+                            } else {
+                                visuals.text_color()
+                            };
+                            let label_area = rect.with_max_x(rect.right() - 110.0);
+                            ui.painter().with_clip_rect(label_area).text(
+                                rect.left_center() + egui::vec2(8.0, 0.0),
+                                egui::Align2::LEFT_CENTER,
+                                &e.label,
+                                egui::FontId::proportional(13.5),
+                                color,
+                            );
+                            if !e.shortcut.is_empty() {
+                                ui.painter().text(
+                                    rect.right_center() - egui::vec2(8.0, 0.0),
+                                    egui::Align2::RIGHT_CENTER,
+                                    e.shortcut,
+                                    egui::FontId::proportional(12.0),
+                                    visuals.weak_text_color(),
+                                );
+                            }
+                            if selected && (up || down) {
                                 resp.scroll_to_me(None);
                             }
                             if resp.clicked() {

@@ -95,7 +95,7 @@ pub fn change_label(
         extra.push_str(d);
     }
     if let Some(old) = old_path {
-        extra.push_str(&format!(" ← {old}"));
+        extra.push_str(&format!(" ⬅ {old}"));
     }
     if !extra.is_empty() {
         job.append(
