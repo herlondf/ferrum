@@ -268,6 +268,16 @@ impl FileDiff {
     }
 }
 
+/// A commit in the history of one file.
+#[derive(Debug, Clone)]
+pub struct FileCommit {
+    pub commit: CommitInfo,
+    /// Path of the file in this commit (it may have been renamed since).
+    pub path: String,
+    /// Previous path, when this commit renamed or copied the file.
+    pub old_path: Option<String>,
+}
+
 /// One line of `git blame`.
 #[derive(Debug, Clone)]
 pub struct BlameLine {
