@@ -324,6 +324,7 @@ fn state_command(state: RepoState) -> Option<&'static str> {
         RepoState::Rebase => Some("rebase"),
         RepoState::CherryPick => Some("cherry-pick"),
         RepoState::Revert => Some("revert"),
+        RepoState::Am => Some("am"),
         _ => None,
     }
 }

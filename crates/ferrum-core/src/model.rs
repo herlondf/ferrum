@@ -146,6 +146,8 @@ pub enum RepoState {
     CherryPick,
     Revert,
     Bisect,
+    /// `git am` stopped (patches being applied).
+    Am,
     Other,
 }
 
@@ -158,6 +160,7 @@ impl RepoState {
             RepoState::CherryPick => "Cherry-pick in progress",
             RepoState::Revert => "Revert in progress",
             RepoState::Bisect => "Bisect in progress",
+            RepoState::Am => "Applying patches",
             RepoState::Other => "Operation in progress",
         }
     }

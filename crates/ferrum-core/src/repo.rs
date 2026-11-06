@@ -87,8 +87,8 @@ impl Repo {
             S::Revert | S::RevertSequence => RepoState::Revert,
             S::CherryPick | S::CherryPickSequence => RepoState::CherryPick,
             S::Bisect => RepoState::Bisect,
+            S::ApplyMailbox | S::ApplyMailboxOrRebase => RepoState::Am,
             S::Rebase | S::RebaseInteractive | S::RebaseMerge => RepoState::Rebase,
-            _ => RepoState::Other,
         }
     }
 
