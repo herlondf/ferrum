@@ -12,6 +12,7 @@ pub mod diff;
 pub mod forge;
 pub mod gitignore;
 pub mod graph;
+pub mod integrate;
 pub mod local;
 pub mod log;
 pub mod message;
