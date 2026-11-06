@@ -57,42 +57,43 @@ pub fn show(
         let selected = selection.as_ref().map_or(0, |s| s.lines.len());
         if selected > 0 && line_staging {
             ui.separator();
-            ui.label(format!(
-                "{selected} line{} selected",
-                if selected == 1 { "" } else { "s" }
-            ));
+            ui.label(if selected == 1 {
+                t!("1 line selected")
+            } else {
+                t!("{} lines selected", selected)
+            });
             match mode {
                 DiffMode::Unstaged => {
-                    if ui.button("Stage lines").clicked() {
+                    if ui.button(t!("Stage lines")).clicked() {
                         action = Some(DiffAction::Lines(Action::Stage));
                     }
-                    if ui.button("Discard lines").clicked() {
+                    if ui.button(t!("Discard lines")).clicked() {
                         action = Some(DiffAction::Lines(Action::Discard));
                     }
                 }
                 DiffMode::Staged => {
-                    if ui.button("Unstage lines").clicked() {
+                    if ui.button(t!("Unstage lines")).clicked() {
                         action = Some(DiffAction::Lines(Action::Unstage));
                     }
                 }
                 DiffMode::ReadOnly => {}
             }
-            if ui.small_button("Clear").clicked()
+            if ui.small_button(t!("Clear")).clicked()
                 && let Some(s) = selection.as_deref_mut()
             {
                 s.clear();
             }
         } else if line_staging && mode != DiffMode::ReadOnly {
-            ui.weak("Click lines to select them, Shift+click for a range.");
+            ui.weak(t!("Click lines to select them, Shift+click for a range."));
         }
     });
     ui.separator();
 
     if file.hunks.is_empty() {
         ui.weak(if file.binary {
-            "Binary file."
+            t!("Binary file.")
         } else {
-            "No changes to show (empty file or mode change)."
+            t!("No changes to show (empty file or mode change).")
         });
         return action;
     }
@@ -172,11 +173,11 @@ pub fn show(
                                         .layout(Layout::right_to_left(Align::Center)),
                                     |ui| match mode {
                                         DiffMode::Unstaged => {
-                                            btn(ui, "Discard hunk", Action::Discard);
-                                            btn(ui, "Stage hunk", Action::Stage);
+                                            btn(ui, &t!("Discard hunk"), Action::Discard);
+                                            btn(ui, &t!("Stage hunk"), Action::Stage);
                                         }
                                         DiffMode::Staged => {
-                                            btn(ui, "Unstage hunk", Action::Unstage)
+                                            btn(ui, &t!("Unstage hunk"), Action::Unstage)
                                         }
                                         DiffMode::ReadOnly => {}
                                     },
@@ -238,7 +239,7 @@ pub fn show(
                         painter.text(pos2(x, y), Align2::LEFT_CENTER, prefix, font.clone(), color);
                         let mut text = line.text.replace('\t', "    ");
                         if line.no_newline {
-                            text.push_str("  (no newline at end)");
+                            text.push_str(&format!("  {}", t!("(no newline at end)")));
                         }
                         painter.text(
                             pos2(x + char_w * 2.0, y),

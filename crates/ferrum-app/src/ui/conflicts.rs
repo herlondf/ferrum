@@ -133,7 +133,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         match conflicted.first() {
             Some(p) => open(tab, p.clone()),
             None => {
-                ui.weak("No conflicts.");
+                ui.weak(t!("No conflicts."));
             }
         }
         return;
@@ -176,7 +176,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         return;
     };
     if !conflicted.contains(&path) {
-        ui.label(format!("{path} has no conflicts."));
+        ui.label(t!("{} has no conflicts.", path));
         return;
     }
     if let Some(e) = &file.error {
@@ -184,9 +184,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     }
     let (ours_label, theirs_label) = side_labels(file);
     if in_rebase {
-        ui.weak(format!(
-            "During a rebase, {ours_label} is the branch being rebased onto and {theirs_label} is your commit being replayed."
-        ));
+        ui.weak(t!("During a rebase, {} is the branch being rebased onto and {} is your commit being replayed.", ours_label, theirs_label));
     }
 
     match file.situation {
@@ -198,11 +196,11 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         Situation::Binary | Situation::Missing => {
             ui.add_space(12.0);
             ui.label(if file.situation == Situation::Binary {
-                "This is a binary file, so it cannot be merged line by line."
+                t!("This is a binary file, so it cannot be merged line by line.")
             } else {
-                "This file is not in the working copy."
+                t!("This file is not in the working copy.")
             });
-            ui.label("Resolve it by keeping one version of the whole file:");
+            ui.label(t!("Resolve it by keeping one version of the whole file:"));
             ui.add_enabled_ui(!busy, |ui| whole_file_buttons(ui, &path, cmds));
             return;
         }
@@ -218,8 +216,8 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     egui::CentralPanel::default_margins().show(ui, |ui| {
         if file.choices.is_empty() {
             ui.add_space(12.0);
-            ui.label("No conflict markers are left in this file.");
-            ui.weak("Check the result below and mark the file as resolved.");
+            ui.label(t!("No conflict markers are left in this file."));
+            ui.weak(t!("Check the result below and mark the file as resolved."));
             return;
         }
         egui::ScrollArea::vertical()
@@ -238,8 +236,8 @@ fn top_bar(
 ) {
     ui.horizontal(|ui| {
         if ui
-            .button("⬅ Local Changes")
-            .on_hover_text("Back to the list of local changes")
+            .button(t!("⬅ Local Changes"))
+            .on_hover_text(t!("Back to the list of local changes"))
             .clicked()
         {
             cmds.push(Command::SetView(View::Changes));
@@ -247,8 +245,9 @@ fn top_bar(
         ui.separator();
         let pos = conflicted.iter().position(|p| p == path);
         let counter = match pos {
-            Some(i) => format!("{} of {}", i + 1, conflicted.len()),
-            None => format!("{} left", conflicted.len()),
+            Some(i) => t!("{} of {}", i + 1, conflicted.len()),
+            None if conflicted.len() == 1 => t!("1 left"),
+            None => t!("{} left", conflicted.len()),
         };
         egui::ComboBox::from_id_salt("conflict-file")
             .selected_text(path)
@@ -265,15 +264,15 @@ fn top_bar(
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(!tab.busy() && pos.is_some(), |ui| {
                 if ui
-                    .button("Use theirs for whole file")
-                    .on_hover_text("Take their version of the file and mark it resolved")
+                    .button(t!("Use theirs for whole file"))
+                    .on_hover_text(t!("Take their version of the file and mark it resolved"))
                     .clicked()
                 {
                     resolve_with(cmds, path, Side::Theirs);
                 }
                 if ui
-                    .button("Use ours for whole file")
-                    .on_hover_text("Take our version of the file and mark it resolved")
+                    .button(t!("Use ours for whole file"))
+                    .on_hover_text(t!("Take our version of the file and mark it resolved"))
                     .clicked()
                 {
                     resolve_with(cmds, path, Side::Ours);
@@ -292,10 +291,10 @@ fn resolve_with(cmds: &mut Commands, path: &str, side: Side) {
 
 fn whole_file_buttons(ui: &mut egui::Ui, path: &str, cmds: &mut Commands) {
     ui.horizontal(|ui| {
-        if ui.button("Use ours").clicked() {
+        if ui.button(t!("Use ours")).clicked() {
             resolve_with(cmds, path, Side::Ours);
         }
-        if ui.button("Use theirs").clicked() {
+        if ui.button(t!("Use theirs")).clicked() {
             resolve_with(cmds, path, Side::Theirs);
         }
     });
@@ -307,13 +306,13 @@ fn side_labels(file: &FileState) -> (String, String) {
         Chunk::Conflict(c) => Some(c),
         _ => None,
     });
-    let pick = |s: Option<&String>, side: &str| match s.filter(|s| !s.is_empty()) {
+    let pick = |s: Option<&String>, side: String| match s.filter(|s| !s.is_empty()) {
         Some(label) => format!("{side} ({label})"),
-        None => side.to_owned(),
+        None => side,
     };
     (
-        pick(first.map(|c| &c.ours_label), "ours"),
-        pick(first.map(|c| &c.theirs_label), "theirs"),
+        pick(first.map(|c| &c.ours_label), t!("ours")),
+        pick(first.map(|c| &c.theirs_label), t!("theirs")),
     )
 }
 
@@ -333,10 +332,12 @@ fn deleted_view(
         (theirs_label, ours_label)
     };
     ui.add_space(12.0);
-    ui.label(format!(
-        "This file was deleted on {deleter} and changed on {changer}."
+    ui.label(t!(
+        "This file was deleted on {} and changed on {}.",
+        deleter,
+        changer
     ));
-    ui.label("Keep the changed file, or delete it:");
+    ui.label(t!("Keep the changed file, or delete it:"));
     ui.add_enabled_ui(!busy, |ui| {
         ui.horizontal(|ui| {
             let (keep, delete) = if by_us {
@@ -344,10 +345,10 @@ fn deleted_view(
             } else {
                 (Side::Ours, Side::Theirs)
             };
-            if ui.button("Keep the file").clicked() {
+            if ui.button(t!("Keep the file")).clicked() {
                 resolve_with(cmds, path, keep);
             }
-            if ui.button("Delete the file").clicked() {
+            if ui.button(t!("Delete the file")).clicked() {
                 resolve_with(cmds, path, delete);
             }
         });
@@ -359,7 +360,7 @@ fn deleted_view(
     };
     if let Some(text) = kept {
         ui.add_space(8.0);
-        ui.strong(format!("Changed version ({changer})"));
+        ui.strong(t!("Changed version ({})", changer));
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
@@ -433,16 +434,18 @@ fn common_text(ui: &mut egui::Ui, text: &str, first: bool, last: bool, expanded:
     };
     if expanded || lines.len() <= head + tail + 1 {
         mono(ui, &lines);
-        return expanded && lines.len() > head + tail + 1 && ui.small_button("Collapse").clicked();
+        return expanded
+            && lines.len() > head + tail + 1
+            && ui.small_button(t!("Collapse")).clicked();
     }
     mono(ui, &lines[..head]);
     let hidden = lines.len() - head - tail;
     let clicked = ui
         .add(
-            egui::Button::new(RichText::new(format!("… {hidden} unchanged lines")).weak())
+            egui::Button::new(RichText::new(t!("… {} unchanged lines", hidden)).weak())
                 .frame(false),
         )
-        .on_hover_text("Show all")
+        .on_hover_text(t!("Show all"))
         .clicked();
     mono(ui, &lines[lines.len() - tail..]);
     clicked
@@ -465,28 +468,28 @@ fn conflict_view(
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.strong(format!("Conflict {} of {total}", n + 1));
+                ui.strong(t!("Conflict {} of {}", n + 1, total));
                 if choice.is_none() {
-                    ui.colored_label(ui.visuals().warn_fg_color, "unresolved");
+                    ui.colored_label(ui.visuals().warn_fg_color, t!("unresolved"));
                 }
                 ui.add_space(12.0);
                 for (label, value) in [
-                    ("Ours", Choice::Ours),
-                    ("Theirs", Choice::Theirs),
-                    ("Both (ours first)", Choice::OursThenTheirs),
-                    ("Both (theirs first)", Choice::TheirsThenOurs),
+                    (t!("Ours"), Choice::Ours),
+                    (t!("Theirs"), Choice::Theirs),
+                    (t!("Both (ours first)"), Choice::OursThenTheirs),
+                    (t!("Both (theirs first)"), Choice::TheirsThenOurs),
                 ] {
                     let selected = *choice == Some(value);
                     if ui.add(egui::Button::selectable(selected, label)).clicked() {
                         *choice = if selected { None } else { Some(value) };
                     }
                 }
-                if choice.is_some() && ui.small_button("Reset").clicked() {
+                if choice.is_some() && ui.small_button(t!("Clear")).clicked() {
                     *choice = None;
                 }
             });
             if let Some(base) = &c.base {
-                egui::CollapsingHeader::new(RichText::new("Base (common ancestor)").weak())
+                egui::CollapsingHeader::new(RichText::new(t!("Base (common ancestor)")).weak())
                     .id_salt(("base", n))
                     .show(ui, |ui| side_text(ui, base, None));
             }
@@ -501,7 +504,7 @@ fn conflict_view(
                 let theirs = theirs_color(&cols[1]);
                 side_view(
                     &mut cols[0],
-                    "Ours",
+                    &t!("Ours"),
                     &c.ours_label,
                     &c.ours,
                     ours,
@@ -509,7 +512,7 @@ fn conflict_view(
                 );
                 side_view(
                     &mut cols[1],
-                    "Theirs",
+                    &t!("Theirs"),
                     &c.theirs_label,
                     &c.theirs,
                     theirs,
@@ -565,7 +568,7 @@ fn side_view(
 
 fn side_text(ui: &mut egui::Ui, text: &str, color: Option<Color32>) {
     if text.is_empty() {
-        ui.label(RichText::new("(empty)").italics().weak());
+        ui.label(RichText::new(t!("(empty)")).italics().weak());
         return;
     }
     let mut rt = RichText::new(text.strip_suffix('\n').unwrap_or(text)).monospace();
@@ -590,27 +593,31 @@ fn result_panel(
     let has_markers = conflict::has_markers(&file.result);
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.strong("Result");
+        ui.strong(t!("Result"));
         if file.edited {
-            ui.weak("Edited by hand: choices above no longer change it.");
+            ui.weak(t!("Edited by hand: choices above no longer change it."));
             if ui
-                .small_button("Discard edits")
-                .on_hover_text("Rebuild the result from the choices above")
+                .small_button(t!("Discard edits"))
+                .on_hover_text(t!("Rebuild the result from the choices above"))
                 .clicked()
             {
                 file.edited = false;
                 file.result = conflict::render(&file.chunks, &file.choices);
             }
         } else if unresolved > 0 {
-            ui.weak(format!(
-                "{unresolved} conflict{} still to choose. You can also edit the text.",
-                if unresolved == 1 { "" } else { "s" }
-            ));
+            ui.weak(if unresolved == 1 {
+                t!("1 conflict still to choose. You can also edit the text.")
+            } else {
+                t!(
+                    "{} conflicts still to choose. You can also edit the text.",
+                    unresolved
+                )
+            });
         } else {
-            ui.weak("You can still edit the text before saving.");
+            ui.weak(t!("You can still edit the text before saving."));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let save = ui.add_enabled(!busy, egui::Button::new("Mark as resolved"));
+            let save = ui.add_enabled(!busy, egui::Button::new(t!("Mark as resolved")));
             if save.clicked() {
                 let op = Op::SaveResolution {
                     path: path.to_owned(),
@@ -618,9 +625,10 @@ fn result_panel(
                 };
                 if has_markers {
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Conflict markers left",
-                        &format!(
-                            "{path} still contains conflict markers. Mark it as resolved anyway?"
+                        &t!("Conflict markers left"),
+                        &t!(
+                            "{} still contains conflict markers. Mark it as resolved anyway?",
+                            path
                         ),
                         op,
                         true,
@@ -630,16 +638,17 @@ fn result_panel(
                 }
             }
             if has_markers {
-                ui.colored_label(ui.visuals().warn_fg_color, "markers left");
+                ui.colored_label(ui.visuals().warn_fg_color, t!("markers left"));
             } else {
-                ui.colored_label(crate::util::added_color(ui), "no markers left");
+                ui.colored_label(crate::util::added_color(ui), t!("no markers left"));
             }
             let others = conflicted.iter().filter(|p| *p != path).count();
             if others > 0 {
-                ui.weak(format!(
-                    "then {others} more file{}",
-                    if others == 1 { "" } else { "s" }
-                ));
+                ui.weak(if others == 1 {
+                    t!("then 1 more file")
+                } else {
+                    t!("then {} more files", others)
+                });
             }
         });
     });
@@ -647,9 +656,9 @@ fn result_panel(
         ui.horizontal(|ui| {
             ui.colored_label(
                 ui.visuals().warn_fg_color,
-                "The file changed on disk since it was loaded.",
+                t!("The file changed on disk since it was loaded."),
             );
-            if ui.small_button("Reload").clicked() {
+            if ui.small_button(t!("Reload")).clicked() {
                 file.stamp = None;
                 file.edited = false;
                 file.changed_on_disk = false;

@@ -39,14 +39,14 @@ impl Kind {
         }
     }
 
-    fn hint(self) -> &'static str {
+    fn hint(self) -> String {
         match self {
-            Kind::Pick => "keep the commit as it is",
-            Kind::Reword => "keep the commit, change its message",
-            Kind::Edit => "stop after this commit so you can amend it",
-            Kind::Squash => "meld into the commit above, keep both messages",
-            Kind::Fixup => "meld into the commit above, discard this message",
-            Kind::Drop => "remove the commit",
+            Kind::Pick => t!("keep the commit as it is"),
+            Kind::Reword => t!("keep the commit, change its message"),
+            Kind::Edit => t!("stop after this commit so you can amend it"),
+            Kind::Squash => t!("meld into the commit above, keep both messages"),
+            Kind::Fixup => t!("meld into the commit above, discard this message"),
+            Kind::Drop => t!("remove the commit"),
         }
     }
 
@@ -80,13 +80,13 @@ pub struct RebasePlan {
 /// Builds a plan for the commits after `base` (`None` = from the root).
 pub fn plan(tab: &RepoTab, base: Option<Oid>) -> Result<RebasePlan, String> {
     if tab.state != RepoState::Clean {
-        return Err(format!(
+        return Err(t!(
             "Cannot start an interactive rebase: {}. Finish or abort it first.",
             tab.state.label().to_lowercase()
         ));
     }
     let Some(branch) = tab.head.clone() else {
-        return Err("HEAD is detached: check out a branch before rebasing.".into());
+        return Err(t!("HEAD is detached: check out a branch before rebasing."));
     };
     let commits = tab.repo.commits_since(base).map_err(|e| e.to_string())?;
     let merges = commits.iter().filter(|c| c.parents.len() > 1).count();
@@ -100,7 +100,7 @@ pub fn plan(tab: &RepoTab, base: Option<Oid>) -> Result<RebasePlan, String> {
         })
         .collect();
     if rows.is_empty() {
-        return Err("There are no commits to rebase.".into());
+        return Err(t!("There are no commits to rebase."));
     }
 
     let upstream = tab.current_branch().and_then(|b| b.upstream.clone());
@@ -123,7 +123,7 @@ pub fn plan(tab: &RepoTab, base: Option<Oid>) -> Result<RebasePlan, String> {
             Ok(c) => format!("{} {}", c.short_id(), c.summary),
             Err(_) => ferrum_core::short(id),
         },
-        None => "the root commit".into(),
+        None => t!("the root commit"),
     };
     Ok(RebasePlan {
         base,
@@ -155,16 +155,13 @@ fn steps(rows: &[Row]) -> Vec<Step> {
 /// Checks the plan, with the same rules as git plus a non-empty reword message.
 fn check(rows: &[Row]) -> Result<(), String> {
     if rows.iter().all(|r| r.kind == Kind::Drop) {
-        return Err("Every commit is dropped: keep at least one.".into());
+        return Err(t!("Every commit is dropped: keep at least one."));
     }
     if let Some(r) = rows
         .iter()
         .find(|r| r.kind == Kind::Reword && r.message.as_deref().unwrap_or("").trim().is_empty())
     {
-        return Err(format!(
-            "The new message for {} is empty.",
-            r.commit.short_id()
-        ));
+        return Err(t!("The new message for {} is empty.", r.commit.short_id()));
     }
     rebase::validate(&steps(rows))
 }
@@ -175,14 +172,6 @@ fn unchanged(rows: &[Row], original: &[Oid]) -> bool {
             .iter()
             .map(|r| r.commit.id)
             .eq(original.iter().copied())
-}
-
-fn plural(n: usize, word: &str) -> String {
-    if n == 1 {
-        format!("1 {word}")
-    } else {
-        format!("{n} {word}s")
-    }
 }
 
 /// "4 commits will become 3 (1 dropped, 1 reworded)".
@@ -198,21 +187,36 @@ fn summary(rows: &[Row], original: &[Oid]) -> String {
         .map(|r| r.commit.id)
         .eq(original.iter().copied())
     {
-        parts.push("reordered".to_owned());
+        parts.push(t!("reordered"));
     }
-    for (kind, word) in [
-        (Kind::Drop, "dropped"),
-        (Kind::Reword, "reworded"),
-        (Kind::Squash, "squashed"),
-        (Kind::Fixup, "fixed up"),
-        (Kind::Edit, "to edit"),
+    for kind in [
+        Kind::Drop,
+        Kind::Reword,
+        Kind::Squash,
+        Kind::Fixup,
+        Kind::Edit,
     ] {
         let n = count(kind);
-        if n > 0 {
-            parts.push(format!("{n} {word}"));
-        }
+        let part = match (kind, n) {
+            (_, 0) => continue,
+            (Kind::Drop, 1) => t!("1 dropped"),
+            (Kind::Drop, n) => t!("{} dropped", n),
+            (Kind::Reword, 1) => t!("1 reworded"),
+            (Kind::Reword, n) => t!("{} reworded", n),
+            (Kind::Squash, 1) => t!("1 squashed"),
+            (Kind::Squash, n) => t!("{} squashed", n),
+            (Kind::Fixup, 1) => t!("1 fixed up"),
+            (Kind::Fixup, n) => t!("{} fixed up", n),
+            (_, 1) => t!("1 to edit"),
+            (_, n) => t!("{} to edit", n),
+        };
+        parts.push(part);
     }
-    let mut text = format!("{} will become {}", plural(rows.len(), "commit"), result);
+    let mut text = if rows.len() == 1 {
+        t!("1 commit will become {}", result)
+    } else {
+        t!("{} commits will become {}", rows.len(), result)
+    };
     if !parts.is_empty() {
         text.push_str(&format!(" ({})", parts.join(", ")));
     }
@@ -238,7 +242,7 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
     };
     let mut open = true;
     let mut close = false;
-    egui::Window::new("Interactive rebase")
+    egui::Window::new(t!("Interactive rebase"))
         .open(&mut open)
         .collapsible(false)
         .resizable(true)
@@ -250,41 +254,32 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
         .min_width(560.0)
         .show(ctx, |ui| {
             ui.label(
-                RichText::new(format!(
-                    "Rebase {} of {} onto {}",
-                    plural(plan.rows.len(), "commit"),
-                    plan.branch,
-                    plan.base_label
-                ))
+                RichText::new(if plan.rows.len() == 1 {
+                    t!("Rebase 1 commit of {} onto {}", plan.branch, plan.base_label)
+                } else {
+                    t!("Rebase {} commits of {} onto {}", plan.rows.len(), plan.branch, plan.base_label)
+                })
                 .strong(),
             );
-            ui.weak(
-                "Commits are applied from top to bottom (oldest first). Drag ☰ or use ⬆ ⬇ to reorder.",
-            );
+            ui.weak(t!("Commits are applied from top to bottom (oldest first). Drag ☰ or use ⬆ ⬇ to reorder."));
             if let Some((n, upstream)) = &plan.pushed {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
-                    format!(
-                        "⚠ {} already on {upstream}: rewriting them means you will need to force push.",
-                        if *n == 1 {
-                            "1 of these commits is".to_owned()
-                        } else {
-                            format!("{n} of these commits are")
-                        }
-                    ),
+                    if *n == 1 {
+                        t!("⚠ 1 of these commits is already on {}: rewriting it means you will need to force push.", upstream)
+                    } else {
+                        t!("⚠ {} of these commits are already on {}: rewriting them means you will need to force push.", n, upstream)
+                    },
                 );
             }
             if plan.merges > 0 {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
-                    format!(
-                        "⚠ {} left out: the rebase replays only regular commits.",
-                        if plan.merges == 1 {
-                            "1 merge commit is".to_owned()
-                        } else {
-                            format!("{} merge commits are", plan.merges)
-                        }
-                    ),
+                    if plan.merges == 1 {
+                        t!("⚠ 1 merge commit is left out: the rebase replays only regular commits.")
+                    } else {
+                        t!("⚠ {} merge commits are left out: the rebase replays only regular commits.", plan.merges)
+                    },
                 );
             }
             ui.add_space(4.0);
@@ -302,16 +297,16 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
                     ui.colored_label(ui.visuals().error_fg_color, e);
                 }
                 Ok(()) if same => {
-                    ui.weak("Nothing to do yet: change an action or the order of the commits.");
+                    ui.weak(t!("Nothing to do yet: change an action or the order of the commits."));
                 }
                 Ok(()) => {}
             }
-            ui.weak("Local changes are stashed automatically and restored afterwards.");
+            ui.weak(t!("Local changes are stashed automatically and restored afterwards."));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 let can_start = result.is_ok() && !same && !busy;
                 if ui
-                    .add_enabled(can_start, egui::Button::new("Start rebase"))
+                    .add_enabled(can_start, egui::Button::new(t!("Start rebase")))
                     .clicked()
                 {
                     cmds.run(Op::InteractiveRebase {
@@ -320,7 +315,7 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
                     });
                     close = true;
                 }
-                if ui.button("Cancel").clicked() {
+                if ui.button(t!("Cancel")).clicked() {
                     close = true;
                 }
             });
@@ -359,25 +354,25 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
                     if attached {
                         ui.add_space(18.0);
                         ui.label(RichText::new("⤴").size(16.0))
-                            .on_hover_text("Melded into the commit above");
+                            .on_hover_text(t!("Melded into the commit above"));
                     }
                     let handle = ui
                         .add(
                             egui::Label::new(RichText::new("☰").color(weak))
                                 .sense(egui::Sense::drag()),
                         )
-                        .on_hover_text("Drag to reorder");
+                        .on_hover_text(t!("Drag to reorder"));
                     handle.dnd_set_drag_payload(i);
                     if ui
                         .add_enabled(i > 0, egui::Button::new("⬆").small())
-                        .on_hover_text("Move up")
+                        .on_hover_text(t!("Move up"))
                         .clicked()
                     {
                         moved = Some((i, i - 1));
                     }
                     if ui
                         .add_enabled(i + 1 < len, egui::Button::new("⬇").small())
-                        .on_hover_text("Move down")
+                        .on_hover_text(t!("Move down"))
                         .clicked()
                     {
                         moved = Some((i, i + 2));
@@ -387,7 +382,7 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
                         .selected_text(row.kind.label())
                         .width(78.0)
                         .show_ui(ui, |ui| {
-                            ui.set_min_width(380.0);
+                            ui.set_min_width(460.0);
                             for k in KINDS {
                                 let text = (
                                     RichText::new(format!("{:<7}", k.label())).monospace(),
@@ -426,7 +421,7 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
                         egui::TextEdit::multiline(msg)
                             .desired_width(f32::INFINITY)
                             .desired_rows(3)
-                            .hint_text("Commit message"),
+                            .hint_text(t!("Commit message")),
                     );
                 }
             })

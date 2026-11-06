@@ -296,7 +296,7 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool
             if ui.add_enabled(enabled, egui::Button::new(text)).clicked() || (enter && enabled) {
                 result = Some(true);
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(t!("Cancel")).clicked() {
                 result = Some(false);
             }
         });
@@ -317,7 +317,7 @@ fn ref_name_warning(ui: &mut egui::Ui, name: &str) {
     if !name.is_empty() && !valid_ref_name(name) {
         ui.colored_label(
             ui.visuals().warn_fg_color,
-            "Names cannot contain spaces or characters like ~ ^ : ? * [ \\ or \"..\".",
+            t!("Names cannot contain spaces or characters like ~ ^ : ? * [ \\ or \"..\"."),
         );
     }
 }
@@ -340,8 +340,8 @@ fn body(
         } => {
             ui.heading(title.as_str());
             ui.label(text.as_str());
-            let ok = if *danger { "Yes, do it" } else { "OK" };
-            match buttons(ui, ok, true, *danger, enter && !*danger) {
+            let ok = if *danger { t!("Yes, do it") } else { t!("OK") };
+            match buttons(ui, &ok, true, *danger, enter && !*danger) {
                 Some(true) => {
                     run((**op).clone());
                     false
@@ -356,13 +356,13 @@ fn body(
             name,
             checkout,
         } => {
-            ui.heading("New branch");
-            ui.label(format!("Starting at {start_label}"));
-            field(ui, "Name", name, "feature/my-change").request_focus();
+            ui.heading(t!("New branch"));
+            ui.label(t!("Starting at {}", start_label));
+            field(ui, &t!("Name"), name, "feature/my-change").request_focus();
             ref_name_warning(ui, name);
-            ui.checkbox(checkout, "Check out after creating");
+            ui.checkbox(checkout, t!("Check out after creating"));
             let ok = valid_ref_name(name);
-            match buttons(ui, "Create branch", ok, false, enter) {
+            match buttons(ui, &t!("Create branch"), ok, false, enter) {
                 Some(true) => {
                     run(Op::CreateBranch {
                         name: name.trim().into(),
@@ -376,11 +376,11 @@ fn body(
             }
         }
         Dialog::RenameBranch { old, new } => {
-            ui.heading(format!("Rename {old}"));
-            field(ui, "New name", new, "").request_focus();
+            ui.heading(t!("Rename {}", old));
+            field(ui, &t!("New name"), new, "").request_focus();
             ref_name_warning(ui, new);
             let ok = valid_ref_name(new) && new.trim() != old;
-            match buttons(ui, "Rename", ok, false, enter) {
+            match buttons(ui, &t!("Rename"), ok, false, enter) {
                 Some(true) => {
                     run(Op::RenameBranch {
                         old: old.clone(),
@@ -398,15 +398,15 @@ fn body(
             remote,
             delete_remote,
         } => {
-            ui.heading(format!("Delete {name}"));
-            ui.checkbox(force, "Delete even if it is not merged")
-                .on_hover_text(
-                    "Commits only on this branch may be lost (you can still undo right after)",
-                );
+            ui.heading(t!("Delete {}", name));
+            ui.checkbox(force, t!("Delete even if it is not merged"))
+                .on_hover_text(t!(
+                    "Commits only on this branch may be lost (you can still undo right after)"
+                ));
             if let Some((r, n)) = remote {
-                ui.checkbox(delete_remote, format!("Also delete {n} from {r}"));
+                ui.checkbox(delete_remote, t!("Also delete {} from {}", n, r));
             }
-            match buttons(ui, "Delete", true, true, false) {
+            match buttons(ui, &t!("Delete"), true, true, false) {
                 Some(true) => {
                     let mut ops = vec![Op::DeleteBranch {
                         name: name.clone(),
@@ -431,9 +431,9 @@ fn body(
             remote_branch,
             local,
         } => {
-            ui.heading(format!("Check out {remote_branch}"));
-            ui.label("A local branch tracking it will be created.");
-            field(ui, "Local branch name", local, "").request_focus();
+            ui.heading(t!("Check out {}", remote_branch));
+            ui.label(t!("A local branch tracking it will be created."));
+            field(ui, &t!("Local branch name"), local, "").request_focus();
             ref_name_warning(ui, local);
             let exists = tab.is_some_and(|t| {
                 t.branches
@@ -443,12 +443,12 @@ fn body(
             if exists {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
-                    "A local branch with this name already exists.",
+                    t!("A local branch with this name already exists."),
                 );
             }
             match buttons(
                 ui,
-                "Check out",
+                &t!("Check out"),
                 valid_ref_name(local) && !exists,
                 false,
                 enter,
@@ -471,11 +471,11 @@ fn body(
             message,
             push_to,
         } => {
-            ui.heading("New tag");
-            ui.label(format!("At {label}"));
-            field(ui, "Name", name, "v1.0.0").request_focus();
+            ui.heading(t!("New tag"));
+            ui.label(t!("At {}", label));
+            field(ui, &t!("Name"), name, "v1.0.0").request_focus();
             ref_name_warning(ui, name);
-            ui.label("Message (optional — makes an annotated tag)");
+            ui.label(t!("Message (optional — makes an annotated tag)"));
             ui.add(
                 egui::TextEdit::multiline(message)
                     .desired_rows(3)
@@ -486,7 +486,7 @@ fn body(
             {
                 let mut push = push_to.is_some();
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut push, "Push to");
+                    ui.checkbox(&mut push, t!("Push to"));
                     let mut remote = push_to
                         .clone()
                         .or_else(|| t.default_remote())
@@ -501,7 +501,7 @@ fn body(
                     *push_to = push.then_some(remote);
                 });
             }
-            match buttons(ui, "Create tag", valid_ref_name(name), false, false) {
+            match buttons(ui, &t!("Create tag"), valid_ref_name(name), false, false) {
                 Some(true) => {
                     let Dialog::CreateTag {
                         rev,
@@ -532,13 +532,13 @@ fn body(
             }
         }
         Dialog::DeleteTag { name, remote } => {
-            ui.heading(format!("Delete tag {name}"));
+            ui.heading(t!("Delete tag {}", name));
             if let Some(t) = tab
                 && !t.remotes.is_empty()
             {
                 let mut also = remote.is_some();
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut also, "Also delete from");
+                    ui.checkbox(&mut also, t!("Also delete from"));
                     let mut r = remote
                         .clone()
                         .or_else(|| t.default_remote())
@@ -553,7 +553,7 @@ fn body(
                     *remote = also.then_some(r);
                 });
             }
-            match buttons(ui, "Delete", true, true, false) {
+            match buttons(ui, &t!("Delete"), true, true, false) {
                 Some(true) => {
                     run(Op::DeleteTag(name.clone()));
                     if let Some(r) = remote {
@@ -572,24 +572,24 @@ fn body(
             let current = tab
                 .and_then(|t| t.head.clone())
                 .unwrap_or_else(|| "HEAD".into());
-            ui.heading(format!("Merge {label} into {current}"));
+            ui.heading(t!("Merge {} into {}", label, current));
             ui.radio_value(
                 mode,
                 MergeMode::Default,
-                "Default (fast-forward when possible)",
+                t!("Default (fast-forward when possible)"),
             );
             ui.radio_value(
                 mode,
                 MergeMode::NoFastForward,
-                "Always create a merge commit (--no-ff)",
+                t!("Always create a merge commit (--no-ff)"),
             );
-            ui.radio_value(mode, MergeMode::FastForwardOnly, "Fast-forward only");
+            ui.radio_value(mode, MergeMode::FastForwardOnly, t!("Fast-forward only"));
             ui.radio_value(
                 mode,
                 MergeMode::Squash,
-                "Squash into staged changes (commit afterwards)",
+                t!("Squash into staged changes (commit afterwards)"),
             );
-            match buttons(ui, "Merge", true, false, enter) {
+            match buttons(ui, &t!("Merge"), true, false, enter) {
                 Some(true) => {
                     run(Op::Merge {
                         rev: rev.clone(),
@@ -607,21 +607,25 @@ fn body(
             branch,
             mode,
         } => {
-            ui.heading(format!("Reset {branch} to {label}"));
-            ui.radio_value(mode, ResetMode::Soft, "Soft — keep all changes staged");
+            ui.heading(t!("Reset {} to {}", branch, label));
+            ui.radio_value(mode, ResetMode::Soft, t!("Soft — keep all changes staged"));
             ui.radio_value(
                 mode,
                 ResetMode::Mixed,
-                "Mixed — keep changes in the working copy",
+                t!("Mixed — keep changes in the working copy"),
             );
-            ui.radio_value(mode, ResetMode::Hard, "Hard — discard all local changes");
+            ui.radio_value(
+                mode,
+                ResetMode::Hard,
+                t!("Hard — discard all local changes"),
+            );
             if *mode == ResetMode::Hard {
                 ui.colored_label(
                     ui.visuals().error_fg_color,
-                    "Uncommitted changes will be lost and cannot be undone.",
+                    t!("Uncommitted changes will be lost and cannot be undone."),
                 );
             }
-            match buttons(ui, "Reset", true, *mode == ResetMode::Hard, false) {
+            match buttons(ui, &t!("Reset"), true, *mode == ResetMode::Hard, false) {
                 Some(true) => {
                     run(Op::Reset {
                         rev: rev.clone(),
@@ -640,17 +644,17 @@ fn body(
             force,
             tags,
         } => {
-            ui.heading("Push");
+            ui.heading(t!("Push"));
             let Some(t) = tab else { return false };
             if t.remotes.is_empty() {
-                ui.label("This repository has no remotes. Add one first (right-click Remotes in the sidebar).");
-                return buttons(ui, "OK", true, false, enter).is_none();
+                ui.label(t!("This repository has no remotes. Add one first (right-click Remotes in the sidebar)."));
+                return buttons(ui, &t!("OK"), true, false, enter).is_none();
             }
             egui::Grid::new("push-grid")
                 .num_columns(2)
                 .spacing([10.0, 6.0])
                 .show(ui, |ui| {
-                    ui.label("Branch");
+                    ui.label(t!("Branch"));
                     egui::ComboBox::from_id_salt("push-branch")
                         .selected_text(branch.as_str())
                         .show_ui(ui, |ui| {
@@ -659,7 +663,7 @@ fn body(
                             }
                         });
                     ui.end_row();
-                    ui.label("To remote");
+                    ui.label(t!("To remote"));
                     egui::ComboBox::from_id_salt("push-remote")
                         .selected_text(remote.as_str())
                         .show_ui(ui, |ui| {
@@ -669,19 +673,19 @@ fn body(
                         });
                     ui.end_row();
                 });
-            ui.checkbox(set_upstream, "Track this remote branch (set upstream)");
-            ui.checkbox(tags, "Also push annotated tags");
-            ui.checkbox(force, "Force push (with lease)")
-                .on_hover_text("Overwrites the remote branch, unless someone else pushed to it since your last fetch");
+            ui.checkbox(set_upstream, t!("Track this remote branch (set upstream)"));
+            ui.checkbox(tags, t!("Also push annotated tags"));
+            ui.checkbox(force, t!("Force push (with lease)"))
+                .on_hover_text(t!("Overwrites the remote branch, unless someone else pushed to it since your last fetch"));
             if *force {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
-                    "Force pushing rewrites history on the remote.",
+                    t!("Force pushing rewrites history on the remote."),
                 );
             }
             match buttons(
                 ui,
-                "Push",
+                &t!("Push"),
                 !remote.is_empty() && !branch.is_empty(),
                 *force,
                 enter,
@@ -701,16 +705,17 @@ fn body(
             }
         }
         Dialog::Pull => {
-            ui.heading("Pull");
+            ui.heading(t!("Pull"));
             let branch = tab.and_then(|t| t.current_branch().cloned());
             match branch.as_ref().and_then(|b| b.upstream.clone()) {
-                Some(u) => ui.label(format!(
-                    "Pull {u} into {}",
+                Some(u) => ui.label(t!(
+                    "Pull {} into {}",
+                    u,
                     branch.as_ref().map_or("", |b| b.name.as_str())
                 )),
                 None => ui.colored_label(
                     ui.visuals().warn_fg_color,
-                    "The current branch has no upstream; git will use its defaults.",
+                    t!("The current branch has no upstream; git will use its defaults."),
                 ),
             };
             for choice in [
@@ -719,9 +724,16 @@ fn body(
                 crate::settings::PullChoice::Rebase,
                 crate::settings::PullChoice::FastForwardOnly,
             ] {
-                ui.radio_value(&mut settings.pull, choice, choice.label());
+                use crate::settings::PullChoice;
+                let label = match choice {
+                    PullChoice::Default => t!("Default (git config)"),
+                    PullChoice::Merge => t!("Merge"),
+                    PullChoice::Rebase => t!("Rebase"),
+                    PullChoice::FastForwardOnly => t!("Fast-forward only"),
+                };
+                ui.radio_value(&mut settings.pull, choice, label);
             }
-            match buttons(ui, "Pull", true, false, enter) {
+            match buttons(ui, &t!("Pull"), true, false, enter) {
                 Some(true) => {
                     run(Op::Pull(settings.pull.mode()));
                     false
@@ -735,11 +747,17 @@ fn body(
             untracked,
             staged_only,
         } => {
-            ui.heading("Stash changes");
-            field(ui, "Message (optional)", message, "work in progress").request_focus();
-            ui.checkbox(untracked, "Include new (untracked) files");
-            ui.checkbox(staged_only, "Only staged changes");
-            match buttons(ui, "Stash", true, false, enter) {
+            ui.heading(t!("Stash changes"));
+            field(
+                ui,
+                &t!("Message (optional)"),
+                message,
+                &t!("work in progress"),
+            )
+            .request_focus();
+            ui.checkbox(untracked, t!("Include new (untracked) files"));
+            ui.checkbox(staged_only, t!("Only staged changes"));
+            match buttons(ui, &t!("Stash"), true, false, enter) {
                 Some(true) => {
                     run(Op::StashPush {
                         message: message.clone(),
@@ -753,11 +771,11 @@ fn body(
             }
         }
         Dialog::AddRemote { name, url } => {
-            ui.heading("Add remote");
-            field(ui, "Name", name, "origin").request_focus();
+            ui.heading(t!("Add remote"));
+            field(ui, &t!("Name"), name, "origin").request_focus();
             field(ui, "URL", url, "git@github.com:user/repo.git");
             let ok = valid_ref_name(name) && !url.trim().is_empty();
-            match buttons(ui, "Add remote", ok, false, enter) {
+            match buttons(ui, &t!("Add remote"), ok, false, enter) {
                 Some(true) => {
                     run(Op::AddRemote {
                         name: name.trim().into(),
@@ -773,11 +791,11 @@ fn body(
             }
         }
         Dialog::Clone { url, parent, name } => {
-            ui.heading("Clone repository");
+            ui.heading(t!("Clone repository"));
             let before = clone_dir_name(url);
             if field(
                 ui,
-                "Repository URL",
+                &t!("Repository URL"),
                 url,
                 "https://github.com/user/repo.git",
             )
@@ -786,26 +804,29 @@ fn body(
             {
                 *name = clone_dir_name(url);
             }
-            ui.label("Into folder");
+            ui.label(t!("Into folder"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(parent).desired_width(340.0));
-                if ui.button("Browse…").clicked()
+                if ui.button(t!("Browse…")).clicked()
                     && let Some(p) = rfd::FileDialog::new().pick_folder()
                 {
                     *parent = p.to_string_lossy().into_owned();
                 }
             });
-            field(ui, "Folder name", name, "");
+            field(ui, &t!("Folder name"), name, "");
             let target = PathBuf::from(parent.as_str()).join(name.trim());
             let exists = !name.trim().is_empty() && target.exists();
             if exists {
-                ui.colored_label(ui.visuals().warn_fg_color, "That folder already exists.");
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    t!("That folder already exists."),
+                );
             }
             let ok = !url.trim().is_empty()
                 && !name.trim().is_empty()
                 && !parent.trim().is_empty()
                 && !exists;
-            match buttons(ui, "Clone", ok, false, enter) {
+            match buttons(ui, &t!("Clone"), ok, false, enter) {
                 Some(true) => {
                     settings.clone_dir = parent.clone();
                     cmds.push(Command::Clone {
@@ -820,18 +841,18 @@ fn body(
             }
         }
         Dialog::Init { path } => {
-            ui.heading("New repository");
-            ui.label("Folder");
+            ui.heading(t!("New repository"));
+            ui.label(t!("Folder"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(path).desired_width(340.0));
-                if ui.button("Browse…").clicked()
+                if ui.button(t!("Browse…")).clicked()
                     && let Some(p) = rfd::FileDialog::new().pick_folder()
                 {
                     *path = p.to_string_lossy().into_owned();
                 }
             });
-            ui.weak("The folder is created if it does not exist.");
-            match buttons(ui, "Create", !path.trim().is_empty(), false, enter) {
+            ui.weak(t!("The folder is created if it does not exist."));
+            match buttons(ui, &t!("Create"), !path.trim().is_empty(), false, enter) {
                 Some(true) => {
                     cmds.push(Command::Init(path.trim().into()));
                     false
@@ -845,22 +866,22 @@ fn body(
             rev,
             new_branch,
         } => {
-            ui.heading("Add worktree");
-            ui.label("Folder");
+            ui.heading(t!("Add worktree"));
+            ui.label(t!("Folder"));
             ui.horizontal(|ui| {
                 ui.add(egui::TextEdit::singleline(path).desired_width(340.0));
-                if ui.button("Browse…").clicked()
+                if ui.button(t!("Browse…")).clicked()
                     && let Some(p) = rfd::FileDialog::new().pick_folder()
                 {
                     *path = p.to_string_lossy().into_owned();
                 }
             });
-            field(ui, "Start from (branch, tag or commit)", rev, "main");
+            field(ui, &t!("Start from (branch, tag or commit)"), rev, "main");
             field(
                 ui,
-                "New branch (optional)",
+                &t!("New branch (optional)"),
                 new_branch,
-                "leave empty to check out the branch above",
+                &t!("leave empty to check out the branch above"),
             );
             if !new_branch.is_empty() {
                 ref_name_warning(ui, new_branch);
@@ -868,7 +889,7 @@ fn body(
             let ok = !path.trim().is_empty()
                 && !rev.trim().is_empty()
                 && (new_branch.trim().is_empty() || valid_ref_name(new_branch));
-            match buttons(ui, "Add worktree", ok, false, enter) {
+            match buttons(ui, &t!("Add worktree"), ok, false, enter) {
                 Some(true) => {
                     let nb = Some(new_branch.trim().to_owned()).filter(|b| !b.is_empty());
                     run(Op::WorktreeAdd {
@@ -889,13 +910,13 @@ fn body(
             sign,
             ssh_key,
         } => {
-            ui.heading("Repository identity");
-            ui.label("Saved in this repository only (git config --local).");
+            ui.heading(t!("Repository identity"));
+            ui.label(t!("Saved in this repository only (git config --local)."));
             if !settings.profiles.is_empty() {
                 ui.horizontal(|ui| {
-                    ui.label("Use profile");
+                    ui.label(t!("Use profile"));
                     egui::ComboBox::from_id_salt("identity-profile")
-                        .selected_text("Choose…")
+                        .selected_text(t!("Choose…"))
                         .show_ui(ui, |ui| {
                             for p in &settings.profiles {
                                 if ui
@@ -915,21 +936,21 @@ fn body(
                         });
                 });
             }
-            field(ui, "Name", name, "Your Name");
-            field(ui, "Email", email, "you@example.com");
+            field(ui, &t!("Name"), name, &t!("Your Name"));
+            field(ui, &t!("Email"), email, "you@example.com");
             field(
                 ui,
-                "SSH key for remotes (optional)",
+                &t!("SSH key for remotes (optional)"),
                 ssh_key,
                 "~/.ssh/id_ed25519_work",
             );
             field(
                 ui,
-                "Signing key (optional)",
+                &t!("Signing key (optional)"),
                 signing_key,
-                "GPG key id or ~/.ssh/id_ed25519.pub",
+                &t!("GPG key id or ~/.ssh/id_ed25519.pub"),
             );
-            ui.checkbox(sign, "Sign commits");
+            ui.checkbox(sign, t!("Sign commits"));
             let profile = Profile {
                 label: String::new(),
                 name: name.clone(),
@@ -942,13 +963,14 @@ fn body(
                 .profiles
                 .iter()
                 .any(|p| p.name == profile.name && p.email == profile.email);
-            if !known && !name.trim().is_empty() && ui.small_button("Save as profile").clicked() {
+            if !known && !name.trim().is_empty() && ui.small_button(t!("Save as profile")).clicked()
+            {
                 let mut p = profile.clone();
                 p.label = email.split('@').nth(1).unwrap_or("profile").to_owned();
                 settings.profiles.push(p);
             }
             let ok = !name.trim().is_empty() && email.contains('@');
-            match buttons(ui, "Apply", ok, false, enter) {
+            match buttons(ui, &t!("Apply"), ok, false, enter) {
                 Some(true) => {
                     run(Op::SetIdentity(profile.identity()));
                     false

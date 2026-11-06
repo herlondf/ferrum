@@ -29,14 +29,14 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         ui.horizontal(|ui| {
             ui.colored_label(
                 ui.visuals().error_fg_color,
-                format!("⚠ Conflicts ({})", tab.status.conflicted.len()),
+                t!("⚠ Conflicts ({})", tab.status.conflicted.len()),
             );
         });
         for f in &tab.status.conflicted {
             let job = change_label(ui, ChangeKind::Conflicted, &f.path, None);
             if ui
                 .add(egui::Button::selectable(false, job).truncate())
-                .on_hover_text("Open the conflict resolver")
+                .on_hover_text(t!("Open the conflict resolver"))
                 .clicked()
             {
                 cmds.push(Command::ResolveConflict(f.path.clone()));
@@ -48,18 +48,18 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let half = (ui.available_height() / 2.0 - 30.0).max(80.0);
 
     ui.horizontal(|ui| {
-        ui.strong(format!("Unstaged ({})", tab.status.unstaged.len()));
+        ui.strong(t!("Unstaged ({})", tab.status.unstaged.len()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(!busy && !tab.status.unstaged.is_empty(), |ui| {
-                if ui.small_button("Discard all…").clicked() {
+                if ui.small_button(t!("Discard all…")).clicked() {
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Discard all changes",
-                        "Throw away all unstaged changes, including new files? This cannot be undone.",
+                        &t!("Discard all changes"),
+                        &t!("Throw away all unstaged changes, including new files? This cannot be undone."),
                         Op::Discard(tab.status.unstaged.clone()),
                         true,
                     )));
                 }
-                if ui.small_button("Stage all").clicked() {
+                if ui.small_button(t!("Stage all")).clicked() {
                     cmds.run(Op::StageAll);
                 }
             });
@@ -73,17 +73,17 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             let files = tab.status.unstaged.clone();
             file_rows(ui, tab, cmds, &files, DiffSource::Unstaged);
             if files.is_empty() {
-                ui.weak("No unstaged changes.");
+                ui.weak(t!("No unstaged changes."));
             }
         });
     ui.separator();
     ui.horizontal(|ui| {
-        ui.strong(format!("Staged ({})", tab.status.staged.len()));
+        ui.strong(t!("Staged ({})", tab.status.staged.len()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add_enabled(
                     !busy && !tab.status.staged.is_empty(),
-                    egui::Button::new("Unstage all").small(),
+                    egui::Button::new(t!("Unstage all")).small(),
                 )
                 .clicked()
             {
@@ -98,7 +98,7 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             let files = tab.status.staged.clone();
             file_rows(ui, tab, cmds, &files, DiffSource::Staged);
             if files.is_empty() {
-                ui.weak("Nothing staged yet.");
+                ui.weak(t!("Nothing staged yet."));
             }
         });
 }
@@ -129,35 +129,31 @@ fn file_rows(
         if resp.double_clicked() && !busy {
             cmds.run(toggle());
         }
-        resp.on_hover_text(format!(
-            "{}\nDouble-click to {}",
-            f.path,
-            if source == DiffSource::Staged {
-                "unstage"
-            } else {
-                "stage"
-            }
-        ))
+        resp.on_hover_text(if source == DiffSource::Staged {
+            t!("{}\nDouble-click to unstage", f.path)
+        } else {
+            t!("{}\nDouble-click to stage", f.path)
+        })
         .context_menu(|ui| {
             ui.add_enabled_ui(!busy, |ui| {
                 let label = if source == DiffSource::Staged {
-                    "Unstage"
+                    t!("Unstage")
                 } else {
-                    "Stage"
+                    t!("Stage")
                 };
                 if ui.button(label).clicked() {
                     cmds.run(toggle());
                     ui.close();
                 }
-                if source == DiffSource::Unstaged && ui.button("Discard changes…").clicked() {
-                    let what = if f.kind == ChangeKind::Untracked {
-                        "Delete the new file"
+                if source == DiffSource::Unstaged && ui.button(t!("Discard changes…")).clicked() {
+                    let text = if f.kind == ChangeKind::Untracked {
+                        t!("Delete the new file {}? This cannot be undone.", f.path)
                     } else {
-                        "Discard the changes in"
+                        t!("Discard the changes in {}? This cannot be undone.", f.path)
                     };
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Discard changes",
-                        &format!("{what} {}? This cannot be undone.", f.path),
+                        &t!("Discard changes"),
+                        &text,
                         Op::Discard(vec![f.clone()]),
                         true,
                     )));
@@ -165,12 +161,12 @@ fn file_rows(
                 }
             });
             ui.separator();
-            if ui.button("Copy path").clicked() {
+            if ui.button(t!("Copy path")).clicked() {
                 cmds.push(Command::Copy(f.path.clone()));
                 ui.close();
             }
             if f.kind != ChangeKind::Untracked && f.kind != ChangeKind::Added {
-                if ui.button("File history").clicked() {
+                if ui.button(t!("File history")).clicked() {
                     cmds.push(Command::FileHistory(f.path.clone()));
                     ui.close();
                 }
@@ -179,7 +175,7 @@ fn file_rows(
                     ui.close();
                 }
             }
-            if f.kind == ChangeKind::Untracked && ui.button("Add to .gitignore").clicked() {
+            if f.kind == ChangeKind::Untracked && ui.button(t!("Add to .gitignore")).clicked() {
                 add_to_gitignore(tab, &f.path, cmds);
                 ui.close();
             }
@@ -196,7 +192,7 @@ fn add_to_gitignore(tab: &RepoTab, path: &str, cmds: &mut Commands) {
     content.push_str(&format!("/{path}\n"));
     match std::fs::write(&file, content) {
         Ok(()) => cmds.push(Command::Refresh),
-        Err(e) => cmds.push(Command::Error(format!("Could not update .gitignore: {e}"))),
+        Err(e) => cmds.push(Command::Error(t!("Could not update .gitignore: {}", e))),
     }
 }
 
@@ -204,23 +200,23 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some((source, path)) = tab.changes.selected.clone() else {
         ui.centered_and_justified(|ui| {
             ui.weak(if tab.status.is_empty() {
-                "No local changes."
+                t!("No local changes.")
             } else {
-                "Select a file to see its changes."
+                t!("Select a file to see its changes.")
             })
         });
         return;
     };
     let Some(file) = tab.changes.diff.clone() else {
-        ui.weak("No changes to show.");
+        ui.weak(t!("No changes to show."));
         return;
     };
     ui.horizontal(|ui| {
         ui.strong(&path);
         ui.weak(if source == DiffSource::Staged {
-            "staged"
+            t!("staged")
         } else {
-            "unstaged"
+            t!("unstaged")
         });
     });
     if file.binary && is_image_path(&file.path) {
@@ -243,7 +239,7 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     );
     let Some(action) = action else { return };
     if tab.busy() {
-        tab.error("Wait for the current operation to finish.");
+        tab.error(t!("Wait for the current operation to finish."));
         return;
     }
 
@@ -291,8 +287,8 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 label: "Discard selection",
             };
             cmds.push(Command::Dialog(Dialog::confirm(
-                "Discard changes",
-                "Discard the selected changes? This cannot be undone.",
+                &t!("Discard changes"),
+                &t!("Discard the selected changes? This cannot be undone."),
                 op,
                 true,
             )));
@@ -302,8 +298,8 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         (Action::Unstage, None) if whole_file => Op::Unstage(vec![change.path]),
         (Action::Discard, None) if whole_file => {
             cmds.push(Command::Dialog(Dialog::confirm(
-                "Discard changes",
-                &format!(
+                &t!("Discard changes"),
+                &t!(
                     "Discard the changes in {}? This cannot be undone.",
                     change.path
                 ),
@@ -333,7 +329,7 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
 
     let resp = ui.add(
         egui::TextEdit::multiline(&mut tab.changes.message)
-            .hint_text("Commit summary\n\nDescription (optional)")
+            .hint_text(t!("Commit summary\n\nDescription (optional)"))
             .desired_rows(4)
             .desired_width(f32::INFINITY),
     );
@@ -351,8 +347,10 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         let was = tab.changes.amend;
         ui.add_enabled_ui(tab.head_oid.is_some(), |ui| {
-            ui.checkbox(&mut tab.changes.amend, "Amend last commit")
-                .on_hover_text("Replace the last commit with the staged changes and this message");
+            ui.checkbox(&mut tab.changes.amend, t!("Amend last commit"))
+                .on_hover_text(t!(
+                    "Replace the last commit with the staged changes and this message"
+                ));
         });
         if tab.changes.amend && !was && tab.changes.message.trim().is_empty() {
             tab.changes.message = tab.repo.last_commit_message().unwrap_or_default();
@@ -364,7 +362,7 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 ui.visuals().weak_text_color()
             };
             ui.colored_label(color, summary_len.to_string())
-                .on_hover_text("Summary length (72 or fewer is recommended)");
+                .on_hover_text(t!("Summary length (72 or fewer is recommended)"));
         });
     });
 
@@ -375,9 +373,9 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         && !tab.busy()
         && tab.status.conflicted.is_empty();
     let label = match (tab.changes.amend, staged) {
-        (true, _) => "Amend commit".to_owned(),
-        (false, 1) => "Commit 1 file".to_owned(),
-        (false, n) => format!("Commit {n} files"),
+        (true, _) => t!("Amend commit"),
+        (false, 1) => t!("Commit 1 file"),
+        (false, n) => t!("Commit {} files", n),
     };
     ui.horizontal(|ui| {
         let resp = ui.add_enabled(
@@ -385,9 +383,9 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             egui::Button::new(label).min_size(egui::vec2(140.0, 26.0)),
         );
         let resp = if !has_message {
-            resp.on_disabled_hover_text("Write a commit message first")
+            resp.on_disabled_hover_text(t!("Write a commit message first"))
         } else if staged == 0 && !tab.changes.amend {
-            resp.on_disabled_hover_text("Stage some changes first")
+            resp.on_disabled_hover_text(t!("Stage some changes first"))
         } else {
             resp
         };
@@ -403,7 +401,7 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             && has_message
             && !tab.changes.amend
             && ui
-                .add_enabled(!tab.busy(), egui::Button::new("Stage all & commit"))
+                .add_enabled(!tab.busy(), egui::Button::new(t!("Stage all & commit")))
                 .clicked()
         {
             tab.changes.committing = true;
@@ -417,12 +415,12 @@ fn commit_box(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
 
     match (&tab.identity.name, &tab.identity.email) {
         (Some(n), Some(e)) => {
-            ui.weak(format!("as {n} <{e}>"))
-                .on_hover_text("Change in the identity menu at the bottom right");
+            ui.weak(t!("as {} <{}>", n, e))
+                .on_hover_text(t!("Change in the identity menu at the bottom right"));
         }
         _ => {
             if ui
-                .link("⚠ No author identity set — click to choose one")
+                .link(t!("⚠ No author identity set — click to choose one"))
                 .clicked()
             {
                 cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
