@@ -36,6 +36,10 @@ impl Repo {
         Git::new(&self.path)
     }
 
+    pub(crate) fn raw(&self) -> &git2::Repository {
+        &self.inner
+    }
+
     pub fn name(&self) -> String {
         self.path
             .file_name()
@@ -537,7 +541,7 @@ impl Repo {
     }
 }
 
-fn commit_info(commit: &git2::Commit) -> CommitInfo {
+pub(crate) fn commit_info(commit: &git2::Commit) -> CommitInfo {
     let author = commit.author();
     CommitInfo {
         id: commit.id(),

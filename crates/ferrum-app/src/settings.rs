@@ -98,6 +98,8 @@ pub struct Settings {
     pub accounts: Vec<ForgeAccount>,
     /// Folder suggested when cloning.
     pub clone_dir: String,
+    #[serde(default)]
+    pub diff: crate::ui::diff_prefs::DiffPrefs,
 }
 
 impl Default for Settings {
@@ -113,6 +115,7 @@ impl Default for Settings {
             profiles: Vec::new(),
             accounts: Vec::new(),
             clone_dir: String::new(),
+            diff: Default::default(),
         }
     }
 }

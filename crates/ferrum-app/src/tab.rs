@@ -126,6 +126,7 @@ pub struct RepoTab {
     pub rebase: Option<rebase::RebasePlan>,
     pub file_view: Option<blame::FileView>,
     pub prs: forge_ui::PrState,
+    pub diff_options: crate::ui::diff_prefs::TabDiffOptions,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -169,6 +170,7 @@ impl RepoTab {
             rebase: None,
             file_view: None,
             prs: Default::default(),
+            diff_options: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,
@@ -360,9 +362,10 @@ impl RepoTab {
         };
         let id = view.details.info.id;
         view.selected_file = Some(i);
+        let cfg = self.diff_options.config;
         match self
             .repo
-            .commit_file_diff(id, &file.path, file.old_path.as_deref())
+            .commit_file_diff_with(id, &file.path, file.old_path.as_deref(), &cfg)
         {
             Ok(diff) => view.diff = diff,
             Err(e) => {
@@ -405,7 +408,8 @@ impl RepoTab {
             self.changes.diff = None;
             return;
         }
-        match self.repo.file_diff(source, &path) {
+        let cfg = self.diff_options.for_path(&path);
+        match self.repo.file_diff_with(source, &path, &cfg) {
             Ok(d) => {
                 // Line numbers shift after staging; a stale selection would be misleading.
                 if self.changes.diff.as_ref().map(|old| &old.hunks)

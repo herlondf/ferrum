@@ -5,8 +5,8 @@ use ferrum_core::{DiffSource, short};
 
 use crate::command::{Command, Commands, Op};
 use crate::tab::RepoTab;
-use crate::ui::{diff_view, image_diff};
-use crate::util::{change_label, format_time, is_image_path};
+use crate::ui::{diff_extra, diff_view};
+use crate::util::{change_label, format_time};
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(view) = &tab.commit_view else {
@@ -34,23 +34,18 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         };
         ui.horizontal(|ui| {
             ui.strong(&file.path);
-            if let Some(old) = &file.old_path {
-                ui.weak(t!("(renamed from {})", old));
-            }
         });
         let id = view.details.info.id;
-        if file.binary && is_image_path(&file.path) {
-            image_diff::show(ui, &tab.repo, file, DiffSource::Commit(id));
-        } else {
-            diff_view::show(
-                ui,
-                "commit-diff",
-                file,
-                diff_view::DiffMode::ReadOnly,
-                false,
-                None,
-            );
-        }
+        diff_extra::show_file(
+            ui,
+            "commit-diff",
+            &tab.repo,
+            DiffSource::Commit(id),
+            file,
+            diff_view::DiffMode::ReadOnly,
+            false,
+            None,
+        );
     });
 }
 

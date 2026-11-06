@@ -140,9 +140,11 @@ pub fn change_label(
 
 pub fn is_image_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
-    [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico"]
-        .iter()
-        .any(|e| lower.ends_with(e))
+    [
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tga", ".svg", ".svgz",
+    ]
+    .iter()
+    .any(|e| lower.ends_with(e))
 }
 
 /// Checks that a branch or tag name is acceptable to git.

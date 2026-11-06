@@ -9,8 +9,8 @@ use ferrum_core::{DiffSource, FileCommit, FileDiff, Oid, Repo, short};
 
 use crate::command::{Command, Commands};
 use crate::tab::{RepoTab, View};
-use crate::ui::{diff_view, image_diff};
-use crate::util::{format_time, is_image_path};
+use crate::ui::{diff_extra, diff_view};
+use crate::util::format_time;
 
 const HISTORY_ROW: f32 = 42.0;
 const BLAME_ROW: f32 = 18.0;
@@ -312,13 +312,12 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
                 let note = t!("This commit does not change the file (for example, a merge).");
                 ui.weak(note);
             }
-            Some(f) if f.binary && is_image_path(&f.path) => {
-                image_diff::show(ui, repo, f, DiffSource::Commit(e.commit.id));
-            }
             Some(f) => {
-                diff_view::show(
+                diff_extra::show_file(
                     ui,
                     "file-history-diff",
+                    repo,
+                    DiffSource::Commit(e.commit.id),
                     f,
                     diff_view::DiffMode::ReadOnly,
                     false,
@@ -614,6 +613,9 @@ mod tests {
             hunks: Vec::new(),
             additions: 0,
             deletions: 0,
+            old_mode: 0,
+            new_mode: 0,
+            skipped: None,
         }
     }
 

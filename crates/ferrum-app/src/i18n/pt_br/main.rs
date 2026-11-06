@@ -342,7 +342,6 @@ pub static T: &[(&str, &str)] = &[
         "Selecione um commit para ver os detalhes.",
     ),
     ("No file selected.", "Nenhum arquivo selecionado."),
-    ("(renamed from {})", "(renomeado de {})"),
     ("Committer", "Committer"),
     ("Parents", "Pais"),
     ("Parent", "Pai"),

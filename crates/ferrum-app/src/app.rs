@@ -41,7 +41,8 @@ pub struct FerrumApp {
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
-/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
+/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`, `diff:OPTS`
+/// (see `diff_prefs::dev_step`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -73,6 +74,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             }))),
             "palette" => out.push(Command::ShowPalette),
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
+            "diff" => out.push(Command::DevStep(DevStep::Diff(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -542,6 +544,9 @@ impl FerrumApp {
                         t.apply_search();
                     }
                 }
+                DevStep::Diff(arg) => {
+                    crate::ui::diff_prefs::dev_step(&mut self.settings.diff, &arg)
+                }
                 DevStep::Select(source, path) => {
                     if let Some(t) = self.tab() {
                         t.view = View::Changes;
@@ -586,7 +591,8 @@ impl FerrumApp {
         if pressed(Modifiers::NONE, Key::F5) || pressed(cmd, Key::R) {
             cmds.push(Command::Refresh);
         }
-        if pressed(cmd, Key::F) {
+        // Ctrl+F searches the diff when it has the pointer or focus, else the history.
+        if pressed(cmd, Key::F) && !crate::ui::diff_view::claim_find(ctx) {
             cmds.push(Command::FocusSearch);
         }
         if pressed(cmd, Key::Num1) {
@@ -1004,6 +1010,7 @@ impl eframe::App for FerrumApp {
             cmds.push(c);
         }
         self.shortcuts(&ctx, &mut cmds);
+        crate::ui::diff_prefs::sync(&ctx, &mut self.settings.diff, &mut self.tabs);
 
         let title = match self.tabs.get(self.active) {
             Some(t) => format!(
