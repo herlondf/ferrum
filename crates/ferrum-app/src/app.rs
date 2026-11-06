@@ -38,7 +38,7 @@ pub struct FerrumApp {
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
-/// commits), `settings`, `palette`, `dialog:branch|push|stash|clone`,
+/// commits), `settings`, `palette`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
@@ -97,6 +97,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                     },
                     "identity" => Dialog::identity(&t.identity),
                     "pr" => Dialog::Forge(forge_ui::new_pull_request(t, &head)),
+                    "login" => {
+                        Dialog::Forge(forge_ui::login(forge::ForgeKind::GitHub, "github.com"))
+                    }
                     _ => continue,
                 };
                 out.push(Command::Dialog(d));
@@ -211,9 +214,12 @@ impl FerrumApp {
         let Some((path, frames)) = &mut self.screenshot else {
             return;
         };
-        *frames += 1;
+        *frames = frames.saturating_add(1);
         ctx.request_repaint();
-        if *frames == 10 {
+        // Wait for running jobs (e.g. loading pull requests), up to ~600 frames.
+        let busy = self.tabs.iter().any(|t| t.busy()) || self.global_job.is_some();
+        if (10..u32::MAX).contains(frames) && (!busy || *frames >= 600) {
+            *frames = u32::MAX;
             let (path, ctx2) = (path.clone(), ctx.clone());
             ctx.request_screenshot(move |img| {
                 let mut out = format!("P6\n{} {}\n255\n", img.size[0], img.size[1]).into_bytes();
@@ -447,19 +453,16 @@ impl FerrumApp {
             }
             Command::LoadPullRequests => self.load_pull_requests(),
             Command::CreatePullRequest(pr) => {
-                let token = self
-                    .tab()
-                    .and_then(|t| t.hosted.clone())
-                    .and_then(|h| Some((self.settings.token_for(h.kind, &h.host)?, h)));
-                match (token, self.tabs.get_mut(self.active)) {
-                    (Some((token, hosted)), Some(t)) => {
-                        t.spawn_job("Create pull request", ctx, move |_| {
-                            forge::create_pull_request(&hosted, &token, &pr)
-                                .map(JobOutput::PullRequestCreated)
-                                .map_err(|e| e.to_string())
-                        })
+                // Runs as an `Op` so it waits for a push queued just before it.
+                let hosted = self.tab().and_then(|t| t.hosted.clone());
+                let token = hosted
+                    .as_ref()
+                    .and_then(|h| self.settings.token_for(h.kind, &h.host));
+                match (hosted, token, self.tabs.get_mut(self.active)) {
+                    (Some(hosted), Some(token), Some(t)) => {
+                        t.run(Op::CreatePullRequest { hosted, token, pr }, ctx)
                     }
-                    _ => self.error("Log in first (Settings → Accounts)."),
+                    _ => self.error("Log in first (Settings > Accounts)."),
                 }
             }
             Command::VerifyAccount { kind, host, token } => {

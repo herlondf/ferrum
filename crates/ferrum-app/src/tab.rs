@@ -417,9 +417,7 @@ impl RepoTab {
         let refresh = op.refresh();
         let is_commit = matches!(op, Op::Commit { .. });
         let mut job = Job::spawn(label, refresh, ctx, move |progress| {
-            op.run(&git, progress)
-                .map(|_| JobOutput::Done)
-                .map_err(|e| e.to_string())
+            op.execute(&git, progress)
         });
         job.is_commit = is_commit;
         self.job = Some(job);
