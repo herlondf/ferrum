@@ -3,12 +3,17 @@ name = "ferrum"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "A fast, cross-platform Git client"
+homepage = "https://github.com/herlondf/ferrum"
+repository = "https://github.com/herlondf/ferrum"
 
 [dependencies]
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 ferrum-core = { version = "0.1.0", path = "../ferrum-core" }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico"] }
+notify = "8"
+notify-rust = "4"
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 sys-locale = "0.3.2"
@@ -21,3 +26,30 @@ zbus = "5.19.0"
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 tempfile = "3.27.0"
 serde_json = "1.0.154"
+
+# Linux packages, built by scripts/package-linux.sh.
+[package.metadata.deb]
+name = "ferrum"
+maintainer = "Herlon D. Filgueira <herlondf@users.noreply.github.com>"
+copyright = "Herlon D. Filgueira"
+extended-description = "A fast, cross-platform Git client: history graph, staging of hunks and lines, interactive rebase, conflict resolution and GitHub/GitLab pull requests."
+section = "vcs"
+depends = "$auto, git"
+assets = [
+    ["target/release/ferrum", "usr/bin/", "755"],
+    ["../../packaging/linux/ferrum.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/linux/ferrum.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["../../packaging/linux/io.github.herlondf.Ferrum.metainfo.xml", "usr/share/metainfo/", "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "A fast, cross-platform Git client"
+assets = [
+    { source = "target/release/ferrum", dest = "/usr/bin/ferrum", mode = "755" },
+    { source = "../../packaging/linux/ferrum.desktop", dest = "/usr/share/applications/ferrum.desktop", mode = "644" },
+    { source = "../../packaging/linux/ferrum.png", dest = "/usr/share/icons/hicolor/256x256/apps/ferrum.png", mode = "644" },
+    { source = "../../packaging/linux/io.github.herlondf.Ferrum.metainfo.xml", dest = "/usr/share/metainfo/io.github.herlondf.Ferrum.metainfo.xml", mode = "644" },
+]
+
+[package.metadata.generate-rpm.requires]
+git = "*"

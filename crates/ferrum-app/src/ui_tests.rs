@@ -20,6 +20,14 @@ pub const SOURCES: &[&str] = &[
     include_str!("external.rs"),
     include_str!("accent.rs"),
     include_str!("settings.rs"),
+    include_str!("ui/activity.rs"),
+    include_str!("ui/background.rs"),
+    include_str!("app/background.rs"),
+    include_str!("desktop_notify.rs"),
+    include_str!("jobs.rs"),
+    include_str!("refresh.rs"),
+    include_str!("watcher.rs"),
+    include_str!("benchmark.rs"),
     include_str!("ui/blame.rs"),
     include_str!("ui/changes.rs"),
     include_str!("ui/conflicts.rs"),
@@ -45,6 +53,7 @@ pub const SOURCES: &[&str] = &[
     include_str!("i18n/pt_br/editing.rs"),
     include_str!("i18n/pt_br/extras.rs"),
     include_str!("i18n/pt_br/preferences.rs"),
+    include_str!("i18n/pt_br/activity.rs"),
 ];
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -351,13 +360,13 @@ fn picks_up_changes_made_outside_the_app() {
     assert!(h.state().tabs[0].status.is_empty());
     std::fs::write(dir.path().join("new.txt"), "from an editor\n").unwrap();
     std::thread::sleep(Duration::from_millis(3200));
-    frames(&mut h);
+    settle(&mut h);
     assert_eq!(h.state().tabs[0].status.unstaged.len(), 1);
     // A commit made in a terminal reloads the history too.
     git(dir.path(), &["add", "-A"]);
     git(dir.path(), &["commit", "-qm", "from terminal"]);
     std::thread::sleep(Duration::from_millis(3200));
-    frames(&mut h);
+    settle(&mut h);
     assert_eq!(h.state().tabs[0].commits[0].summary, "from terminal");
 }
 
@@ -487,6 +496,78 @@ fn settings_sections_show_preferences() {
     frames(&mut h);
     assert!(h.query_by_label("Verbose git output").is_some());
 }
+
 /// Sidebar flows (in their own file to keep this one small).
 #[path = "ui_tests_sidebar.rs"]
 mod sidebar;
+
+#[test]
+fn polls_for_changes_when_not_watching() {
+    let dir = repo();
+    git(dir.path(), &["checkout", "-q", "--", "a.txt"]);
+    let mut h = harness(dir.path());
+    h.state_mut().settings.background.watch_files = false;
+    h.state_mut().settings.background.poll_secs = 1;
+    frames(&mut h);
+    std::fs::write(dir.path().join("new.txt"), "from an editor\n").unwrap();
+    std::thread::sleep(Duration::from_millis(1200));
+    settle(&mut h);
+    assert_eq!(h.state().tabs[0].status.unstaged.len(), 1);
+}
+
+/// The operations of a repository, as recorded in the activity log.
+fn recorded(path: &Path) -> Vec<std::sync::Arc<crate::jobs::Operation>> {
+    crate::jobs::operations()
+        .into_iter()
+        .filter(|o| o.repo.as_deref() == Some(path))
+        .collect()
+}
+
+#[test]
+fn activity_window_shows_the_git_commands() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    h.get_by_label("Stage all").click();
+    settle(&mut h);
+    let ctx = h.ctx.clone();
+    h.state_mut()
+        .handle(crate::command::Command::ShowActivity, &ctx);
+    frames(&mut h);
+    h.get_by_label_contains("$ git add -A");
+    let ops = recorded(h.state().tabs[0].path());
+    assert_eq!(ops.len(), 1);
+    assert_eq!(
+        ops[0].outcome().map(|o| o.1),
+        Some(crate::jobs::Outcome::Succeeded)
+    );
+    assert!(!ops[0].background);
+}
+
+/// A fetch from a remote that never answers is cancelled from the toolbar.
+#[cfg(unix)]
+#[test]
+fn cancel_a_running_fetch() {
+    let dir = repo();
+    let p = dir.path();
+    git(p, &["config", "protocol.ext.allow", "always"]);
+    git(p, &["remote", "add", "origin", "ext::sleep 30"]);
+    let mut h = harness(p);
+    frames(&mut h);
+    h.get_by_label("🔄 Fetch").click();
+    frames(&mut h);
+    assert!(h.state().tabs[0].busy());
+    h.get_by_label("✖").click();
+    settle(&mut h);
+    let msg = h.state().tabs[0].message.as_ref().unwrap();
+    assert!(msg.text.contains("cancelled"), "{}", msg.text);
+    let ops = recorded(h.state().tabs[0].path());
+    let op = ops.last().unwrap();
+    assert_eq!(
+        op.outcome().map(|o| o.1),
+        Some(crate::jobs::Outcome::Cancelled)
+    );
+    assert!(op.commands()[0].cancelled);
+}

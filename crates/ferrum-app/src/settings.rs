@@ -105,6 +105,41 @@ pub struct Settings {
     /// Sidebar state per repository (pinned refs, open folders, sort).
     #[serde(default)]
     pub repos: std::collections::BTreeMap<String, crate::ui::sidebar_model::RepoPrefs>,
+    pub background: BackgroundSettings,
+}
+
+/// File watching, refreshes, notifications and update checks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackgroundSettings {
+    /// Watch the working folder for changes made by other programs.
+    pub watch_files: bool,
+    /// How often to look for changes when not watching, in seconds.
+    pub poll_secs: u32,
+    /// Reload everything when the window gets the focus back.
+    pub refresh_on_focus: bool,
+    /// Desktop notification when a long operation finishes in the background.
+    pub notifications: bool,
+    /// Look for a new release on GitHub once a day.
+    pub check_updates: bool,
+    /// Unix time of the last update check.
+    pub last_update_check: u64,
+    /// Newer release found by the last check: (version, page URL).
+    pub update_available: Option<(String, String)>,
+}
+
+impl Default for BackgroundSettings {
+    fn default() -> Self {
+        Self {
+            watch_files: true,
+            poll_secs: 3,
+            refresh_on_focus: true,
+            notifications: true,
+            check_updates: true,
+            last_update_check: 0,
+            update_available: None,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -123,6 +158,7 @@ impl Default for Settings {
             prefs: Default::default(),
             external: Default::default(),
             repos: Default::default(),
+            background: BackgroundSettings::default(),
         }
     }
 }

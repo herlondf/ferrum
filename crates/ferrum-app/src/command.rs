@@ -55,6 +55,10 @@ pub enum Command {
     OpenUrl(String),
     ShowSettings,
     ShowPalette,
+    /// Open or close the Activity window.
+    ShowActivity,
+    /// Stop the running operation (of the active tab, or the app-wide one).
+    CancelJob,
     FocusSearch,
     /// Open something in another program (editor, terminal, diff tool...).
     External(crate::external::Launch),

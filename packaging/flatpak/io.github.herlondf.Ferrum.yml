@@ -1,0 +1,59 @@
+# Flatpak manifest for Ferrum. Build it with scripts/flatpak-build.sh, which
+# first writes cargo-sources.json (the crates from Cargo.lock, so the build
+# can run offline) with flatpak-cargo-generator.
+app-id: io.github.herlondf.Ferrum
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: ferrum
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Repositories can be anywhere in the home folder; git reads ~/.gitconfig.
+  - --filesystem=home
+  - --socket=ssh-auth
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+modules:
+  # The runtime has no git command line; Ferrum writes through it.
+  - name: git
+    buildsystem: simple
+    build-commands:
+      - make -j${FLATPAK_BUILDER_N_JOBS} prefix=/app NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1 INSTALL_SYMLINKS=1
+      - make prefix=/app NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1 INSTALL_SYMLINKS=1 install
+    cleanup:
+      - /share/man
+      - /share/gitweb
+    sources:
+      - type: archive
+        url: https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.56.0.tar.xz
+        sha256: 26c56c296b38c0695b26fa95f475f1d01704d2d38e73465ca30b0b2f5dc789d3
+
+  - name: ferrum
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/ferrum/cargo
+        CARGO_NET_OFFLINE: 'true'
+    build-commands:
+      - cargo --offline build --release -p ferrum
+      - install -Dm755 target/release/ferrum /app/bin/ferrum
+      - install -Dm644 packaging/linux/ferrum.desktop /app/share/applications/io.github.herlondf.Ferrum.desktop
+      - sed -i 's/^Icon=ferrum$/Icon=io.github.herlondf.Ferrum/' /app/share/applications/io.github.herlondf.Ferrum.desktop
+      - install -Dm644 packaging/linux/ferrum.png /app/share/icons/hicolor/256x256/apps/io.github.herlondf.Ferrum.png
+      - install -Dm644 packaging/linux/io.github.herlondf.Ferrum.metainfo.xml /app/share/metainfo/io.github.herlondf.Ferrum.metainfo.xml
+      - sed -i 's|>ferrum.desktop<|>io.github.herlondf.Ferrum.desktop<|' /app/share/metainfo/io.github.herlondf.Ferrum.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - dist
+          - .flatpak-builder
+      - cargo-sources.json

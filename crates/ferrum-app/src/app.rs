@@ -7,6 +7,8 @@ use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
+mod background;
+
 use crate::command::{Command, Commands, DevStep, Op};
 use crate::jobs::{Job, JobOutput, Refresh};
 use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
@@ -30,8 +32,8 @@ pub struct FerrumApp {
     message: Option<Message>,
     applied: Option<(ThemeChoice, f32, crate::i18n::Language)>,
     was_focused: bool,
-    /// Last time local changes were checked in the background.
-    last_poll: Instant,
+    /// Background reloads, update check and the Activity window.
+    bg: background::State,
     /// Dev aid: with `FERRUM_SCREENSHOT=out.ppm`, save the window after a few frames and quit.
     screenshot: Option<(PathBuf, u32)>,
     /// Dev aid: commands from `FERRUM_START`, run on the first frame.
@@ -44,7 +46,8 @@ pub struct FerrumApp {
 /// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`,
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
-/// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`).
+/// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
+/// `activity`, `fetch`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -77,6 +80,8 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 _ => ThemeChoice::System,
             }))),
             "palette" => out.push(Command::ShowPalette),
+            "activity" => out.push(Command::ShowActivity),
+            "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
             "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
             "select" => {
@@ -134,7 +139,7 @@ impl FerrumApp {
             message: None,
             applied: None,
             was_focused: true,
-            last_poll: Instant::now(),
+            bg: Default::default(),
             screenshot,
             startup: Vec::new(),
         };
@@ -181,7 +186,7 @@ impl FerrumApp {
             || self
                 .tabs
                 .iter()
-                .any(|t| t.job.is_some() || !t.queue.is_empty())
+                .any(|t| t.job.is_some() || !t.queue.is_empty() || t.live.refreshing())
     }
 
     fn tab(&mut self) -> Option<&mut RepoTab> {
@@ -236,30 +241,6 @@ impl FerrumApp {
         self.applied = Some(want);
     }
 
-    /// Every few seconds, picks up edits made in other programs: local changes,
-    /// and everything when HEAD moved (e.g. a commit made in a terminal).
-    fn poll_changes(&mut self, ctx: &egui::Context) {
-        const INTERVAL: Duration = Duration::from_secs(3);
-        ctx.request_repaint_after(INTERVAL);
-        let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
-        if self.last_poll.elapsed() < INTERVAL || minimized || self.dialog.is_some() {
-            return;
-        }
-        self.last_poll = Instant::now();
-        let Some(tab) = self.tabs.get_mut(self.active) else {
-            return;
-        };
-        if tab.busy() {
-            return;
-        }
-        let head_moved = tab.repo.head_oid() != tab.head_oid || tab.repo.head_branch() != tab.head;
-        if head_moved {
-            tab.refresh_all();
-        } else {
-            tab.refresh_status();
-        }
-    }
-
     fn maybe_screenshot(&mut self, ctx: &egui::Context) {
         let Some((path, frames)) = &mut self.screenshot else {
             return;
@@ -272,7 +253,8 @@ impl FerrumApp {
             .ok()
             .and_then(|f| f.parse().ok())
             .unwrap_or(10);
-        let busy = self.tabs.iter().any(|t| t.busy()) || self.global_job.is_some();
+        let busy =
+            self.tabs.iter().any(|t| t.busy() || t.live.refreshing()) || self.global_job.is_some();
         if (min..u32::MAX).contains(frames) && (!busy || *frames >= min.max(600)) {
             *frames = u32::MAX;
             let (path, ctx2) = (path.clone(), ctx.clone());
@@ -300,9 +282,11 @@ impl FerrumApp {
             && let Some(result) = job.poll()
         {
             let label = job.label.clone();
+            let cancelled = job.cancel_requested();
             self.global_job = None;
             match result {
                 Ok(out) => outputs.push((None, out)),
+                Err(_) if cancelled => self.info(t!("{} cancelled", label)),
                 Err(e) => self.error(t!("{} failed: {}", label, e)),
             }
         }
@@ -413,7 +397,7 @@ impl FerrumApp {
             }
             Command::Refresh => {
                 if let Some(t) = self.tab() {
-                    t.refresh_all();
+                    t.request_refresh(Refresh::All);
                     t.info(t!("Refreshed"));
                 }
             }
@@ -534,8 +518,10 @@ impl FerrumApp {
                 });
             }
             Command::Clone { url, parent, name } => {
-                self.spawn_global(&t!("Clone {}", name), ctx, move |progress| {
-                    ops::clone(&parent, &url, &name, |l| progress(l)).map_err(|e| e.to_string())?;
+                self.spawn_global_cancellable(&t!("Clone {}", name), ctx, move |env| {
+                    let git = env.git(&ferrum_core::cli::Git::new(&parent));
+                    ops::clone_with(&git, &url, &name, |l| env.progress(l))
+                        .map_err(|e| e.to_string())?;
                     Ok(JobOutput::OpenRepo(parent.join(&name)))
                 });
             }
@@ -588,6 +574,15 @@ impl FerrumApp {
             Command::OpenUrl(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
             Command::ShowSettings => self.settings_window.open = true,
             Command::ShowPalette => self.palette.toggle(),
+            Command::ShowActivity => self.bg.activity.toggle(),
+            Command::CancelJob => match self.tabs.get_mut(self.active) {
+                Some(t) if t.job.is_some() => t.cancel_job(),
+                _ => {
+                    if let Some(j) = self.global_job.as_ref().filter(|j| j.cancellable()) {
+                        j.cancel();
+                    }
+                }
+            },
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -806,6 +801,8 @@ impl FerrumApp {
                 }
             });
             crate::ui::tools::toolbar_buttons(ui, &self.settings.prefs, tab.path(), cmds);
+            ui.separator();
+            crate::ui::activity::status_control(ui, tab, self.global_job.as_ref(), cmds);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .button("⚙")
@@ -821,6 +818,7 @@ impl FerrumApp {
                 {
                     cmds.push(Command::ShowPalette);
                 }
+                self.update_link(ui);
             });
         });
     }
@@ -1033,18 +1031,7 @@ impl eframe::App for FerrumApp {
         self.maybe_screenshot(&ctx);
         self.apply_look(&ctx);
         self.poll_jobs(&ctx);
-
-        // Pick up changes made outside the app when the window regains focus.
-        let focused = ctx.input(|i| i.focused);
-        if focused
-            && !self.was_focused
-            && let Some(t) = self.tab()
-            && !t.busy()
-        {
-            t.refresh_all();
-        }
-        self.was_focused = focused;
-        self.poll_changes(&ctx);
+        self.background_tick(&ctx);
 
         let mut cmds = Commands::default();
         for c in std::mem::take(&mut self.startup) {
@@ -1155,6 +1142,8 @@ impl eframe::App for FerrumApp {
             &self.settings,
             &mut cmds,
         );
+
+        self.show_activity(&ctx);
 
         for c in cmds.take() {
             self.handle(c, &ctx);

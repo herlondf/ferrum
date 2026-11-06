@@ -2,6 +2,7 @@
 //! independently. The same English key may appear in several tables, but must
 //! then have the same translation (checked by a test).
 
+mod activity;
 mod common;
 mod editing;
 mod extras;
@@ -10,6 +11,7 @@ mod preferences;
 mod sidebar;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
+    activity::T,
     common::T,
     main::T,
     editing::T,
