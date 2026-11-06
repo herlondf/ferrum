@@ -50,7 +50,23 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   icons (○ local only, ☁ published, ⚠ upstream gone), drag a branch onto another
   to merge or rebase, double-click to check out / track / open, "Select stale
   local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
-  per section. Open folders, pins and sort order are kept per repository.
+  per section. Open folders and sort order are kept per worktree; pins and
+  issue link rules are shared by all worktrees of a repository.
+- **Git LFS** (toolbar ☰ > Git LFS, when `git lfs` is installed): tracked
+  patterns (track / untrack, from `.gitattributes`), status, fetch / pull / prune
+  with progress, install, lock / unlock from the local changes file menu, and a
+  locks dialog with a filter and multi-unlock (optionally forced). LFS content in
+  diffs can be downloaded, previewed and saved.
+- **Submodules**: add (URL, path, branch), remove (deinit, `git rm` and the clone
+  in `.git/modules`), move, change URL (with `git submodule sync`), update the
+  selected ones (init / recursive), discard their changes, open in a tab next to
+  the parent; icons for a moved commit (⟳), uncommitted changes (📝) and
+  untracked files (+). Optional update after checkout, cherry-pick and revert
+  (Settings > Git: never / ask / always).
+- **Worktrees**: linked worktrees nested under the main one, "Check out as
+  worktree…" for local and remote branches (with a suggested folder), a 📂 icon on
+  branches checked out in another worktree; double-clicking one opens that
+  worktree in a tab.
 - **Fetch, pull and push** with live progress, force-with-lease and upstream setup.
 - **Interactive rebase** planner: reorder by drag and drop, reword, squash,
   fixup, edit, drop.
