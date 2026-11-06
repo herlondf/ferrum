@@ -18,6 +18,7 @@ pub mod message;
 pub mod model;
 pub mod ops;
 pub mod rebase;
+pub mod refs;
 mod repo;
 pub mod stats;
 pub mod update;

@@ -112,6 +112,9 @@ pub struct Settings {
     pub ai: crate::commit_prefs::AiPrefs,
     #[serde(default)]
     pub diff: crate::ui::diff_prefs::DiffPrefs,
+    /// Branch, tag and stash dialog choices.
+    #[serde(default)]
+    pub refs: crate::ui::ref_dialogs::RefPrefs,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -169,6 +172,7 @@ impl Default for Settings {
             commit: Default::default(),
             ai: Default::default(),
             diff: Default::default(),
+            refs: Default::default(),
         }
     }
 }

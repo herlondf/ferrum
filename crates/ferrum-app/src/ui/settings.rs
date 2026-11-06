@@ -408,7 +408,7 @@ fn accounts(ui: &mut egui::Ui, settings: &mut Settings, cmds: &mut Commands) {
 }
 
 /// Mirrors `FerrumApp::shortcuts` in app.rs.
-fn shortcut_list() -> [(&'static str, String); 19] {
+fn shortcut_list() -> [(&'static str, String); 21] {
     [
         ("Mod+P", t!("Command palette")),
         ("Mod+O", t!("Open repository")),
@@ -417,7 +417,9 @@ fn shortcut_list() -> [(&'static str, String); 19] {
         ("Mod+F", t!("Search commits")),
         ("Mod+1", t!("History")),
         ("Mod+2", t!("Local changes")),
-        ("Mod+B", t!("New branch")),
+        ("Mod+B", t!("Check out branch")),
+        ("Mod+Shift+B", t!("New branch")),
+        ("F2", t!("Rename the selected branch")),
         ("Mod+Shift+S", t!("Stash changes")),
         ("Mod+Shift+F", t!("Fetch all remotes")),
         ("Mod+Shift+D", "Pull".to_owned()),

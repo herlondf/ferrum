@@ -63,12 +63,7 @@ pub static T: &[(&str, &str)] = &[
         "Branches cuja branch upstream foi excluída",
     ),
     ("{} selected", "{} selecionadas"),
-    ("Delete branches", "Excluir branches"),
     ("Delete {} branches", "Excluir {} branches"),
-    (
-        "Delete {} local branches? Commits that are only on them will be lost.\n\n{}",
-        "Excluir {} branches locais? Commits que estão somente nelas serão perdidos.\n\n{}",
-    ),
     // ----- Drag and drop -----
     (
         "Check out {} and merge {} into it?",

@@ -23,7 +23,6 @@ pub static T: &[(&str, &str)] = &[
         "Commits only on this branch may be lost (you can still undo right after)",
         "Commits que só existem nesta branch podem ser perdidos (ainda é possível desfazer logo em seguida)",
     ),
-    ("Also delete {} from {}", "Excluir também {} de {}"),
     ("Delete", "Excluir"),
     ("Check out {}", "Fazer checkout de {}"),
     (

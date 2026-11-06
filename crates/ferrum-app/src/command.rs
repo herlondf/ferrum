@@ -248,6 +248,8 @@ pub enum Op {
         token: String,
         pr: NewPullRequest,
     },
+    /// Branch, tag and stash operations of `ui::ref_dialogs`.
+    Refs(crate::ref_ops::RefOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -322,6 +324,7 @@ impl Op {
             Op::CreatePullRequest { hosted, .. } => {
                 t!("Create {}", hosted.kind.request_name())
             }
+            Op::Refs(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -449,6 +452,7 @@ impl Op {
             Op::CreatePullRequest { hosted, token, pr } => {
                 forge::create_pull_request(hosted, token, pr).map(|_| ())
             }
+            Op::Refs(r) => r.run(git, progress),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }

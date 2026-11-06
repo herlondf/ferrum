@@ -51,6 +51,19 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   to merge or rebase, double-click to check out / track / open, "Select stale
   local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
   per section. Open folders, pins and sort order are kept per repository.
+- **Branches**: quick checkout with fuzzy search (Ctrl+B); new branch with
+  folder prefix completion (Tab), validation (`git check-ref-format`, already
+  exists), space replacement and the last prefix remembered; rename (F2) also
+  on the remote; delete several at once with their remote branches and the
+  worktrees that have them checked out; copy the name from the sidebar or the
+  commit menu.
+- **Tags**: multiline messages, signed tags (`-s`, when a signing key is set),
+  push from the create dialog, a details window (tagger, date, message,
+  commit), delete locally and/or on a remote.
+- **Stashes**: stash only some files, snapshots (keep the working copy),
+  rename, apply with the staged state restored (`--index`), save as a patch,
+  drop several; a stashes dropdown in the toolbar and quick stash
+  (Ctrl/Alt+click on Stash).
 - **Fetch, pull and push** with live progress, force-with-lease and upstream setup.
 - **Interactive rebase** planner: reorder by drag and drop, reword, squash,
   fixup, edit, drop.
@@ -108,8 +121,10 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Commit (in the message box) | Ctrl+Enter |
 | Commit and push | Ctrl+Shift+Enter |
 | Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
-| New branch | Ctrl+B |
-| Stash | Ctrl+Shift+S |
+| Check out a branch (search) | Ctrl+B |
+| New branch | Ctrl+Shift+B |
+| Rename the selected sidebar branch | F2 |
+| Stash (Ctrl/Alt+click on the Stash button: quick stash) | Ctrl+Shift+S |
 | Fetch / Pull / Push | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
 | Undo | Ctrl+Z |
 | Next / previous tab, close tab | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+W |

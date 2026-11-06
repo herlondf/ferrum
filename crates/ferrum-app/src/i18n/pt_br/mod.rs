@@ -11,6 +11,7 @@ mod history;
 mod local;
 mod main;
 mod preferences;
+mod refs;
 mod sidebar;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
@@ -23,5 +24,6 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     history::T,
     local::T,
     preferences::T,
+    refs::T,
     sidebar::T,
 ];

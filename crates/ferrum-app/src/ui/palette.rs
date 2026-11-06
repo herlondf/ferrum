@@ -101,8 +101,14 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
         ]);
         let head = t.head.clone().unwrap_or_else(|| "HEAD".into());
         let h2 = head.clone();
-        list.push(entry(t!("New branch…"), "Ctrl+B", move || {
+        list.push(entry(t!("New branch…"), "Ctrl+Shift+B", move || {
             Command::Dialog(Dialog::create_branch(&h2, &h2))
+        }));
+        list.push(entry(t!("Check out branch…"), "Ctrl+B", || {
+            Command::Dialog(crate::ui::ref_dialogs::quick_checkout())
+        }));
+        list.push(entry(t!("Quick stash"), "", || {
+            Command::Run(crate::ui::ref_dialogs::quick_stash())
         }));
         if let Some(b) = t.head.clone() {
             let push = Dialog::push(t, &b);
@@ -208,7 +214,7 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
 }
 
 /// Characters of `query` appear in `text` in order (case-insensitive).
-fn fuzzy_score(text: &str, query: &str) -> Option<i32> {
+pub(crate) fn fuzzy_score(text: &str, query: &str) -> Option<i32> {
     if query.is_empty() {
         return Some(0);
     }

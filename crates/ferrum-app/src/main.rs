@@ -15,7 +15,10 @@ mod history_tests;
 mod icon;
 mod jobs;
 mod prefs;
+mod ref_ops;
 mod refresh;
+#[cfg(test)]
+mod refs_tests;
 mod settings;
 mod tab;
 mod ui;
