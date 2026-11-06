@@ -591,7 +591,7 @@ impl Repo {
     }
 }
 
-fn commit_info(commit: &git2::Commit) -> CommitInfo {
+pub(crate) fn commit_info(commit: &git2::Commit) -> CommitInfo {
     commit_info_mailmap(commit, None)
 }
 

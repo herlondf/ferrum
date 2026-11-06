@@ -73,6 +73,7 @@ pub enum Command {
 pub enum DevStep {
     Search(String),
     Select(ferrum_core::DiffSource, String),
+    Diff(String),
     Theme(crate::settings::ThemeChoice),
     /// Open Settings at a section, e.g. "appearance".
     SettingsSection(String),

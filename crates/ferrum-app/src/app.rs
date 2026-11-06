@@ -49,7 +49,8 @@ pub struct FerrumApp {
 /// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
 /// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
-/// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view).
+/// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
+/// `diff:OPTS` (see `diff_prefs::dev_step`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -109,6 +110,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
             "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
             "local" => out.push(Command::DevStep(DevStep::Changes(arg.into()))),
+            "diff" => out.push(Command::DevStep(DevStep::Diff(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -587,6 +589,9 @@ impl FerrumApp {
                         t.apply_search();
                     }
                 }
+                DevStep::Diff(arg) => {
+                    crate::ui::diff_prefs::dev_step(ctx, &mut self.settings.diff, &arg)
+                }
                 DevStep::Select(source, path) => {
                     if let Some(t) = self.tab() {
                         t.view = View::Changes;
@@ -656,7 +661,8 @@ impl FerrumApp {
         if pressed(Modifiers::NONE, Key::F5) || pressed(cmd, Key::R) {
             cmds.push(Command::Refresh);
         }
-        if pressed(cmd, Key::F) {
+        // Ctrl+F searches the diff when it has the pointer or focus, else the history.
+        if pressed(cmd, Key::F) && !crate::ui::diff_view::claim_find(ctx) {
             cmds.push(Command::FocusSearch);
         }
         history_options::shortcuts(ctx, &self.tabs[self.active], cmds);
@@ -1083,6 +1089,12 @@ impl eframe::App for FerrumApp {
             cmds.push(c);
         }
         self.shortcuts(&ctx, &mut cmds);
+        crate::ui::diff_prefs::share_with_prefs(
+            &ctx,
+            &mut self.settings.diff,
+            &mut self.settings.prefs,
+        );
+        crate::ui::diff_prefs::sync(&ctx, &mut self.settings.diff, &mut self.tabs);
 
         let title = match self.tabs.get(self.active) {
             Some(t) => format!(

@@ -16,9 +16,8 @@ use crate::tab::RepoTab;
 use crate::ui::changes_tools::{self, Tool};
 use crate::ui::commit_box;
 use crate::ui::dialogs::Dialog;
-use crate::ui::diff_view::{self, Action, DiffAction, DiffMode};
-use crate::ui::image_diff;
-use crate::util::{change_label, is_image_path};
+use crate::ui::diff_view::{Action, DiffAction, DiffMode};
+use crate::util::change_label;
 
 /// What the lists remember between frames.
 #[derive(Default)]
@@ -968,10 +967,6 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             t!("unstaged")
         });
     });
-    if file.binary && is_image_path(&file.path) {
-        image_diff::show(ui, &tab.repo, &file, source);
-        return;
-    }
     let mode = if source == DiffSource::Staged {
         DiffMode::Staged
     } else {
@@ -980,15 +975,21 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     // Lines of the last commit cannot be unstaged one by one while amending.
     let line_staging =
         supports_line_staging(&file) && !(tab.changes.amend && source == DiffSource::Staged);
-    let action = diff_view::show(
+    let action = crate::ui::diff_extra::show_file(
         ui,
         "changes-diff",
+        &tab.repo,
+        source,
         &file,
         mode,
         line_staging,
         Some(&mut tab.changes.selection),
     );
     let Some(action) = action else { return };
+    if action == DiffAction::LoadFull {
+        crate::ui::diff_prefs::load_large(tab, &file.path);
+        return;
+    }
     if tab.busy() {
         tab.error(t!("Wait for the current operation to finish."));
         return;
@@ -1007,6 +1008,7 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 .then(|| partial_patch(&file, |hh, _| hh == h, a != Action::Stage))
                 .flatten(),
         ),
+        DiffAction::LoadFull => return,
         DiffAction::Lines(a) => (
             a,
             partial_patch(

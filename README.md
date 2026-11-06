@@ -21,7 +21,16 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Drag commits** on the current branch to reorder or squash them.
 - **Repository statistics**: commits per weekday, hour and author, and a
   treemap of changed folders.
-- **Commit details**: message, files and diff; side-by-side **image diff**.
+- **Commit details**: message, files and diff.
+- **Diff viewer**: unified or side by side, syntax highlighting, changed words
+  highlighted, find (Ctrl+F), map of changes, next/previous change, ignore
+  whitespace, word wrap, font size, whole file or N context lines, visible
+  whitespace and tab width, optional `-`/`+` markers, a large window (Space),
+  rename and file mode changes, scroll position kept per file.
+  **Images** (PNG, JPEG, GIF, BMP, WebP, ICO, TGA, SVG, first page of PDF) side
+  by side, as a swipe, onion skin or pixel difference; binary size changes; Git
+  LFS pointers with a download/preview; commits between two submodule
+  revisions; large untracked files load on request.
 - **Local changes**: stage/unstage/discard whole files, hunks or single lines;
   flat, tree or single-list view; filter; drag files between lists; hide
   untracked / show ignored files; `.gitignore` by file, folder, extension or
@@ -86,13 +95,15 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Command palette | Ctrl+P |
 | Open repository | Ctrl+O |
 | History / Local changes | Ctrl+1 / Ctrl+2 |
-| Search commits | Ctrl+F |
+| Search commits (or find in the diff under the pointer) | Ctrl+F |
 | Next / previous match | Enter or F3 / Shift+Enter or Shift+F3 |
 | Jump to HEAD | Ctrl+0 (or Ctrl+1 in the history) |
 | Go to commit | Ctrl+G |
 | Only the current branch in the graph | Ctrl+Shift+A |
 | Show reflog | Ctrl+Shift+. |
 | Collapse / expand the selected merge | Left / Right |
+| Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
+| Large diff window | Space |
 | Refresh | F5 or Ctrl+R |
 | Commit (in the message box) | Ctrl+Enter |
 | Commit and push | Ctrl+Shift+Enter |
@@ -143,7 +154,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
 - `FERRUM_SCREENSHOT=out.ppm ./target/debug/ferrum <repo>` saves a screenshot
   and quits (`FERRUM_SCREENSHOT_FRAMES=N` waits longer).
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
-  the steps are listed in `startup_commands` in `app.rs`.
+  the steps are listed in `startup_commands` in `app.rs` (diff options:
+  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`).
+
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
   graph layout, status…) and prints the best and average of each.

@@ -128,6 +128,7 @@ pub struct RepoTab {
     pub prs: forge_ui::PrState,
     pub sidebar: crate::ui::sidebar_model::SidebarState,
     pub pane: crate::ui::focus::PaneFocus,
+    pub diff_options: crate::ui::diff_prefs::TabDiffOptions,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -187,6 +188,7 @@ impl RepoTab {
             prs: Default::default(),
             sidebar: Default::default(),
             pane: Default::default(),
+            diff_options: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,
@@ -346,9 +348,10 @@ impl RepoTab {
         };
         let id = view.details.info.id;
         view.selected_file = Some(i);
+        let cfg = self.diff_options.config;
         match self
             .repo
-            .commit_file_diff(id, &file.path, file.old_path.as_deref())
+            .commit_file_diff_with(id, &file.path, file.old_path.as_deref(), &cfg)
         {
             Ok(diff) => view.diff = diff,
             Err(e) => {
@@ -394,7 +397,8 @@ impl RepoTab {
         let diff = if source == DiffSource::Staged && self.changes.amend {
             self.repo.amend_file_diff(&path)
         } else {
-            self.repo.file_diff(source, &path)
+            let cfg = self.diff_options.for_path(&path);
+            self.repo.file_diff_with(source, &path, &cfg)
         };
         match diff {
             Ok(d) => {

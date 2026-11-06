@@ -267,6 +267,12 @@ pub struct FileDiff {
     pub hunks: Vec<Hunk>,
     pub additions: usize,
     pub deletions: usize,
+    /// Git file modes (`0o100644`, `0o100755`, `0o120000` link, `0o160000`
+    /// submodule); 0 when the side does not exist.
+    pub old_mode: u32,
+    pub new_mode: u32,
+    /// Size in bytes of an untracked file whose diff was not loaded (too large).
+    pub skipped: Option<u64>,
 }
 
 impl FileDiff {
