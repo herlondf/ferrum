@@ -32,19 +32,25 @@ const DIRS: &[&str] = &[
 ];
 
 /// Finds the file named `rel` under `root`, ignoring the case of each part.
+/// The result has the names as they are on disk (also on file systems that
+/// ignore case, where `exists` would match any spelling).
 fn find_ci(root: &Path, rel: &str) -> Option<std::path::PathBuf> {
     let mut dir = root.to_path_buf();
     for part in rel.split('/') {
-        let exact = dir.join(part);
-        if exact.exists() {
-            dir = exact;
-            continue;
-        }
-        let entry = std::fs::read_dir(&dir)
+        let names: Vec<std::ffi::OsString> = std::fs::read_dir(&dir)
             .ok()?
             .flatten()
-            .find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(part))?;
-        dir = entry.path();
+            .map(|e| e.file_name())
+            .collect();
+        let name = names
+            .iter()
+            .find(|n| n.to_string_lossy() == part)
+            .or_else(|| {
+                names
+                    .iter()
+                    .find(|n| n.to_string_lossy().eq_ignore_ascii_case(part))
+            })?;
+        dir = dir.join(name);
     }
     Some(dir)
 }

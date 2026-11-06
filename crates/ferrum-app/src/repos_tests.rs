@@ -276,13 +276,7 @@ fn tab_opens_in_its_own_window() {
     handle(&mut h, Command::OpenRepo(b.path().into()));
     handle(&mut h, Command::Repos(RepoCmd::OpenInWindow(1)));
     frames(&mut h);
-    let windows: Vec<PathBuf> = h
-        .state()
-        .repo_state()
-        .windows
-        .iter()
-        .map(real)
-        .collect();
+    let windows: Vec<PathBuf> = h.state().repo_state().windows.iter().map(real).collect();
     assert_eq!(windows, [real(b.path())]);
     // The main window moved on to the other tab.
     assert_eq!(
