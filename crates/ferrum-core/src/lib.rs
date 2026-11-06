@@ -5,6 +5,7 @@
 //! and LFS behave exactly as in the terminal.
 
 pub mod cli;
+pub mod config;
 pub mod conflict;
 pub mod diff;
 pub mod forge;
