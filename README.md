@@ -146,8 +146,24 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Preferences**: global git identity, git executable and verbose git output,
   code font and size, tab width, relative/absolute/long dates, system accent
   color, toolbar buttons, branch name space replacement, default merge type.
-- **Command palette** (Ctrl+P), keyboard shortcuts, light/dark theme, zoom,
-  tabs that reopen with the app.
+- **Command palette** (Ctrl+P): commands, branches to check out (local and
+  remote), pinned refs, files (opens their history), tabs, "Create pull
+  request", "Add worktree" and custom commands, grouped by kind with their
+  shortcuts. Light/dark theme, zoom, tabs that reopen with the app.
+- **Customizable keyboard shortcuts** (Settings > Shortcuts): click a shortcut
+  and press the new keys, several keys per action, reset one or all, conflicts
+  flagged.
+- **Custom commands** (Settings > Custom commands): shell commands, programs
+  with arguments or URLs for the repository, a commit, a branch, a file or a
+  submodule, in the context menus (submenus with `/` in the name) and the
+  palette. Variables `$SHA`, `$SHORT_SHA`, `$branch`, `$file`, `$path`,
+  `$remote`, `$submodule`, `$selected_shas` (shell-quoted when needed); an
+  optional form before running (text, branch, file, checkbox, choice, each
+  value becoming `$name`); per-system commands; confirm, show output (live
+  window, also in Activity) and refresh after. Teams can share them in
+  `.ferrum/custom-commands.json` (same format as "Copy as JSON"); each shared
+  command shows its text and asks for approval before its first run, and again
+  when it changes.
 - **Status and activity**: the toolbar shows the repository, branch,
   ahead/behind and the running operation with its progress; a click opens the
   **Activity** window with every operation, the exact git commands, their
@@ -168,41 +184,48 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 
 ## Keyboard shortcuts
 
+Every shortcut except the context keys at the end of the table can be changed
+in Settings > Shortcuts. Defaults:
+
 | Action | Shortcut |
 |---|---|
-| Command palette | Ctrl+P |
+| Command palette | Ctrl+P or Ctrl+Shift+P |
 | Open repository | Ctrl+O |
-| History / Local changes | Ctrl+1 / Ctrl+2 |
+| Settings | Ctrl+, |
+| Refresh | F5 or Ctrl+R |
+| History (again: jump to HEAD) / Local changes | Ctrl+1 / Ctrl+2 |
 | Search commits (or find in the diff under the pointer) | Ctrl+F |
-| Next / previous match | Enter or F3 / Shift+Enter or Shift+F3 |
-| Jump to HEAD | Ctrl+0 (or Ctrl+1 in the history) |
+| Next / previous match | F3 / Shift+F3 (Enter / Shift+Enter in the search field) |
+| Jump to HEAD | Ctrl+0 |
 | Go to commit (Go to line in the blame under the pointer) | Ctrl+G |
-| Blame: back / forward | Alt+Left / Alt+Right |
 | Only the current branch in the graph | Ctrl+Shift+A |
 | Show reflog | Ctrl+Shift+. |
-| Collapse / expand the selected merge | Left / Right |
-| Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
-| Large diff window (diff focused) / large commit details (commit list focused) | Space |
-| Copy commit id / commit info (commit list focused) | Ctrl+C / Ctrl+Shift+C |
 | Show / hide the commit details | Ctrl+Alt+D |
+| Large diff window (diff focused) / large commit details (commit list focused) | Space |
+| Copy commit info (commit list focused) | Ctrl+Shift+C |
 | External diff of the selected file | Ctrl+D |
-| Compare two commits | Ctrl+click the second commit |
-| Refresh | F5 or Ctrl+R |
+| Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
+| Blame: back / forward | Alt+Left / Alt+Right |
 | Commit (in the message box) | Ctrl+Enter |
 | Commit and push | Ctrl+Shift+Enter |
-| Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
 | Check out a branch (search) | Ctrl+B |
 | New branch | Ctrl+Shift+B |
+| New tag (at the selected commit, else HEAD) | Ctrl+Shift+G |
 | Rename the selected sidebar branch | F2 |
+| Delete the selected sidebar branch, tag or stash (asks first) | Delete |
 | Stash (Ctrl/Alt+click on the Stash button: quick stash) | Ctrl+Shift+S |
 | Fetch / Pull / Push (dialog) | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
-| Fetch / Pull / Push with options | Alt+click or right-click the toolbar button |
 | Undo | Ctrl+Z |
-| Next / previous tab, close tab | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+W |
-| Settings | Ctrl+, |
+| Open in terminal / show in file manager | Ctrl+Alt+T / Ctrl+Alt+O |
+| Close tab, next / previous tab | Ctrl+W, Ctrl+Tab / Ctrl+Shift+Tab |
+| *Context keys (fixed):* | |
+| Copy commit id (commit list focused) | Ctrl+C |
+| Collapse / expand the selected merge | Left / Right |
+| Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
+| Fetch / Pull / Push with options | Alt+click or right-click the toolbar button |
+| Compare two commits / select several | Ctrl+click / Shift+click |
 | Move between sidebar, commit list and details | Tab / Shift+Tab |
 | Sidebar: move, open/close, check out, select | Arrows, Home/End, Enter, Space |
-| Select several commits | Ctrl+click / Shift+click |
 | Interactive rebase: pick, reword, edit, squash, fixup, drop | P, R, E, S, F, D |
 | Interactive rebase: move the selected commits | Alt+Up / Alt+Down |
 
