@@ -130,8 +130,8 @@ pub static T: &[(&str, &str)] = &[
     ("Revert {}", "Reverter {}"),
     ("Reset to {}", "Reset para {}"),
     ("Create tag {}", "Criar tag {}"),
-    ("Delete tag {}", "Excluir tag {}"),
-    ("Stash changes", "Guardar alterações no stash"),
+    ("Delete tag {}", "Excluir a tag {}"),
+    ("Stash changes", "Fazer stash das alterações"),
     ("Pop {}", "Aplicar e remover {}"),
     ("Apply {}", "Aplicar {}"),
     ("Drop {}", "Descartar {}"),
@@ -355,4 +355,7 @@ pub static T: &[(&str, &str)] = &[
     ("{} files changed", "{} arquivos alterados"),
     ("File history", "Histórico do arquivo"),
     ("Blame", "Blame"),
+    ("Stage selection", "Preparar seleção"),
+    ("Unstage selection", "Remover seleção da preparação"),
+    ("Discard selection", "Descartar seleção"),
 ];

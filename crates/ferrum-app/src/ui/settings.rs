@@ -144,7 +144,7 @@ fn general(ui: &mut egui::Ui, settings: &mut Settings) {
                         .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
                 );
                 if ui
-                    .add_enabled(settings.zoom != 1.0, egui::Button::new(t!("Reset")))
+                    .add_enabled(settings.zoom != 1.0, egui::Button::new(t!("Reset zoom")))
                     .clicked()
                 {
                     settings.zoom = 1.0;

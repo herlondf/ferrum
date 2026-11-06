@@ -229,7 +229,12 @@ impl Op {
             Op::UnstageAll => t!("Unstage all changes"),
             Op::Discard(f) => t!("Discard changes in {}", files(f.len())),
             // Labels come from the views; translated here if the table has them.
-            Op::ApplyPatch { label, .. } => crate::i18n::tr(label).into(),
+            Op::ApplyPatch { label, .. } => match *label {
+                "Stage selection" => t!("Stage selection"),
+                "Unstage selection" => t!("Unstage selection"),
+                "Discard selection" => t!("Discard selection"),
+                other => other.to_owned(),
+            },
             Op::Commit { amend: true, .. } => t!("Amend commit"),
             Op::Commit { .. } => t!("Commit"),
             Op::Fetch { remote: Some(r) } => t!("Fetch {}", r),

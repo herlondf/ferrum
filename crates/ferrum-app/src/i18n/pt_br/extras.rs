@@ -14,7 +14,7 @@ pub static T: &[(&str, &str)] = &[
     ("Light", "Claro"),
     ("Dark", "Escuro"),
     ("Zoom", "Zoom"),
-    ("Reset", "Restaurar"),
+    ("Reset zoom", "Restaurar"),
     ("Default (git config)", "Padrão (git config)"),
     ("Fast-forward only", "Somente fast-forward"),
     (
@@ -86,7 +86,7 @@ pub static T: &[(&str, &str)] = &[
     ("Local changes", "Alterações locais"),
     ("New branch", "Nova branch"),
     ("Stash changes", "Fazer stash das alterações"),
-    ("Fetch all remotes", "Fetch de todos os remotos"),
+    ("Fetch all remotes", "Fazer fetch de todos os remotos"),
     ("Undo the last operation", "Desfazer a última operação"),
     ("Close tab", "Fechar aba"),
     ("Next tab", "Próxima aba"),
