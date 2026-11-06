@@ -13,6 +13,7 @@ pub mod model;
 pub mod ops;
 pub mod rebase;
 mod repo;
+pub mod update;
 
 pub use git2::Oid;
 pub use model::*;
@@ -28,9 +29,18 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Other(String),
+    #[error("The operation was cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// The local time zone's offset from UTC right now, in minutes.
+pub fn local_offset_minutes() -> i32 {
+    git2::Signature::now("ferrum", "ferrum")
+        .map(|s| s.when().offset_minutes())
+        .unwrap_or(0)
+}
 
 pub(crate) fn lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()

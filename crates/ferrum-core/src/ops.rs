@@ -463,8 +463,25 @@ pub fn clone(
     dir_name: &str,
     progress: impl FnMut(&str),
 ) -> Result<()> {
-    Git::new(parent).run_streaming(&["clone", "--progress", url, dir_name], progress)?;
-    Ok(())
+    clone_with(&Git::new(parent), url, dir_name, progress)
+}
+
+/// Clones into `dir_name` inside `git.dir()`. `git` may carry a log and a
+/// cancel token; a cancelled clone removes the folder it had started.
+pub fn clone_with(git: &Git, url: &str, dir_name: &str, progress: impl FnMut(&str)) -> Result<()> {
+    let target = git.dir().join(dir_name);
+    let existed = target.exists();
+    let result = git.run_streaming(&["clone", "--progress", url, dir_name], progress);
+    if matches!(result, Err(crate::Error::Cancelled)) && !existed {
+        // git may still hold files for a moment on Windows; retry briefly.
+        for _ in 0..20 {
+            if std::fs::remove_dir_all(&target).is_ok() || !target.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
+    result.map(|_| ())
 }
 
 pub fn init(path: &std::path::Path) -> Result<()> {
@@ -685,5 +702,35 @@ mod tests {
         assert_eq!(list[1].branch.as_deref(), Some("wt-branch"));
         worktree_remove(&t.git, &path, false).unwrap();
         assert_eq!(t.repo().worktrees().unwrap().len(), 1);
+    }
+
+    /// A clone stuck on a slow remote is cancelled and its folder removed.
+    #[cfg(unix)]
+    #[test]
+    fn cancelled_clone_removes_the_folder() {
+        let parent = tempfile::tempdir().unwrap();
+        let cancel = crate::cli::CancelToken::new();
+        // The ext:: transport runs a command that never answers.
+        let git = Git::new(parent.path())
+            .with_env("GIT_CONFIG_COUNT", "1")
+            .with_env("GIT_CONFIG_KEY_0", "protocol.ext.allow")
+            .with_env("GIT_CONFIG_VALUE_0", "always")
+            .with_cancel(cancel.clone());
+        let target = parent.path().join("slow");
+        let watch = target.clone();
+        let c = cancel.clone();
+        std::thread::spawn(move || {
+            for _ in 0..100 {
+                if watch.exists() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            c.cancel();
+        });
+        let err = clone_with(&git, "ext::sleep 30", "slow", |_| {}).unwrap_err();
+        assert!(matches!(err, crate::Error::Cancelled), "{err}");
+        assert!(!target.exists());
     }
 }

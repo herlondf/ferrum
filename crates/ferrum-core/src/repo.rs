@@ -36,6 +36,21 @@ impl Repo {
         Git::new(&self.path)
     }
 
+    /// The `.git` folder (elsewhere for linked worktrees).
+    pub fn git_dir(&self) -> &Path {
+        self.inner.path()
+    }
+
+    /// The folder shared by all worktrees (holds refs and objects).
+    pub fn common_dir(&self) -> &Path {
+        self.inner.commondir()
+    }
+
+    /// Whether a path (relative to the working folder) is ignored by .gitignore.
+    pub fn is_ignored(&self, rel: &Path) -> bool {
+        self.inner.is_path_ignored(rel).unwrap_or(false)
+    }
+
     pub fn name(&self) -> String {
         self.path
             .file_name()
