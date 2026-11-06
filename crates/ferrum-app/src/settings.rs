@@ -124,6 +124,9 @@ pub struct Settings {
     /// Commit details: active tab, file list mode, collapsed pane.
     #[serde(default)]
     pub details: crate::ui::details_model::DetailsSettings,
+    /// Repository Manager list, source folders, workspaces, tab looks.
+    #[serde(default)]
+    pub library: crate::repos::Library,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -185,6 +188,7 @@ impl Default for Settings {
             submodules: Default::default(),
             sync: Default::default(),
             details: Default::default(),
+            library: Default::default(),
         }
     }
 }

@@ -100,6 +100,15 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/file_tree.rs"),
     include_str!("ui/file_actions.rs"),
     include_str!("i18n/pt_br/details.rs"),
+    include_str!("repos.rs"),
+    include_str!("single_instance.rs"),
+    include_str!("app/repos.rs"),
+    include_str!("ui/tabs.rs"),
+    include_str!("ui/repo_manager.rs"),
+    include_str!("ui/open_quickly.rs"),
+    include_str!("ui/overview.rs"),
+    include_str!("ui/repo_dialogs.rs"),
+    include_str!("i18n/pt_br/repos.rs"),
 ];
 
 pub fn git(dir: &Path, args: &[&str]) -> String {

@@ -24,6 +24,8 @@ pub enum View {
     /// File history and blame.
     File,
     PullRequests,
+    /// README, remotes and statistics (`ui::overview`).
+    Overview,
 }
 
 pub struct Message {
@@ -132,6 +134,7 @@ pub struct RepoTab {
     pub diff_options: crate::ui::diff_prefs::TabDiffOptions,
     /// Details tabs, file tree, compare view and commit windows.
     pub details: crate::ui::details_model::DetailsState,
+    pub overview: crate::ui::overview::OverviewState,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -196,6 +199,7 @@ impl RepoTab {
             pane: Default::default(),
             diff_options: Default::default(),
             details: Default::default(),
+            overview: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,

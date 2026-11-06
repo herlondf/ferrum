@@ -16,6 +16,7 @@ mod main;
 mod parts;
 mod preferences;
 mod refs;
+mod repos;
 mod sidebar;
 mod sync;
 
@@ -34,6 +35,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     local::T,
     preferences::T,
     refs::T,
+    repos::T,
     sidebar::T,
     sync::T,
 ];

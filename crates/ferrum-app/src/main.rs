@@ -30,7 +30,11 @@ mod refresh;
 mod refs_tests;
 mod repo_parts;
 mod repo_settings;
+mod repos;
+#[cfg(test)]
+mod repos_tests;
 mod settings;
+mod single_instance;
 mod sync;
 #[cfg(test)]
 mod sync_tests;
@@ -42,7 +46,8 @@ mod util;
 mod watcher;
 
 fn main() -> eframe::Result {
-    let paths: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(Into::into).collect();
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+    let paths: Vec<std::path::PathBuf> = args.iter().map(Into::into).collect();
     if paths
         .first()
         .is_some_and(|a| a.as_os_str() == "--benchmark")
@@ -54,6 +59,30 @@ fn main() -> eframe::Result {
             .unwrap_or(3);
         std::process::exit(benchmark::main(&repo, runs));
     }
+
+    // `ferrum PATH`, `ferrum log -- FILE` and "Open in Desktop" links.
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let requests = repos::parse_args(&args, &cwd);
+    let mut listener = None;
+    if single_instance::enabled()
+        && let Some(dir) = instance_dir()
+    {
+        match single_instance::start(&dir, &requests) {
+            single_instance::Start::Forwarded => return Ok(()),
+            single_instance::Start::Serve(l) => listener = Some(l),
+            single_instance::Start::Alone => {}
+        }
+    }
+    let (open, other): (Vec<repos::Request>, Vec<repos::Request>) = requests
+        .into_iter()
+        .partition(|r| matches!(r, repos::Request::Open(p) if ferrum_core::Repo::open(p).is_ok()));
+    let paths: Vec<std::path::PathBuf> = open
+        .into_iter()
+        .filter_map(|r| match r {
+            repos::Request::Open(p) => Some(p),
+            _ => None,
+        })
+        .collect();
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -73,8 +102,19 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Ferrum",
         options,
-        Box::new(move |cc| Ok(Box::new(app::FerrumApp::new(cc, paths)))),
+        Box::new(move |cc| {
+            let app = app::FerrumApp::new(cc, paths).with_launch(other, listener);
+            Ok(Box::new(app))
+        }),
     )
+}
+
+/// Folder of the single-instance socket: the data folder.
+fn instance_dir() -> Option<std::path::PathBuf> {
+    match data_dir() {
+        Some(file) => file.parent().map(Into::into),
+        None => eframe::storage_dir("Ferrum"),
+    }
 }
 
 /// Where settings are saved. `FERRUM_DATA_DIR` overrides it, and screenshot

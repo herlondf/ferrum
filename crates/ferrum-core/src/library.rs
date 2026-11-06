@@ -207,7 +207,10 @@ pub fn running_git_processes() -> Vec<u32> {
 /// Deletes a stale `index.lock`, refusing while a git process is running.
 pub fn delete_index_lock(lock: &Path) -> Result<()> {
     if lock.file_name().is_none_or(|n| n != "index.lock") {
-        return Err(Error::Other(format!("{} is not an index.lock", lock.display())));
+        return Err(Error::Other(format!(
+            "{} is not an index.lock",
+            lock.display()
+        )));
     }
     let running = running_git_processes();
     if !running.is_empty() {
@@ -236,7 +239,12 @@ pub fn set_commit_template(git: &Git, path: Option<&str>) -> Result<()> {
     match path {
         Some(p) => git.run(&["config", "commit.template", p]).map(drop),
         // `--unset` fails when the key is not set.
-        None if git.run(&["config", "--local", "--get", "commit.template"]).is_err() => Ok(()),
+        None if git
+            .run(&["config", "--local", "--get", "commit.template"])
+            .is_err() =>
+        {
+            Ok(())
+        }
         None => git
             .run(&["config", "--local", "--unset", "commit.template"])
             .map(drop),
@@ -264,7 +272,10 @@ mod tests {
         // Repositories inside repositories are not listed.
         mk("a/inner");
         std::fs::create_dir_all(root.path().join("empty")).unwrap();
-        assert_eq!(find_repositories(root.path(), 2), vec![a.clone(), b.clone()]);
+        assert_eq!(
+            find_repositories(root.path(), 2),
+            vec![a.clone(), b.clone()]
+        );
         assert_eq!(find_repositories(root.path(), 1), vec![a]);
         assert_eq!(find_repositories(&b, 0), vec![b]);
         assert_eq!(find_repositories(root.path(), 4).len(), 3);
@@ -275,7 +286,15 @@ mod tests {
         let t = TestRepo::new();
         t.commit("a.txt", "a\n", "first");
         t.git
-            .run(&["-c", "user.email=other@example.com", "commit", "-q", "--allow-empty", "-m", "second"])
+            .run(&[
+                "-c",
+                "user.email=other@example.com",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "second",
+            ])
             .unwrap();
         t.git.run(&["branch", "topic"]).unwrap();
         t.git.run(&["tag", "v1"]).unwrap();
@@ -311,7 +330,10 @@ mod tests {
             lock_file_in_error(msg),
             Some(PathBuf::from("/home/u/r/.git/index.lock"))
         );
-        assert_eq!(lock_file_in_error("error: could not lock config file"), None);
+        assert_eq!(
+            lock_file_in_error("error: could not lock config file"),
+            None
+        );
         assert_eq!(
             lock_file_in_error("Unable to create 'C:/r/.git/refs/heads/x.lock'"),
             None

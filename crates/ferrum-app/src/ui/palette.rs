@@ -209,6 +209,14 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             }));
         }
     }
+    for (label, shortcut, make) in crate::ui::repo_manager::palette_entries(settings, tab.is_some())
+    {
+        list.push(Entry {
+            label,
+            shortcut,
+            make,
+        });
+    }
     for (i, name) in tab_names.iter().enumerate() {
         list.push(entry(t!("Switch to {}", name), "Ctrl+Tab", move || {
             Command::SelectTab(i)

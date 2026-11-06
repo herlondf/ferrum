@@ -71,6 +71,8 @@ pub enum Command {
     History(crate::ui::history_options::HistoryFn),
     /// Change remembered fetch/pull/push options (see `sync.rs`).
     Sync(crate::sync::SyncFn),
+    /// Tabs, workspaces, the Repository Manager (see `repos.rs`).
+    Repos(crate::repos::RepoCmd),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }
@@ -264,6 +266,8 @@ pub enum Op {
     Refs(crate::ref_ops::RefOp),
     /// Merge, rebase, cherry-pick and conflict operations with options (see `flow.rs`).
     Flow(crate::flow::FlowOp),
+    /// Repository settings and fixes (see `repos.rs`).
+    Repo(crate::repos::RepoOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -362,6 +366,7 @@ impl Op {
             }
             Op::Refs(r) => r.label(),
             Op::Flow(f) => f.label(),
+            Op::Repo(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -385,6 +390,7 @@ impl Op {
             Op::Flow(f) if f.status_only() => Refresh::Status,
             Op::CreatePullRequest { .. } => Refresh::None,
             Op::Part(p) => p.refresh(),
+            Op::Repo(_) => Refresh::Status,
             _ => Refresh::All,
         }
     }
@@ -503,6 +509,7 @@ impl Op {
             }
             Op::Refs(r) => r.run(git, progress),
             Op::Flow(f) => f.run(git, progress),
+            Op::Repo(r) => r.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }

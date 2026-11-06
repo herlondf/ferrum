@@ -68,6 +68,8 @@ pub enum Dialog {
     Worktree(crate::ui::worktrees::WorktreeDialog),
     /// Merge, rebase, cherry-pick, revert, reword and local-changes prompts.
     Flow(crate::ui::flow_dialogs::FlowDialog),
+    /// Repository settings and fixes (`ui::repo_dialogs`).
+    Repo(crate::ui::repo_dialogs::RepoDialog),
 }
 
 impl Dialog {
@@ -612,6 +614,7 @@ fn body(
         Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Flow(d) => crate::ui::flow_dialogs::show(ui, d, tab, cmds, enter),
+        Dialog::Repo(d) => crate::ui::repo_dialogs::show(ui, d, tab, settings, cmds, enter),
     }
 }
 

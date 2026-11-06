@@ -9,6 +9,7 @@ repository = "https://github.com/herlondf/ferrum"
 
 [dependencies]
 eframe = { version = "0.37.0", features = ["persistence"] }
+egui_commonmark = { version = "0.26.0", default-features = false, features = ["pulldown_cmark"] }
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 ferrum-core = { version = "0.1.0", path = "../ferrum-core" }
 hayro = "0.9.0"
