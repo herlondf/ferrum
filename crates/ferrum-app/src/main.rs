@@ -7,6 +7,8 @@ mod benchmark;
 mod command;
 mod desktop_notify;
 mod external;
+#[cfg(test)]
+mod history_tests;
 mod icon;
 mod jobs;
 mod prefs;

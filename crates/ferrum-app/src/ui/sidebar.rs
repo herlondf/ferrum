@@ -8,6 +8,7 @@ use crate::command::{Command, Commands, Op};
 use crate::tab::{RepoTab, View};
 use crate::ui::dialogs::Dialog;
 use crate::ui::forge as forge_ui;
+use crate::ui::history_options;
 use crate::ui::sidebar_model::{
     DragBranch, DropMenu, NavAction, Node, SidebarState, SortOrder, folder_paths, sort_by, tree,
 };
@@ -539,6 +540,7 @@ fn local_folder_menu(ui: &mut egui::Ui, tab: &RepoTab, path: &str, cmds: &mut Co
         cmds.push(Command::Dialog(d));
         ui.close();
     }
+    history_options::ref_menu(ui, tab, &format!("refs/heads/{path}/"), cmds);
 }
 
 /// Icon and counters on the right of a local branch.
@@ -588,6 +590,11 @@ fn branch_row(
         RichText::new(format!("✔ {label}")).strong()
     } else {
         RichText::new(label)
+    };
+    let rich = if history_options::is_hidden(tab, &format!("refs/heads/{}", b.name)) {
+        rich.weak()
+    } else {
+        rich
     };
     let selected = st.selection.contains(&b.name)
         || (b.target.is_some() && tab.history.selected == b.target && tab.view == View::History);
@@ -761,6 +768,7 @@ fn local_branch_menu(
             ui.close();
         }
     }
+    history_options::ref_menu(ui, tab, &format!("refs/heads/{name}"), cmds);
     ui.separator();
     pin_button(ui, st, &format!("refs/heads/{name}"));
     if ui.button(t!("Copy name")).clicked() {
@@ -988,6 +996,7 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
                     cmds.push(Command::Copy(remote.url.clone()));
                     ui.close();
                 }
+                history_options::ref_menu(ui, tab, &format!("refs/remotes/{prefix}"), cmds);
             });
             if h.open {
                 let nodes = tree(list, st.prefs.branch_sort, st.prefs.folders_first);
@@ -1019,6 +1028,14 @@ fn remote_nodes(
                 let key = format!("dir:remote:{remote}/{path}");
                 let label = RichText::new(format!("📁 {name}"));
                 let h = header(ui, st, &key, false, label, Some(*count), None);
+                h.resp.context_menu(|ui| {
+                    history_options::ref_menu(
+                        ui,
+                        tab,
+                        &format!("refs/remotes/{remote}/{path}/"),
+                        cmds,
+                    )
+                });
                 if h.open {
                     children(ui, st, &key, |ui, st| {
                         remote_nodes(ui, tab, st, remote, inner, cmds);
@@ -1125,6 +1142,7 @@ fn remote_branch_row(
                 ui.close();
             }
         });
+        history_options::ref_menu(ui, tab, &format!("refs/remotes/{}", b.name), cmds);
         ui.separator();
         pin_button(ui, st, &format!("refs/remotes/{}", b.name));
         if ui.button(t!("Copy name")).clicked() {

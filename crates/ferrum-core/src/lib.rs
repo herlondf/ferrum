@@ -4,16 +4,19 @@
 //! through the `git` command line, so hooks, credential helpers, SSH config
 //! and LFS behave exactly as in the terminal.
 
+pub mod avatar;
 pub mod cli;
 pub mod config;
 pub mod conflict;
 pub mod diff;
 pub mod forge;
 pub mod graph;
+pub mod log;
 pub mod model;
 pub mod ops;
 pub mod rebase;
 mod repo;
+pub mod stats;
 pub mod update;
 
 pub use git2::Oid;

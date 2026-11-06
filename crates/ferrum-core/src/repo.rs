@@ -9,8 +9,8 @@ use crate::model::*;
 use crate::{Error, Result, lossy};
 
 /// Field and record separators for parsing `git log --format` output.
-const FS: char = '\x1f';
-const RS: char = '\x1e';
+pub(crate) const FS: char = '\x1f';
+pub(crate) const RS: char = '\x1e';
 
 pub struct Repo {
     inner: git2::Repository,
@@ -30,6 +30,10 @@ impl Repo {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub(crate) fn raw(&self) -> &git2::Repository {
+        &self.inner
     }
 
     pub fn git(&self) -> Git {
@@ -475,11 +479,13 @@ impl Repo {
         Ok(parse_file_log(&out, path))
     }
 
-    /// Commits whose changes add or remove `term` (`git log -S`).
-    pub fn search_content(&self, term: &str) -> Result<Vec<Oid>> {
+    /// Commits whose changes add or remove `term` (`git log -S`), on every
+    /// branch or only HEAD.
+    pub fn search_content(&self, term: &str, all: bool) -> Result<Vec<Oid>> {
+        let scope = if all { "--all" } else { "HEAD" };
         let out = self
             .git()
-            .run(&["log", "--all", "--format=%H", &format!("-S{term}")])?;
+            .run(&["log", scope, "--format=%H", &format!("-S{term}")])?;
         Ok(out
             .lines()
             .filter_map(|l| Oid::from_str(l.trim()).ok())
@@ -586,7 +592,17 @@ impl Repo {
 }
 
 fn commit_info(commit: &git2::Commit) -> CommitInfo {
-    let author = commit.author();
+    commit_info_mailmap(commit, None)
+}
+
+/// Like `commit_info`, with the author name and email mapped through `.mailmap`.
+pub(crate) fn commit_info_mailmap(
+    commit: &git2::Commit,
+    mailmap: Option<&git2::Mailmap>,
+) -> CommitInfo {
+    let author = mailmap
+        .and_then(|m| commit.author_with_mailmap(m).ok())
+        .unwrap_or_else(|| commit.author().to_owned());
     CommitInfo {
         id: commit.id(),
         summary: lossy(commit.summary_bytes().unwrap_or_default()),
@@ -668,7 +684,7 @@ fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
 }
 
 /// Time zone of a date like `2024-05-01 10:00:00 -0300`, in minutes east of UTC.
-fn parse_offset(date: &str) -> i32 {
+pub(crate) fn parse_offset(date: &str) -> i32 {
     let Some(tz) = date.rsplit(' ').next().filter(|t| t.len() == 5) else {
         return 0;
     };

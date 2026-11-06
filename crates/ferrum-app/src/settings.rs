@@ -106,6 +106,8 @@ pub struct Settings {
     #[serde(default)]
     pub repos: std::collections::BTreeMap<String, crate::ui::sidebar_model::RepoPrefs>,
     pub background: BackgroundSettings,
+    /// History view options, global and per repository.
+    pub history: crate::ui::history_model::HistorySettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -159,6 +161,7 @@ impl Default for Settings {
             external: Default::default(),
             repos: Default::default(),
             background: BackgroundSettings::default(),
+            history: Default::default(),
         }
     }
 }

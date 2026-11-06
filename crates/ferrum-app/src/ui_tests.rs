@@ -36,6 +36,11 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/diff_view.rs"),
     include_str!("ui/forge.rs"),
     include_str!("ui/history.rs"),
+    include_str!("ui/history_model.rs"),
+    include_str!("ui/history_options.rs"),
+    include_str!("ui/issue_links.rs"),
+    include_str!("ui/avatars.rs"),
+    include_str!("ui/stats.rs"),
     include_str!("ui/image_diff.rs"),
     include_str!("ui/palette.rs"),
     include_str!("ui/preferences.rs"),
@@ -54,9 +59,10 @@ pub const SOURCES: &[&str] = &[
     include_str!("i18n/pt_br/extras.rs"),
     include_str!("i18n/pt_br/preferences.rs"),
     include_str!("i18n/pt_br/activity.rs"),
+    include_str!("i18n/pt_br/history.rs"),
 ];
 
-fn git(dir: &Path, args: &[&str]) -> String {
+pub fn git(dir: &Path, args: &[&str]) -> String {
     let out = Proc::new("git")
         .current_dir(dir)
         .args(args)
@@ -71,7 +77,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 /// A repository with one commit and a modified file.
-fn repo() -> tempfile::TempDir {
+pub fn repo() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
     git(p, &["init", "-q", "-b", "main"]);
@@ -86,7 +92,7 @@ fn repo() -> tempfile::TempDir {
     dir
 }
 
-fn harness(path: &Path) -> Harness<'static, FerrumApp> {
+pub fn harness(path: &Path) -> Harness<'static, FerrumApp> {
     let path = path.to_path_buf();
     let mut h = Harness::builder()
         .with_size([1400.0, 900.0])
@@ -98,14 +104,14 @@ fn harness(path: &Path) -> Harness<'static, FerrumApp> {
 }
 
 /// Runs a few frames so clicks are handled and the next screen is drawn.
-fn frames(h: &mut Harness<'_, FerrumApp>) {
+pub fn frames(h: &mut Harness<'_, FerrumApp>) {
     for _ in 0..4 {
         h.step();
     }
 }
 
 /// Steps frames until no git operation is running.
-fn settle(h: &mut Harness<'_, FerrumApp>) {
+pub fn settle(h: &mut Harness<'_, FerrumApp>) {
     for _ in 0..1000 {
         h.step();
         if !h.state().is_busy() {

@@ -7,16 +7,14 @@ use std::time::Instant;
 use eframe::egui;
 use ferrum_core::cli::Git;
 use ferrum_core::forge::{self, HostedRepo};
-use ferrum_core::graph::{self, Graph};
+use ferrum_core::graph::Graph;
 use ferrum_core::ops::ResetMode;
 use ferrum_core::*;
 use std::result::Result;
 
 use crate::command::Op;
 use crate::jobs::{Job, JobOutput, JobSpec, Refresh};
-use crate::ui::{blame, conflicts, forge as forge_ui, rebase};
-
-pub const COMMIT_LIMIT: usize = 10_000;
+use crate::ui::{blame, conflicts, forge as forge_ui, history_model, rebase};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -40,12 +38,12 @@ pub struct HistoryState {
     /// Scroll the list so the selected commit is visible (after a jump).
     pub scroll_to_selected: bool,
     pub search: String,
-    /// Search inside the changes of each commit (`git log -S`).
-    pub content_search: bool,
+    /// Commits found by a search job (changes or paths).
     pub content_hits: Option<HashSet<Oid>>,
     /// Indices into `commits` that match the search; `None` shows everything.
     pub visible: Option<Vec<usize>>,
     pub focus_search: bool,
+    pub ext: history_model::HistoryExt,
 }
 
 /// A commit shown in the details panel.
@@ -140,8 +138,13 @@ pub struct RepoTab {
 }
 
 impl RepoTab {
-    pub fn open(path: PathBuf) -> Result<Self, String> {
+    /// Opens a repository with its saved history options.
+    pub fn open_with(
+        path: PathBuf,
+        history: &history_model::HistorySettings,
+    ) -> Result<Self, String> {
         let mut tab = Self::new(path)?;
+        tab.history.ext.prefs = history.prefs_for(tab.path());
         tab.refresh_all();
         Ok(tab)
     }
@@ -224,17 +227,10 @@ impl RepoTab {
         ok(self.repo.tags().map(|v| self.tags = v));
         ok(self.repo.remotes().map(|v| self.remotes = v));
         ok(self.repo.ref_labels().map(|v| self.labels = v));
-        ok(self.repo.commits(COMMIT_LIMIT).map(|v| self.commits = v));
+        ok(history_model::load(self));
         self.stashes = self.repo.stashes().unwrap_or_default();
         self.submodules = self.repo.submodules().unwrap_or_default();
         self.worktrees = self.repo.worktrees().unwrap_or_default();
-        self.graph = graph::layout(&self.commits);
-        self.index = self
-            .commits
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (c.id, i))
-            .collect();
         self.uses_lfs = self.repo.uses_lfs();
         self.hosted = self
             .remotes
@@ -295,32 +291,7 @@ impl RepoTab {
     // ----- History -----
 
     pub fn apply_search(&mut self) {
-        let q = self.history.search.trim().to_lowercase();
-        if q.is_empty() {
-            self.history.visible = None;
-            return;
-        }
-        let visible = if self.history.content_search {
-            match &self.history.content_hits {
-                Some(hits) => (0..self.commits.len())
-                    .filter(|&i| hits.contains(&self.commits[i].id))
-                    .collect(),
-                None => Vec::new(),
-            }
-        } else {
-            self.commits
-                .iter()
-                .enumerate()
-                .filter(|(_, c)| {
-                    c.summary.to_lowercase().contains(&q)
-                        || c.author.to_lowercase().contains(&q)
-                        || c.email.to_lowercase().contains(&q)
-                        || c.id.to_string().starts_with(&q)
-                })
-                .map(|(i, _)| i)
-                .collect()
-        };
-        self.history.visible = Some(visible);
+        history_model::apply_search(self);
     }
 
     pub fn select_commit(&mut self, id: Oid) {

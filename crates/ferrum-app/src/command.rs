@@ -64,6 +64,8 @@ pub enum Command {
     External(crate::external::Launch),
     /// Write `user.name` / `user.email` to the global git config.
     SetGlobalIdentity(ferrum_core::config::GlobalIdentity),
+    /// Change history options or graph filters (see `ui::history_options`).
+    History(crate::ui::history_options::HistoryFn),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }

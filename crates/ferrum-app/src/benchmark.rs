@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use ferrum_core::{Repo, graph};
 
-use crate::tab::{COMMIT_LIMIT, RepoTab};
+use crate::tab::RepoTab;
+use crate::ui::history_model::{HistorySettings, PAGE};
 
 /// One timed step: name, time, and a count of what it loaded.
 type Step = (&'static str, Duration, String);
@@ -50,8 +51,17 @@ pub fn run_once(path: &Path) -> Result<Vec<Step>, String> {
         || repo.ref_labels(),
         |r| r.as_ref().map(|m| m.len().to_string()).unwrap_or_default(),
     );
-    let commits = time(&mut s, "commits", || repo.commits(COMMIT_LIMIT), len);
-    let commits = commits.unwrap_or_default();
+    let log = time(
+        &mut s,
+        "commits",
+        || repo.log(&Default::default(), PAGE),
+        |r| {
+            r.as_ref()
+                .map(|l| l.commits.len().to_string())
+                .unwrap_or_else(|_| "error".into())
+        },
+    );
+    let commits = log.map(|l| l.commits).unwrap_or_default();
     let _ = time(
         &mut s,
         "graph layout",
@@ -77,7 +87,7 @@ pub fn run_once(path: &Path) -> Result<Vec<Step>, String> {
     let _ = time(
         &mut s,
         "full reload (app)",
-        || RepoTab::open(path.to_path_buf()).is_ok(),
+        || RepoTab::open_with(path.to_path_buf(), &HistorySettings::default()).is_ok(),
         |_| String::new(),
     );
     Ok(s)

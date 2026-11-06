@@ -15,8 +15,8 @@ use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
 use crate::tab::{Message, RepoTab, View};
 use crate::ui::dialogs::{self, Dialog};
 use crate::ui::{
-    blame, changes, conflicts, details, forge as forge_ui, history, palette, rebase,
-    settings as settings_ui, sidebar,
+    blame, changes, conflicts, details, forge as forge_ui, history, history_model, history_options,
+    palette, rebase, settings as settings_ui, sidebar,
 };
 use crate::ui::{focus, sidebar_model};
 
@@ -47,7 +47,8 @@ pub struct FerrumApp {
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
 /// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
-/// `activity`, `fetch`.
+/// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
+/// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -82,6 +83,28 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "palette" => out.push(Command::ShowPalette),
             "activity" => out.push(Command::ShowActivity),
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
+            "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
+            "collapse-all" => out.push(history_options::cmd(|t, _| {
+                history_model::set_all_collapsed(t, true)
+            })),
+            "vertical" => out.push(history_options::cmd(|_, s| s.vertical_layout = true)),
+            "graph" => {
+                // graph:reflog, graph:first-parent, graph:only=refs/heads/x…
+                let arg = arg.to_owned();
+                out.push(history_options::change_log(move |o| {
+                    match arg.split_once('=') {
+                        Some(("only", r)) => o.include = vec![r.to_owned()],
+                        Some(("hide", r)) => o.hidden.push(r.to_owned()),
+                        _ => match arg.as_str() {
+                            "reflog" => o.reflog = true,
+                            "first-parent" => o.first_parent = true,
+                            "topo" => o.topo_order = true,
+                            "no-remotes" => o.hide_remotes = true,
+                            _ => eprintln!("FERRUM_START: unknown graph option {arg}"),
+                        },
+                    }
+                }));
+            }
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
             "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
             "select" => {
@@ -162,7 +185,7 @@ impl FerrumApp {
     }
 
     fn open(&mut self, path: PathBuf) {
-        match RepoTab::open(path) {
+        match RepoTab::open_with(path, &self.settings.history) {
             Ok(mut tab) => {
                 let key = sidebar_model::repo_key(tab.path());
                 let prefs = self.settings.repos.get(&key).cloned().unwrap_or_default();
@@ -309,6 +332,13 @@ impl FerrumApp {
                     } else {
                         t!("{} commits found", n)
                     });
+                }
+            }
+            JobOutput::PathHits(hits) => {
+                if let Some(t) = t {
+                    let n = hits.len();
+                    history_model::set_path_hits(t, hits);
+                    t.info(t!("{} commits found", n));
                 }
             }
             JobOutput::PullRequests(list) => {
@@ -583,6 +613,12 @@ impl FerrumApp {
                     }
                 }
             },
+            Command::History(f) => {
+                if let Some(t) = self.tabs.get_mut(self.active) {
+                    f(t, &mut self.settings.history);
+                    self.settings.history.store(t.path(), &t.history.ext.prefs);
+                }
+            }
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -616,6 +652,7 @@ impl FerrumApp {
         if pressed(cmd, Key::F) {
             cmds.push(Command::FocusSearch);
         }
+        history_options::shortcuts(ctx, &self.tabs[self.active], cmds);
         if pressed(cmd, Key::Num1) {
             cmds.push(Command::SetView(View::History));
         }
@@ -894,6 +931,7 @@ impl FerrumApp {
             }
             let Some(tab) = tab else { return };
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                history_options::filter_status(ui, tab, cmds);
                 let id = &tab.identity;
                 let who = match (&id.name, &id.email) {
                     (Some(n), Some(e)) => format!("👤 {n} <{e}>"),
@@ -1080,17 +1118,20 @@ impl eframe::App for FerrumApp {
                 });
             match tab.view {
                 View::History => {
-                    let r = egui::Panel::bottom("details")
-                        .resizable(true)
-                        .default_size(300.0)
-                        .show(ui, |ui| {
-                            details::show(ui, tab, &mut cmds);
-                        });
+                    let panel = if settings.history.vertical_layout {
+                        egui::Panel::right("details-side").default_size(480.0)
+                    } else {
+                        egui::Panel::bottom("details").default_size(300.0)
+                    };
+                    let r = panel.resizable(true).show(ui, |ui| {
+                        details::show(ui, tab, &mut cmds);
+                    });
                     tab.pane.details_rect = Some(r.response.rect);
                     egui::CentralPanel::default_margins().show(ui, |ui| {
-                        history::search_bar(ui, tab, &mut cmds);
-                        history::commit_list(ui, tab, &mut cmds);
+                        history::search_bar(ui, tab, settings, &mut cmds);
+                        history::commit_list(ui, tab, settings, &mut cmds);
                     });
+                    history_options::windows(&ctx, tab, &mut cmds);
                 }
                 View::Changes => {
                     egui::CentralPanel::default_margins()
@@ -1162,6 +1203,9 @@ impl eframe::App for FerrumApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         self.settings.open_repos = self.tabs.iter().map(|t| t.path().to_path_buf()).collect();
         self.settings.active_repo = self.active;
+        for t in &self.tabs {
+            self.settings.history.store(t.path(), &t.history.ext.prefs);
+        }
         eframe::set_value(storage, STORAGE_KEY, &self.settings);
     }
 }

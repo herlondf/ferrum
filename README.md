@@ -7,7 +7,20 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 ## Features
 
 - **History** with a colored branch graph, branch/tag labels, search by
-  message/author/hash or inside changes (`git log -S`), keyboard navigation.
+  message/author/hash, inside changes (`git log -S`) or by file path (current
+  branch or all, recent searches, Enter/F3 for the next match), keyboard
+  navigation, and more commits loaded as you scroll.
+- **Graph options**: collapse/expand merges (with a tooltip of what a merge
+  brought in), topological order, first parent, reflog with unreachable commits
+  greyed out, hide remote branches/tags/stashes, show only or hide branches,
+  folders and remotes (saved per repository, shown in the status bar),
+  unpushed/unpulled markers, author avatars (Gravatar/GitHub, can be turned
+  off) with `.mailmap`, author highlight, conventional commit prefixes, issue
+  tracker links (regex rules and `#123`), compact labels, details beside the
+  list, and Shift+wheel for wide graphs.
+- **Drag commits** on the current branch to reorder or squash them.
+- **Repository statistics**: commits per weekday, hour and author, and a
+  treemap of changed folders.
 - **Commit details**: message, files and diff; side-by-side **image diff**.
 - **Local changes**: stage/unstage/discard whole files, hunks or single lines;
   commit and amend; prepared messages for merges, reverts and cherry-picks.
@@ -65,6 +78,12 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Open repository | Ctrl+O |
 | History / Local changes | Ctrl+1 / Ctrl+2 |
 | Search commits | Ctrl+F |
+| Next / previous match | Enter or F3 / Shift+Enter or Shift+F3 |
+| Jump to HEAD | Ctrl+0 (or Ctrl+1 in the history) |
+| Go to commit | Ctrl+G |
+| Only the current branch in the graph | Ctrl+Shift+A |
+| Show reflog | Ctrl+Shift+. |
+| Collapse / expand the selected merge | Left / Right |
 | Refresh | F5 or Ctrl+R |
 | Commit (in the message box) | Ctrl+Enter |
 | New branch | Ctrl+B |

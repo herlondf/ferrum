@@ -97,8 +97,11 @@ impl RepoTab {
         let (tx, rx) = mpsc::channel();
         let path = self.path().to_path_buf();
         let ctx = ctx.clone();
+        let (prefs, limit) = self.history.ext.load_options();
         std::thread::spawn(move || {
             let result = RepoTab::new(path).map(|mut t| {
+                t.history.ext.prefs = prefs;
+                t.history.ext.limit = limit;
                 match kind {
                     Refresh::All => t.refresh_all(),
                     _ => t.refresh_status(),
@@ -131,6 +134,7 @@ impl RepoTab {
             swap(&mut self.graph, &mut fresh.graph);
             swap(&mut self.labels, &mut fresh.labels);
             swap(&mut self.index, &mut fresh.index);
+            self.history.ext.take_loaded(&mut fresh.history.ext);
             self.apply_search();
             self.keep_selected_commit();
         }
