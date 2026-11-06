@@ -97,7 +97,7 @@ fn fetch_dialog_options_are_remembered() {
     let last = crate::jobs::operations()
         .into_iter()
         .rev()
-        .find(|o| o.repo.as_deref() == Some(p));
+        .find(|o| o.repo.as_deref().is_some_and(|r| same_path(r, p)));
     let cmd = last.unwrap().commands()[0].command.clone();
     assert!(!cmd.contains("--prune"), "{cmd}");
 }
@@ -334,11 +334,18 @@ fn fetches_automatically_in_the_background() {
     let op = crate::jobs::operations()
         .into_iter()
         .rev()
-        .find(|o| o.repo.as_deref() == Some(p))
+        .find(|o| o.repo.as_deref().is_some_and(|r| same_path(r, p)))
         .unwrap();
     assert!(op.background);
     assert!(op.commands()[0].command.contains("--prune"));
     // The next one is a whole interval away.
     let next = h.state().tabs[0].sync.next_fetch.unwrap();
     assert!(next > Instant::now() + std::time::Duration::from_secs(60));
+}
+
+/// Paths compared after resolving links and spelling (macOS /private/var,
+/// Windows short names and slashes).
+fn same_path(a: &Path, b: &Path) -> bool {
+    let real = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    real(a) == real(b)
 }

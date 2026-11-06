@@ -3,8 +3,9 @@
 
 use std::path::Path;
 
+use eframe::egui::accesskit::Role;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use crate::app::FerrumApp;
 use crate::command::{Command, Op};
@@ -86,7 +87,10 @@ fn submodule_status_discard_move_and_remove() {
     h.get_by_label("Yes, do it").click();
     settle(&mut h);
     assert_eq!(
-        std::fs::read_to_string(p.join("sub/a.txt")).unwrap(),
+        // The submodule clone may use CRLF on Windows.
+        std::fs::read_to_string(p.join("sub/a.txt"))
+            .unwrap()
+            .replace("\r\n", "\n"),
         "one\ntwo\n"
     );
     assert!(!h.state().tabs[0].submodules[0].dirty);
@@ -140,7 +144,10 @@ fn submodules_follow_checkouts_when_asked() {
     h.get_by_label("OK").click();
     settle(&mut h);
     assert_eq!(
-        std::fs::read_to_string(p.join("sub/a.txt")).unwrap(),
+        // The submodule clone may use CRLF on Windows.
+        std::fs::read_to_string(p.join("sub/a.txt"))
+            .unwrap()
+            .replace("\r\n", "\n"),
         "one\ntwo\n"
     );
 
@@ -151,7 +158,10 @@ fn submodules_follow_checkouts_when_asked() {
     run(&mut h, Command::Run(Op::Checkout("main".into())));
     settle(&mut h);
     assert_eq!(
-        std::fs::read_to_string(p.join("sub/a.txt")).unwrap(),
+        // The submodule clone may use CRLF on Windows.
+        std::fs::read_to_string(p.join("sub/a.txt"))
+            .unwrap()
+            .replace("\r\n", "\n"),
         "one\ntwo\n"
     );
     assert!(!h.state().tabs[0].submodules[0].moved);
@@ -216,7 +226,14 @@ fn branch_in_another_worktree_opens_it() {
     h.get_by_label_contains("(feature)");
 
     // Check out another branch as a worktree.
-    h.get_by_label_contains("solo").click_secondary();
+    // The sidebar row (other nodes, like paths, may also contain "solo").
+    h.get_all_by_role(Role::Button)
+        .find(|n| {
+            let label = n.accesskit_node().label().unwrap_or_default();
+            label.split_whitespace().next() == Some("solo")
+        })
+        .expect("solo row")
+        .click_secondary();
     frames(&mut h);
     h.get_by_label("Check out as worktree…").click();
     frames(&mut h);
