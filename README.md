@@ -8,7 +8,16 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 
 - **History** with a colored branch graph, branch/tag labels, search by
   message/author/hash or inside changes (`git log -S`), keyboard navigation.
-- **Commit details**: message, files and diff; side-by-side **image diff**.
+- **Commit details**: message, files and diff.
+- **Diff viewer**: unified or side by side, syntax highlighting, changed words
+  highlighted, find (Ctrl+F), map of changes, next/previous change, ignore
+  whitespace, word wrap, font size, whole file or N context lines, visible
+  whitespace and tab width, optional `-`/`+` markers, a large window (Space),
+  rename and file mode changes, scroll position kept per file.
+  **Images** (PNG, JPEG, GIF, BMP, WebP, ICO, TGA, SVG, first page of PDF) side
+  by side, as a swipe, onion skin or pixel difference; binary size changes; Git
+  LFS pointers with a download/preview; commits between two submodule
+  revisions; large untracked files load on request.
 - **Local changes**: stage/unstage/discard whole files, hunks or single lines;
   commit and amend; prepared messages for merges, reverts and cherry-picks.
 - **Branches, remotes, tags, stashes, submodules and worktrees** in the sidebar,
@@ -37,7 +46,9 @@ Git must be installed and on the `PATH`.
 | Command palette | Ctrl+P |
 | Open repository | Ctrl+O |
 | History / Local changes | Ctrl+1 / Ctrl+2 |
-| Search commits | Ctrl+F |
+| Search commits (or find in the diff under the pointer) | Ctrl+F |
+| Previous / next hunk in the diff | Ctrl+Up / Ctrl+Down |
+| Large diff window | Space |
 | Refresh | F5 or Ctrl+R |
 | Commit (in the message box) | Ctrl+Enter |
 | New branch | Ctrl+B |
@@ -77,7 +88,9 @@ as artifacts.
 - `FERRUM_SCREENSHOT=out.ppm ./target/debug/ferrum <repo>` saves a screenshot
   and quits (`FERRUM_SCREENSHOT_FRAMES=N` waits longer).
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
-  the steps are listed in `startup_commands` in `app.rs`.
+  the steps are listed in `startup_commands` in `app.rs` (diff options:
+  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`).
+
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 
 ## License

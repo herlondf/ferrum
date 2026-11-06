@@ -8,6 +8,7 @@ license.workspace = true
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 ferrum-core = { version = "0.1.0", path = "../ferrum-core" }
+hayro = "0.9.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico", "tga"] }
 resvg = "0.49.0"
 rfd = "0.17.2"

@@ -100,7 +100,8 @@ fn active_view(ctx: &egui::Context) -> Option<String> {
 
 /// Marks a view as the one keyboard shortcuts go to.
 pub fn mark_active(ctx: &egui::Context, id: &str) {
-    ctx.data_mut(|d| d.insert_temp(active_id(), (id.to_owned(), ctx.cumulative_frame_nr())));
+    let frame = ctx.cumulative_frame_nr();
+    ctx.data_mut(|d| d.insert_temp(active_id(), (id.to_owned(), frame)));
 }
 
 /// Opens the find bar of the diff under the pointer, if any. Returns whether
@@ -114,6 +115,19 @@ pub fn claim_find(ctx: &egui::Context) -> bool {
     st.find_focus = true;
     store_state(ctx, &view, st);
     true
+}
+
+/// Dev aid (`FERRUM_START`): opens the find bar with `find`, or the large window.
+pub fn dev_open(ctx: &egui::Context, id: &str, find: Option<&str>) {
+    let mut st = load_state(ctx, id);
+    match find {
+        Some(q) => {
+            st.find_open = true;
+            st.find = q.to_owned();
+        }
+        None => st.large = true,
+    }
+    store_state(ctx, id, st);
 }
 
 pub fn large_open(ctx: &egui::Context, id: &str) -> bool {

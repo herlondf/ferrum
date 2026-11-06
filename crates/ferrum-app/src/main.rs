@@ -3,6 +3,8 @@ mod i18n;
 
 mod app;
 mod command;
+#[cfg(test)]
+mod diff_tests;
 mod icon;
 mod jobs;
 mod settings;

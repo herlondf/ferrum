@@ -545,7 +545,7 @@ impl FerrumApp {
                     }
                 }
                 DevStep::Diff(arg) => {
-                    crate::ui::diff_prefs::dev_step(&mut self.settings.diff, &arg)
+                    crate::ui::diff_prefs::dev_step(ctx, &mut self.settings.diff, &arg)
                 }
                 DevStep::Select(source, path) => {
                     if let Some(t) = self.tab() {

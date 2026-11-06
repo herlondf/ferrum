@@ -21,6 +21,8 @@ const MAX_PIXELS: u64 = 40_000_000;
 const MAX_DIFF_PIXELS: usize = 16_000_000;
 /// Images are never scaled up more than this.
 const MAX_ZOOM: f32 = 2.0;
+/// PDF pages are rendered this large (longer side, in pixels).
+const PDF_SIDE: f32 = 1000.0;
 /// Small SVGs are rendered at least this large, so they stay sharp when zoomed.
 const SVG_MIN_SIDE: f32 = 512.0;
 /// Decoded images kept in memory.
@@ -506,6 +508,9 @@ fn decode(bytes: &[u8], max_side: u32, path: &str) -> Result<(ColorImage, u32, u
     if lower.ends_with(".svg") || lower.ends_with(".svgz") {
         return render_svg(bytes, max_side);
     }
+    if lower.ends_with(".pdf") {
+        return render_pdf(bytes, max_side);
+    }
     let hint = image::ImageFormat::from_path(&lower).ok();
     let reader = || {
         let mut r = image::ImageReader::new(Cursor::new(bytes));
@@ -567,6 +572,36 @@ fn render_svg(bytes: &[u8], max_side: u32) -> Result<(ColorImage, u32, u32), Str
         [pixmap.width() as usize, pixmap.height() as usize],
         pixmap.data(),
     );
+    Ok((image, w.round() as u32, h.round() as u32))
+}
+
+/// Renders the first page of a PDF with hayro, about 1000 pixels on its longer side.
+fn render_pdf(bytes: &[u8], max_side: u32) -> Result<(ColorImage, u32, u32), String> {
+    use hayro::hayro_interpret::InterpreterSettings;
+    let pdf = hayro::hayro_syntax::Pdf::new(bytes.to_vec())
+        .map_err(|e| t!("Could not decode the image: {}", format!("{e:?}")))?;
+    let page = pdf
+        .pages()
+        .first()
+        .ok_or_else(|| t!("Could not decode the image: {}", "no pages"))?;
+    let (w, h) = page.render_dimensions();
+    let longest = w.max(h).max(1.0);
+    let scale = (PDF_SIDE / longest).min(max_side as f32 / longest);
+    check_pixels((w * scale) as u32, (h * scale) as u32)?;
+    let settings = hayro::PixmapSettings {
+        x_scale: scale,
+        y_scale: scale,
+        bg_color: hayro::vello_cpu::color::palette::css::WHITE,
+    };
+    let pixmap = hayro::render(
+        page,
+        &hayro::RenderCache::new(),
+        &InterpreterSettings::default(),
+        &hayro::RenderSettings::default(),
+        &settings,
+    );
+    let size = [pixmap.width() as usize, pixmap.height() as usize];
+    let image = ColorImage::from_rgba_premultiplied(size, pixmap.data_as_u8_slice());
     Ok((image, w.round() as u32, h.round() as u32))
 }
 
@@ -660,6 +695,51 @@ mod tests {
         assert_eq!(img.pixels[0], Color32::from_rgb(255, 0, 0));
         assert!(decode(b"<svg", 2048, "bad.svg").is_err());
         assert!(is_image("a/b.svg") && is_image("x.tga") && !is_image("x.txt"));
+    }
+
+    #[test]
+    fn renders_the_first_pdf_page() {
+        let pdf = minimal_pdf();
+        let (img, w, h) = decode(&pdf, 4096, "doc.PDF").unwrap();
+        assert_eq!((w, h), (200, 100));
+        assert_eq!(img.size, [1000, 500]);
+        // White page with a black box in the middle.
+        assert_eq!(img.pixels[0], Color32::WHITE);
+        assert_eq!(img.pixels[250 * 1000 + 500], Color32::BLACK);
+        assert!(decode(b"%PDF-1.4 broken", 4096, "x.pdf").is_err());
+    }
+
+    /// A one-page PDF (200×100 points) with a filled rectangle.
+    fn minimal_pdf() -> Vec<u8> {
+        let content = "0 0 0 rg 50 25 100 50 re f";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>".to_owned(),
+            format!(
+                "<< /Length {} >>\nstream\n{content}\nendstream",
+                content.len()
+            ),
+        ];
+        let mut out = b"%PDF-1.4\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, o) in objects.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+        }
+        let xref = out.len();
+        out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).bytes());
+        for off in offsets {
+            out.extend(format!("{off:010} 00000 n \n").bytes());
+        }
+        out.extend(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .bytes(),
+        );
+        out
     }
 
     #[test]
