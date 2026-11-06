@@ -38,7 +38,7 @@ pub struct FerrumApp {
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
-/// commits), `settings`, `palette`, `dialog:branch|push|stash|clone|identity|pr|login`,
+/// commits), `settings`, `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
@@ -64,6 +64,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 out.push(Command::PlanRebase(base));
             }
             "settings" => out.push(Command::ShowSettings),
+            "theme" => out.push(Command::Info(format!("theme:{arg}"))),
             "palette" => out.push(Command::ShowPalette),
             "search" => out.push(Command::Info(format!("search:{arg}"))),
             "select" => {
@@ -519,6 +520,13 @@ impl FerrumApp {
                         t.select_change(source, path.to_owned());
                     }
                 }
+            }
+            Command::Info(i) if i.starts_with("theme:") => {
+                self.settings.theme = match &i["theme:".len()..] {
+                    "light" => ThemeChoice::Light,
+                    "dark" => ThemeChoice::Dark,
+                    _ => ThemeChoice::System,
+                };
             }
             Command::Info(i) => self.info(i),
             Command::Copy(text) => {
