@@ -53,7 +53,7 @@ impl<T: Send + 'static> Load<T> {
                     ctx.request_repaint_after(Duration::from_millis(50))
                 }
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    *self = Load::Done(Err("Loading stopped unexpectedly.".into()))
+                    *self = Load::Done(Err(t!("Loading stopped unexpectedly.")))
                 }
             }
         }
@@ -137,15 +137,15 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
 
     ui.horizontal(|ui| {
         if ui
-            .button("⬅ Back")
-            .on_hover_text("Back to the history")
+            .button(t!("⬅ Back"))
+            .on_hover_text(t!("Back to the history"))
             .clicked()
         {
             cmds.push(Command::SetView(View::History));
         }
         ui.separator();
         if ui
-            .add(egui::Button::selectable(!view.blame, "History"))
+            .add(egui::Button::selectable(!view.blame, t!("History")))
             .clicked()
         {
             view.blame = false;
@@ -159,7 +159,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         ui.separator();
         ui.add(egui::Label::new(egui::RichText::new(&view.path).strong()).truncate());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("↻").on_hover_text("Reload").clicked() {
+            if ui.button("↻").on_hover_text(t!("Reload")).clicked() {
                 if view.blame {
                     view.blame_data = Load::Idle;
                 } else {
@@ -168,7 +168,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                     view.diff_commit = None;
                 }
             }
-            if ui.small_button("Copy path").clicked() {
+            if ui.small_button(t!("Copy path")).clicked() {
                 cmds.push(Command::Copy(view.path.clone()));
             }
         });
@@ -179,7 +179,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         if dirty && matches!(view.blame_data, Load::Done(Ok(_))) {
             ui.colored_label(
                 ui.visuals().warn_fg_color,
-                "⚠ This file has uncommitted changes. Blame shows the last committed version.",
+                t!("⚠ This file has uncommitted changes. Blame shows the last committed version."),
             );
         }
         blame_view(ui, view, cmds);
@@ -193,7 +193,7 @@ fn loading_or_error<T>(ui: &mut egui::Ui, result: Option<&Result<T, String>>) ->
         None => {
             ui.horizontal(|ui| {
                 ui.spinner();
-                ui.weak("Loading…");
+                ui.weak(t!("Loading…"));
             });
             true
         }
@@ -217,7 +217,7 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
         return;
     };
     if entries.is_empty() {
-        ui.weak("No commits touched this file.");
+        ui.weak(t!("No commits touched this file."));
         return;
     }
     if view.selected.is_none() {
@@ -244,11 +244,11 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
         .resizable(true)
         .default_size(380.0)
         .show(ui, |ui| {
-            ui.weak(format!(
-                "{} commit{}",
-                entries.len(),
-                if entries.len() == 1 { "" } else { "s" }
-            ));
+            ui.weak(if entries.len() == 1 {
+                t!("1 commit")
+            } else {
+                t!("{} commits", entries.len())
+            });
             ui.spacing_mut().item_spacing.y = 0.0;
             egui::ScrollArea::vertical()
                 .id_salt("file-history-rows")
@@ -272,11 +272,11 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
                             clicked = Some(i);
                         }
                         resp.context_menu(|ui| {
-                            if ui.button("Show in history").clicked() {
+                            if ui.button(t!("Show in history")).clicked() {
                                 cmds.push(Command::SelectCommit(e.commit.id));
                                 ui.close();
                             }
-                            if ui.button("Copy hash").clicked() {
+                            if ui.button(t!("Copy hash")).clicked() {
                                 cmds.push(Command::Copy(e.commit.id.to_string()));
                                 ui.close();
                             }
@@ -297,9 +297,9 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
             ui.weak(e.commit.short_id());
         });
         if let Some(old) = &e.old_path {
-            ui.weak(format!("Renamed from {old}"));
+            ui.weak(t!("Renamed from {}", old));
         } else if e.path != view.path {
-            ui.weak(format!("Named {} in this commit", e.path));
+            ui.weak(t!("Named {} in this commit", e.path));
         }
         if loading_or_error(ui, view.diff.poll(&ctx)) {
             return;
@@ -309,7 +309,8 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
         };
         match file {
             None => {
-                ui.weak("This commit does not change the file (for example, a merge).");
+                let note = t!("This commit does not change the file (for example, a merge).");
+                ui.weak(note);
             }
             Some(f) if f.binary && is_image_path(&f.path) => {
                 image_diff::show(ui, repo, f, DiffSource::Commit(e.commit.id));
@@ -470,7 +471,7 @@ fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
         return;
     };
     if data.rows.is_empty() {
-        ui.weak("The file is empty.");
+        ui.weak(t!("The file is empty."));
         return;
     }
 
@@ -580,7 +581,7 @@ fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
                     resp.on_hover_ui(|ui| {
                         ui.strong(summary);
                         ui.weak(format!("{} · {date}", row.commit));
-                        ui.weak("Click to show in the history");
+                        ui.weak(t!("Click to show in the history"));
                     });
                 }
             }

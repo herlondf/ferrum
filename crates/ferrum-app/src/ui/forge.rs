@@ -154,11 +154,11 @@ fn push_reason(tab: &RepoTab, branch: &str) -> Option<String> {
         .iter()
         .find(|b| b.kind == BranchKind::Local && b.name == branch)?;
     match (&b.upstream, b.ahead_behind) {
-        (None, _) => Some(format!("{branch} has not been pushed yet.")),
-        (Some(u), Some((ahead, _))) if ahead > 0 => Some(format!(
-            "{branch} has {ahead} commit{} not pushed to {u}.",
-            if ahead == 1 { "" } else { "s" }
-        )),
+        (None, _) => Some(t!("{} has not been pushed yet.", branch)),
+        (Some(u), Some((1, _))) => Some(t!("{} has 1 commit not pushed to {}.", branch, u)),
+        (Some(u), Some((ahead, _))) if ahead > 0 => {
+            Some(t!("{} has {} commits not pushed to {}.", branch, ahead, u))
+        }
         _ => None,
     }
 }
@@ -182,8 +182,19 @@ fn checkout_command(tab: &RepoTab, remote: &str, source: &str) -> Option<Command
     })
 }
 
+/// Whether `e` is the app's "log in first" message (set in app.rs, maybe translated).
+fn needs_login(e: &str) -> bool {
+    const KEY: &str = "Log in to {} to see {}s.";
+    e.starts_with("Log in")
+        || [KEY, crate::i18n::tr(KEY)].iter().any(|k| {
+            k.split("{}")
+                .next()
+                .is_some_and(|p| !p.is_empty() && e.starts_with(p))
+        })
+}
+
 fn is_auth_error(e: &str) -> bool {
-    e.starts_with("Log in") || e.contains("HTTP 401")
+    needs_login(e) || e.contains("HTTP 401")
 }
 
 fn token_url(kind: ForgeKind, host: &str) -> String {
@@ -243,13 +254,14 @@ fn parse_timestamp(s: &str) -> Option<i64> {
 /// "5 minutes ago", "yesterday", or a date for anything older than a month.
 fn relative_time(secs: i64, now: i64) -> String {
     let ago = (now - secs).max(0);
-    let plural = |n: i64, unit: &str| format!("{n} {unit}{} ago", if n == 1 { "" } else { "s" });
     match ago {
-        0..60 => "just now".into(),
-        60..3600 => plural(ago / 60, "minute"),
-        3600..86_400 => plural(ago / 3600, "hour"),
-        86_400..172_800 => "yesterday".into(),
-        172_800..2_592_000 => plural(ago / 86_400, "day"),
+        0..60 => t!("just now"),
+        60..120 => t!("1 minute ago"),
+        120..3600 => t!("{} minutes ago", ago / 60),
+        3600..7200 => t!("1 hour ago"),
+        7200..86_400 => t!("{} hours ago", ago / 3600),
+        86_400..172_800 => t!("yesterday"),
+        172_800..2_592_000 => t!("{} days ago", ago / 86_400),
         _ => format_time(secs, 0)[..10].to_owned(),
     }
 }
@@ -266,12 +278,15 @@ fn now_secs() -> i64 {
 pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmds: &mut Commands) {
     let Some(hosted) = tab.hosted.clone() else {
         ui.centered_and_justified(|ui| {
-            ui.weak("This repository has no GitHub or GitLab remote.");
+            ui.weak(t!("This repository has no GitHub or GitLab remote."));
         });
         return;
     };
     let noun = hosted.kind.request_name();
-    let loading = tab.job.as_ref().is_some_and(|j| j.label == LOAD_JOB);
+    let loading = tab
+        .job
+        .as_ref()
+        .is_some_and(|j| j.label == LOAD_JOB || j.label == crate::i18n::tr(LOAD_JOB));
 
     ui.horizontal(|ui| {
         ui.heading(format!("{}s", capitalize(noun)));
@@ -283,27 +298,24 @@ pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmd
         ui.add_space(6.0);
         if ui
             .link(RichText::new(format!("{}/{}", hosted.host, hosted.path)).weak())
-            .on_hover_text("Open the repository in the browser")
+            .on_hover_text(t!("Open the repository in the browser"))
             .clicked()
         {
             cmds.push(Command::OpenUrl(hosted.web_url()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(!loading, egui::Button::new("⟳ Refresh"))
+                .add_enabled(!loading, egui::Button::new(t!("⟳ Refresh")))
                 .clicked()
             {
                 cmds.push(Command::LoadPullRequests);
             }
             if let Some(head) = tab.head.clone()
-                && ui.button(format!("New {noun}…")).clicked()
+                && ui.button(t!("New {}…", noun)).clicked()
             {
                 cmds.push(Command::Dialog(Dialog::Forge(new_pull_request(tab, &head))));
             }
-            if ui
-                .button(format!("Open on {}", hosted.kind.name()))
-                .clicked()
-            {
+            if ui.button(t!("Open on {}", hosted.kind.name())).clicked() {
                 cmds.push(Command::OpenUrl(hosted.web_url()));
             }
             if loading {
@@ -319,7 +331,7 @@ pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmd
         } else {
             message(ui, |ui| {
                 ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {err}"));
-                if ui.button("Try again").clicked() {
+                if ui.button(t!("Try again")).clicked() {
                     cmds.push(Command::LoadPullRequests);
                 }
             });
@@ -330,10 +342,10 @@ pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmd
         message(ui, |ui| {
             if loading {
                 ui.spinner();
-                ui.weak(format!("Loading {noun}s…"));
+                ui.weak(t!("Loading {}s…", noun));
             } else {
-                ui.weak(format!("{}s are not loaded.", capitalize(noun)));
-                if ui.button("Load").clicked() {
+                ui.weak(t!("{}s are not loaded.", capitalize(noun)));
+                if ui.button(t!("Load")).clicked() {
                     cmds.push(Command::LoadPullRequests);
                 }
             }
@@ -342,12 +354,9 @@ pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmd
     };
     if list.is_empty() {
         message(ui, |ui| {
-            ui.label(RichText::new(format!("No open {noun}s")).size(16.0));
-            ui.weak(format!(
-                "{}s opened on {} will show up here.",
-                capitalize(noun),
-                hosted.kind.name()
-            ));
+            ui.label(RichText::new(t!("No open {}s", noun)).size(16.0));
+            let (nouns, forge) = (capitalize(noun), hosted.kind.name());
+            ui.weak(t!("{}s opened on {} will show up here.", nouns, forge));
         });
         return;
     }
@@ -379,33 +388,30 @@ fn message(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
 
 fn not_logged_in(ui: &mut egui::Ui, hosted: &HostedRepo, err: &str, cmds: &mut Commands) {
     message(ui, |ui| {
-        ui.label(RichText::new(format!("Log in to {}", hosted.kind.name())).size(16.0));
-        if err.starts_with("Log in") {
-            ui.label(format!(
-                "Ferrum needs a {} token for {} to list and create {}s.",
-                hosted.kind.name(),
-                hosted.host,
-                hosted.kind.request_name()
-            ));
+        ui.label(RichText::new(t!("Log in to {}", hosted.kind.name())).size(16.0));
+        if needs_login(err) {
+            let template = t!("Ferrum needs a {} token for {} to list and create {}s.");
+            let (forge, host) = (hosted.kind.name(), &hosted.host);
+            let noun = hosted.kind.request_name();
+            ui.label(crate::i18n::fill(&template, &[&forge, host, &noun]));
         } else {
             ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {err}"));
         }
         if hosted.kind == ForgeKind::GitHub {
-            ui.weak(
-                "Logged in with the GitHub CLI (gh auth login)? That login is used automatically.",
-            );
+            let note = t!("Logged in to the GitHub CLI (gh auth login)? Ferrum uses it.");
+            ui.weak(note);
         }
         ui.horizontal(|ui| {
             // Center the two buttons.
             let w = 170.0;
             ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
-            if ui.button("Log in…").clicked() {
+            if ui.button(t!("Log in…")).clicked() {
                 cmds.push(Command::Dialog(Dialog::Forge(login(
                     hosted.kind,
                     &hosted.host,
                 ))));
             }
-            if ui.button("Try again").clicked() {
+            if ui.button(t!("Try again")).clicked() {
                 cmds.push(Command::LoadPullRequests);
             }
         });
@@ -438,7 +444,7 @@ fn pr_row(
     let when_rect = painter.text(
         rect.right_top() + vec2(-10.0, 14.0),
         Align2::RIGHT_CENTER,
-        format!("updated {when}"),
+        t!("updated {}", when),
         FontId::proportional(12.0),
         weak,
     );
@@ -453,7 +459,7 @@ fn pr_row(
     );
     let mut x = num.right() + 8.0;
     if pr.draft {
-        let badge = painter.layout_no_wrap("Draft".into(), FontId::proportional(11.0), weak);
+        let badge = painter.layout_no_wrap(t!("Draft"), FontId::proportional(11.0), weak);
         let r = egui::Rect::from_min_size(
             egui::pos2(x, top - badge.size().y / 2.0 - 2.0),
             badge.size() + vec2(12.0, 4.0),
@@ -499,25 +505,26 @@ fn pr_row(
         egui::Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color),
     );
     let hover = match updated {
-        Some(t) => format!("{}\nUpdated {} UTC", pr.url, format_time(t, 0)),
+        Some(t) => t!("{}\nUpdated {} UTC", pr.url, format_time(t, 0)),
         None => pr.url.clone(),
     };
     let hover = if fetched {
         hover
     } else {
-        format!("{hover}\n{remote}/{} is not fetched", pr.source_branch)
+        let missing = t!("{}/{} is not fetched", remote, pr.source_branch);
+        format!("{hover}\n{missing}")
     };
     resp.on_hover_text(hover)
         .on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 fn pr_menu(ui: &mut egui::Ui, pr: &PullRequest, remote: &str, tab: &RepoTab, cmds: &mut Commands) {
-    if ui.button("Open in browser").clicked() {
+    if ui.button(t!("Open in browser")).clicked() {
         cmds.push(Command::OpenUrl(pr.url.clone()));
         ui.close();
     }
     let checkout = checkout_command(tab, remote, &pr.source_branch);
-    let label = format!("Check out {}", pr.source_branch);
+    let label = t!("Check out {}", pr.source_branch);
     let resp = ui.add_enabled(checkout.is_some(), egui::Button::new(label));
     if resp.clicked()
         && let Some(c) = checkout
@@ -525,16 +532,15 @@ fn pr_menu(ui: &mut egui::Ui, pr: &PullRequest, remote: &str, tab: &RepoTab, cmd
         cmds.push(c);
         ui.close();
     }
-    resp.on_disabled_hover_text(format!(
-        "{remote}/{} does not exist. Fetch first, or the branch lives in a fork",
-        pr.source_branch
-    ));
+    let tip = t!("{}/{} does not exist. Fetch first, or the branch lives in a fork");
+    let tip = crate::i18n::fill(&tip, &[&remote, &pr.source_branch]);
+    resp.on_disabled_hover_text(tip);
     ui.separator();
-    if ui.button("Copy URL").clicked() {
+    if ui.button(t!("Copy URL")).clicked() {
         cmds.push(Command::Copy(pr.url.clone()));
         ui.close();
     }
-    if ui.button("Copy branch name").clicked() {
+    if ui.button(t!("Copy branch name")).clicked() {
         cmds.push(Command::Copy(pr.source_branch.clone()));
         ui.close();
     }
@@ -576,12 +582,12 @@ fn new_pr_dialog(
     switch_to: &mut Option<ForgeDialog>,
 ) -> bool {
     let Some(hosted) = f.hosted.clone() else {
-        ui.heading("New pull request");
-        ui.label("This repository has no GitHub or GitLab remote.");
-        return !ui.button("Close").clicked();
+        ui.heading(t!("New pull request"));
+        ui.label(t!("This repository has no GitHub or GitLab remote."));
+        return !ui.button(t!("Close")).clicked();
     };
     let noun = hosted.kind.request_name();
-    ui.heading(format!("New {noun}"));
+    ui.heading(t!("New {}", noun));
     ui.weak(format!("{}/{}", hosted.host, hosted.path));
     ui.add_space(4.0);
 
@@ -595,8 +601,8 @@ fn new_pr_dialog(
             });
             ui.add_space(8.0);
             return !ui
-                .button("Hide")
-                .on_hover_text("Keep working; the result shows in the status bar")
+                .button(t!("Hide"))
+                .on_hover_text(t!("Keep working; the result shows in the status bar"))
                 .clicked();
         }
         f.submitted = None;
@@ -612,13 +618,13 @@ fn new_pr_dialog(
     if !logged_in {
         ui.colored_label(
             ui.visuals().warn_fg_color,
-            format!("Log in to {} to create {noun}s from Ferrum.", hosted.host),
+            t!("Log in to {} to create {}s from Ferrum.", hosted.host, noun),
         );
         ui.horizontal(|ui| {
-            if ui.button("Log in…").clicked() {
+            if ui.button(t!("Log in…")).clicked() {
                 *switch_to = Some(login(hosted.kind, &hosted.host));
             }
-            if ui.button("Open in browser instead").clicked() {
+            if ui.button(t!("Open in browser instead")).clicked() {
                 cmds.push(Command::OpenUrl(
                     hosted.new_request_url(&f.source, &f.target),
                 ));
@@ -627,16 +633,16 @@ fn new_pr_dialog(
         ui.add_space(4.0);
     }
 
-    ui.label("Title");
+    ui.label(t!("Title"));
     ui.add(
         egui::TextEdit::singleline(&mut f.title)
-            .hint_text("A short summary")
+            .hint_text(t!("A short summary"))
             .desired_width(f32::INFINITY),
     );
-    ui.label("Description");
+    ui.label(t!("Description"));
     ui.add(
         egui::TextEdit::multiline(&mut f.body)
-            .hint_text("What changes and why (Markdown)")
+            .hint_text(t!("What changes and why (Markdown)"))
             .desired_rows(6)
             .desired_width(f32::INFINITY),
     );
@@ -645,7 +651,7 @@ fn new_pr_dialog(
         .num_columns(2)
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
-            ui.label("From");
+            ui.label(t!("From"));
             let before = f.source.clone();
             egui::ComboBox::from_id_salt("pr-source")
                 .selected_text(&f.source)
@@ -660,12 +666,12 @@ fn new_pr_dialog(
                 f.title = f.auto_title.clone();
             }
             ui.end_row();
-            ui.label("Into");
+            ui.label(t!("Into"));
             egui::ComboBox::from_id_salt("pr-target")
                 .selected_text(if f.target.is_empty() {
-                    "Choose a branch"
+                    t!("Choose a branch")
                 } else {
-                    &f.target
+                    f.target.clone()
                 })
                 .width(300.0)
                 .show_ui(ui, |ui| {
@@ -675,12 +681,12 @@ fn new_pr_dialog(
                 });
             ui.end_row();
         });
-    ui.checkbox(&mut f.draft, "Create as draft");
+    ui.checkbox(&mut f.draft, t!("Create as draft"));
     let push_reason = push_reason(tab, &f.source);
     if let Some(reason) = &push_reason {
         ui.checkbox(
             &mut f.push_first,
-            format!("Push {} to {} first", f.source, f.remote),
+            t!("Push {} to {} first", f.source, f.remote),
         )
         .on_hover_text(reason);
         if f.push_first {
@@ -692,7 +698,7 @@ fn new_pr_dialog(
     if f.targets.is_empty() {
         ui.colored_label(
             ui.visuals().warn_fg_color,
-            format!("No branches of {} are known. Fetch it first.", f.remote),
+            t!("No branches of {} are known. Fetch it first.", f.remote),
         );
     }
     if let Some(e) = &f.error {
@@ -706,8 +712,8 @@ fn new_pr_dialog(
     let mut keep = true;
     ui.horizontal(|ui| {
         if ui
-            .button("Open in browser instead")
-            .on_hover_text(format!("Fill in the {noun} on {}", hosted.kind.name()))
+            .button(t!("Open in browser instead"))
+            .on_hover_text(t!("Fill in the {} on {}", noun, hosted.kind.name()))
             .clicked()
         {
             cmds.push(Command::OpenUrl(
@@ -717,7 +723,7 @@ fn new_pr_dialog(
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(ready, egui::Button::new(format!("Create {noun}")))
+                .add_enabled(ready, egui::Button::new(t!("Create {}", noun)))
                 .clicked()
             {
                 if push_reason.is_some() && f.push_first {
@@ -744,7 +750,7 @@ fn new_pr_dialog(
                 f.error = None;
                 f.submitted = Some(Instant::now());
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(t!("Cancel")).clicked() {
                 keep = false;
             }
         });
@@ -753,7 +759,7 @@ fn new_pr_dialog(
 }
 
 fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bool {
-    ui.heading(format!("Log in to {}", f.kind.name()));
+    ui.heading(t!("Log in to {}", f.kind.name()));
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         for kind in [ForgeKind::GitHub, ForgeKind::GitLab] {
@@ -776,11 +782,11 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
     );
     let host = f.host.trim().to_ascii_lowercase();
 
-    ui.label("Personal access token");
+    ui.label(t!("Personal access token"));
     let token = ui.add(
         egui::TextEdit::singleline(&mut f.token)
             .password(true)
-            .hint_text("Paste the token here")
+            .hint_text(t!("Paste the token here"))
             .desired_width(f32::INFINITY),
     );
     let scopes = match f.kind {
@@ -790,13 +796,13 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         if ui
-            .add_enabled(!host.is_empty(), egui::Link::new("Create a token"))
+            .add_enabled(!host.is_empty(), egui::Link::new(t!("Create a token")))
             .on_hover_text(token_url(f.kind, &host))
             .clicked()
         {
             cmds.push(Command::OpenUrl(token_url(f.kind, &host)));
         }
-        ui.weak(format!("on {host} with the \"{scopes}\" scope."));
+        ui.weak(t!("on {} with the \"{}\" scope.", host, scopes));
     });
 
     if f.kind == ForgeKind::GitHub && !host.is_empty() {
@@ -806,8 +812,8 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
         if let Some((_, Some(gh))) = &f.gh {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.weak("The GitHub CLI is logged in on this computer.");
-                if ui.button("Use GitHub CLI login").clicked() {
+                ui.weak(t!("The GitHub CLI is logged in on this computer."));
+                if ui.button(t!("Use GitHub CLI login")).clicked() {
                     cmds.push(Command::VerifyAccount {
                         kind: f.kind,
                         host: host.clone(),
@@ -823,7 +829,8 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
         }
     }
     ui.add_space(4.0);
-    ui.weak("The token is saved in Ferrum's settings file on this computer.");
+    let note = t!("The token is saved in Ferrum's settings file on this computer.");
+    ui.weak(note);
 
     let ready = !host.is_empty() && !f.token.trim().is_empty();
     let enter = token.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -831,7 +838,11 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
     let mut keep = true;
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.add_enabled(ready, egui::Button::new("Log in")).clicked() || (enter && ready) {
+            if ui
+                .add_enabled(ready, egui::Button::new(t!("Log in")))
+                .clicked()
+                || (enter && ready)
+            {
                 cmds.push(Command::VerifyAccount {
                     kind: f.kind,
                     host: host.clone(),
@@ -839,7 +850,7 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
                 });
                 keep = false;
             }
-            if ui.button("Cancel").clicked() {
+            if ui.button(t!("Cancel")).clicked() {
                 keep = false;
             }
         });

@@ -50,7 +50,7 @@ struct Cache {
 /// What one side of the diff shows.
 enum Side {
     /// The file does not exist on this side; the text says why.
-    Missing(&'static str),
+    Missing(String),
     Error(String),
     Image(Arc<Loaded>),
 }
@@ -60,18 +60,18 @@ pub fn show(ui: &mut egui::Ui, repo: &Repo, file: &FileDiff, source: DiffSource)
     let deleted = file.kind == ChangeKind::Deleted;
 
     let before = match file.old_id {
-        _ if added => Side::Missing("No previous version (file added)"),
+        _ if added => Side::Missing(t!("No previous version (file added)")),
         Some(id) => load_blob(ui.ctx(), repo, id),
-        None => Side::Missing("No previous version"),
+        None => Side::Missing(t!("No previous version")),
     };
     let after = if deleted {
-        Side::Missing("File deleted")
+        Side::Missing(t!("File deleted"))
     } else if source == DiffSource::Unstaged {
         load_workdir(ui.ctx(), repo, &file.path)
     } else {
         match file.new_id {
             Some(id) => load_blob(ui.ctx(), repo, id),
-            None => Side::Missing("No new version"),
+            None => Side::Missing(t!("No new version")),
         }
     };
 
@@ -79,11 +79,8 @@ pub fn show(ui: &mut egui::Ui, repo: &Repo, file: &FileDiff, source: DiffSource)
         && a != b
     {
         ui.label(
-            egui::RichText::new(format!(
-                "Dimensions changed: {}×{} -> {}×{}",
-                a.0, a.1, b.0, b.1
-            ))
-            .color(ui.visuals().warn_fg_color),
+            egui::RichText::new(t!("Dimensions changed: {}×{} -> {}×{}", a.0, a.1, b.0, b.1))
+                .color(ui.visuals().warn_fg_color),
         );
     }
 
@@ -92,10 +89,10 @@ pub fn show(ui: &mut egui::Ui, repo: &Repo, file: &FileDiff, source: DiffSource)
     let col_w = ((avail.x - gap) / 2.0).max(50.0);
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
-        for (title, side) in [("Before", &before), ("After", &after)] {
+        for (title, side) in [(t!("Before"), &before), (t!("After"), &after)] {
             ui.allocate_ui(vec2(col_w, avail.y), |ui| {
                 ui.set_width(col_w);
-                ui.vertical(|ui| column(ui, title, side, vec2(col_w, avail.y)));
+                ui.vertical(|ui| column(ui, &title, side, vec2(col_w, avail.y)));
             });
         }
     });
@@ -105,7 +102,7 @@ fn column(ui: &mut egui::Ui, title: &str, side: &Side, size: egui::Vec2) {
     ui.strong(title);
     match side {
         Side::Missing(text) => {
-            ui.weak(*text);
+            ui.weak(text.as_str());
         }
         Side::Error(e) => {
             ui.colored_label(ui.visuals().error_fg_color, e);
@@ -133,7 +130,7 @@ fn column(ui: &mut egui::Ui, title: &str, side: &Side, size: egui::Vec2) {
                         pic.height,
                         format_size(loaded.bytes)
                     ))
-                    .on_hover_text(format!("Shown at {:.0}%", scale * 100.0));
+                    .on_hover_text(t!("Shown at {}%", format!("{:.0}", scale * 100.0)));
                 });
             }
         },
@@ -173,7 +170,7 @@ fn load_blob(ctx: &egui::Context, repo: &Repo, id: Oid) -> Side {
     }
     let size = match repo.blob_size(id) {
         Ok(s) => s as u64,
-        Err(e) => return Side::Error(format!("Could not read the image: {e}")),
+        Err(e) => return Side::Error(t!("Could not read the image: {}", e)),
     };
     let loaded = if size > MAX_BYTES {
         Loaded {
@@ -183,7 +180,7 @@ fn load_blob(ctx: &egui::Context, repo: &Repo, id: Oid) -> Side {
     } else {
         match repo.blob(id) {
             Ok(bytes) => decode_to_texture(ctx, &format!("image-{id}"), &bytes),
-            Err(e) => return Side::Error(format!("Could not read the image: {e}")),
+            Err(e) => return Side::Error(t!("Could not read the image: {}", e)),
         }
     };
     let loaded = Arc::new(loaded);
@@ -193,7 +190,7 @@ fn load_blob(ctx: &egui::Context, repo: &Repo, id: Oid) -> Side {
 
 fn load_workdir(ctx: &egui::Context, repo: &Repo, path: &str) -> Side {
     let Ok(meta) = std::fs::metadata(repo.path().join(path)) else {
-        return Side::Missing("File not found in the working copy");
+        return Side::Missing(t!("File not found in the working copy"));
     };
     let key = Key::File {
         path: path.to_owned(),
@@ -211,7 +208,7 @@ fn load_workdir(ctx: &egui::Context, repo: &Repo, path: &str) -> Side {
     } else {
         match repo.read_workdir_file(path) {
             Ok(bytes) => decode_to_texture(ctx, &format!("image-wd-{path}"), &bytes),
-            Err(e) => return Side::Error(format!("Could not read the file: {e}")),
+            Err(e) => return Side::Error(t!("Could not read the file: {}", e)),
         }
     };
     let loaded = Arc::new(loaded);
@@ -220,7 +217,7 @@ fn load_workdir(ctx: &egui::Context, repo: &Repo, path: &str) -> Side {
 }
 
 fn too_big() -> String {
-    "Image too large to preview.".to_owned()
+    t!("Image too large to preview.")
 }
 
 fn decode_to_texture(ctx: &egui::Context, name: &str, bytes: &[u8]) -> Loaded {
@@ -247,11 +244,11 @@ fn decode(bytes: &[u8], max_side: u32) -> Result<(ColorImage, u32, u32), String>
     // Read the header first so huge images are rejected before decoding.
     let (w, h) = reader()?
         .into_dimensions()
-        .map_err(|e| format!("Could not decode the image: {e}"))?;
+        .map_err(|e| t!("Could not decode the image: {}", e))?;
     check_pixels(w, h)?;
     let mut img = reader()?
         .decode()
-        .map_err(|e| format!("Could not decode the image: {e}"))?;
+        .map_err(|e| t!("Could not decode the image: {}", e))?;
     if w > max_side || h > max_side {
         img = img.thumbnail(max_side, max_side);
     }
@@ -262,7 +259,7 @@ fn decode(bytes: &[u8], max_side: u32) -> Result<(ColorImage, u32, u32), String>
 
 fn check_pixels(w: u32, h: u32) -> Result<(), String> {
     if u64::from(w) * u64::from(h) > MAX_PIXELS {
-        Err(format!("Image too large to preview ({w}×{h})."))
+        Err(t!("Image too large to preview ({}×{}).", w, h))
     } else {
         Ok(())
     }
