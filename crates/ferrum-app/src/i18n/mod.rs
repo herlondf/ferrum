@@ -126,10 +126,11 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join("\n");
             let mut rest = code.as_str();
-            while let Some(pos) = rest.find("t!(\"") {
+            // Built with concat! so this line does not match itself.
+            while let Some(pos) = rest.find(concat!("t", "!(")) {
                 // Skip identifiers ending in t (e.g. `print!`) by checking the previous char.
                 let before = &rest[..pos];
-                rest = &rest[pos + 4..];
+                rest = &rest[pos + 3..];
                 if before
                     .chars()
                     .last()
@@ -137,6 +138,12 @@ mod tests {
                 {
                     continue;
                 }
+                // rustfmt may put the string on the next line.
+                let trimmed = rest.trim_start();
+                let Some(after_quote) = trimmed.strip_prefix('"') else {
+                    continue;
+                };
+                rest = after_quote;
                 let Some(end) = find_string_end(rest) else {
                     continue;
                 };
