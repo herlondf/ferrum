@@ -44,7 +44,7 @@ impl Default for DiffConfig {
 }
 
 impl DiffConfig {
-    fn options(&self) -> DiffOptions {
+    pub(crate) fn options(&self) -> DiffOptions {
         let mut opts = DiffOptions::new();
         opts.context_lines(if self.full_file {
             FULL_CONTEXT
