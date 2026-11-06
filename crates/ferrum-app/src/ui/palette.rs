@@ -214,7 +214,7 @@ pub fn show(
         .iter()
         .filter_map(|e| fuzzy_score(&e.label, &q).map(|s| (s, e)))
         .collect();
-    matches.sort_by(|a, b| b.0.cmp(&a.0));
+    matches.sort_by_key(|m| std::cmp::Reverse(m.0));
     p.selected = p.selected.min(matches.len().saturating_sub(1));
 
     let (up, down, enter, esc) = ctx.input(|i| {
