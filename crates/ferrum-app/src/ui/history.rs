@@ -14,7 +14,7 @@ use crate::util::format_time;
 const ROW_HEIGHT: f32 = 24.0;
 const LANE_WIDTH: f32 = 14.0;
 /// Very wide graphs are clipped so the description stays readable.
-const MAX_GRAPH_LANES: usize = 16;
+const MAX_GRAPH_LANES: usize = 10;
 const AUTHOR_WIDTH: f32 = 150.0;
 const DATE_WIDTH: f32 = 120.0;
 const HASH_WIDTH: f32 = 64.0;

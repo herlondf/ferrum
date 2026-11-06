@@ -206,6 +206,7 @@ impl RepoTab {
 
     /// Reloads everything: refs, history and local changes.
     pub fn refresh_all(&mut self) {
+        let started = Instant::now();
         let mut errors = Vec::new();
         let mut ok = |r: Result<(), ferrum_core::Error>| {
             if let Err(e) = r {
@@ -254,6 +255,9 @@ impl RepoTab {
         }
         if let Some(e) = errors.into_iter().next() {
             self.error(e);
+        }
+        if std::env::var_os("FERRUM_TIMING").is_some() {
+            eprintln!("refresh_all {}: {:?} ({} commits)", self.name, started.elapsed(), self.commits.len());
         }
     }
 
