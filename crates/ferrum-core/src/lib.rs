@@ -4,6 +4,7 @@
 //! through the `git` command line, so hooks, credential helpers, SSH config
 //! and LFS behave exactly as in the terminal.
 
+pub mod askpass;
 pub mod avatar;
 pub mod bisect;
 pub mod browse;
@@ -29,6 +30,7 @@ pub mod rebase;
 pub mod refs;
 mod repo;
 pub mod shell;
+pub mod ssh;
 pub mod stats;
 pub mod submodule;
 pub mod sync;

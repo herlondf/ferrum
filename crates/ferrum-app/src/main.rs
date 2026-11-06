@@ -24,6 +24,9 @@ mod flow_tests;
 mod fork_tools_tests;
 #[cfg(test)]
 mod history_tests;
+mod hosted;
+#[cfg(test)]
+mod hosted_tests;
 mod icon;
 mod jobs;
 mod keymap;
@@ -52,6 +55,16 @@ mod util;
 mod watcher;
 
 fn main() -> eframe::Result {
+    // Run by git or ssh to ask for a password (see ferrum_core::askpass).
+    if std::env::var_os(ferrum_core::askpass::ENV).is_some() {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        let prompt = match args.as_slice() {
+            [flag, p, ..] if flag == "--askpass" => p.clone(),
+            [p, ..] => p.clone(),
+            [] => String::new(),
+        };
+        std::process::exit(ferrum_core::askpass::client(&prompt));
+    }
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     let paths: Vec<std::path::PathBuf> = args.iter().map(Into::into).collect();
     if paths

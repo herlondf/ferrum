@@ -428,6 +428,11 @@ fn body(
         Dialog::Clone { url, parent, name } => {
             ui.heading(t!("Clone repository"));
             let before = clone_dir_name(url);
+            if crate::ui::clone_repos::picker(ui, settings, url)
+                && (name.is_empty() || *name == before)
+            {
+                *name = clone_dir_name(url);
+            }
             if field(
                 ui,
                 &t!("Repository URL"),

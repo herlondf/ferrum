@@ -69,19 +69,11 @@ fn staged_diff(dir: &std::path::Path, amend: bool) -> Result<String, String> {
     if amend && git.run(&["rev-parse", "-q", "--verify", "HEAD~1"]).is_ok() {
         args.push("HEAD~1");
     }
-    let mut diff = git.run(&args).map_err(|e| e.to_string())?;
+    let diff = git.run(&args).map_err(|e| e.to_string())?;
     if diff.trim().is_empty() {
         return Err(t!("Nothing is staged."));
     }
-    if diff.len() > MAX_DIFF {
-        let mut end = MAX_DIFF;
-        while !diff.is_char_boundary(end) {
-            end -= 1;
-        }
-        diff.truncate(end);
-        diff.push_str("\n[diff truncated]\n");
-    }
-    Ok(diff)
+    Ok(truncate(diff, MAX_DIFF))
 }
 
 fn shell(command: &str) -> Command {
@@ -112,6 +104,35 @@ fn run(
         return Err(t!("Set the AI command in Settings first."));
     }
     let prompt = build_prompt(template, &staged_diff(dir, amend)?);
+    let out = run_command(dir, command, prompt, cancel)?;
+    let message = ferrum_core::message::clean_generated(&out);
+    if message.is_empty() {
+        return Err(t!("The AI tool returned an empty message."));
+    }
+    Ok(message)
+}
+
+/// Cuts `text` to about `max` bytes, saying so.
+pub fn truncate(mut text: String, max: usize) -> String {
+    if text.len() > max {
+        let mut end = max;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        text.truncate(end);
+        text.push_str("\n[diff truncated]\n");
+    }
+    text
+}
+
+/// Runs the AI command with `prompt` on its standard input and returns its
+/// output (also used by the code review).
+pub fn run_command(
+    dir: &std::path::Path,
+    command: &str,
+    prompt: String,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
     let mut child = shell(command)
         .current_dir(dir)
         .stdin(Stdio::piped())
@@ -150,11 +171,7 @@ fn run(
         let detail = if err.trim().is_empty() { out } else { err };
         return Err(t!("{} failed: {}", command, detail.trim()));
     }
-    let message = ferrum_core::message::clean_generated(&out);
-    if message.is_empty() {
-        return Err(t!("The AI tool returned an empty message."));
-    }
-    Ok(message)
+    Ok(out)
 }
 
 #[cfg(test)]

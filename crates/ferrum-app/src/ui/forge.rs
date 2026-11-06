@@ -1,5 +1,5 @@
-//! Pull requests on GitHub and merge requests on GitLab: the list view, the
-//! "new pull request" dialog and the login dialog.
+//! Pull requests (merge requests on GitLab): the list view, the "new pull
+//! request" dialog and the login dialog for every hosted service.
 //!
 //! Creating a request goes through `Command::CreatePullRequest`, which the app
 //! turns into `Op::CreatePullRequest`. Being an `Op`, it waits in the tab's
@@ -9,7 +9,7 @@
 use std::time::Instant;
 
 use eframe::egui::{self, Align2, FontId, RichText, Sense, vec2};
-use ferrum_core::forge::{self, ForgeKind, HostedRepo, NewPullRequest, PullRequest};
+use ferrum_core::forge::{self, Credentials, ForgeKind, HostedRepo, NewPullRequest, PullRequest};
 use ferrum_core::ops::PushOptions;
 use ferrum_core::{BranchInfo, BranchKind};
 
@@ -30,7 +30,7 @@ pub struct PrState {
 }
 
 pub enum ForgeDialog {
-    NewPullRequest(NewPrForm),
+    NewPullRequest(Box<NewPrForm>),
     Login(LoginForm),
 }
 
@@ -47,6 +47,9 @@ pub struct NewPrForm {
     targets: Vec<String>,
     draft: bool,
     push_first: bool,
+    /// Templates found in the repository, and the one in the description.
+    templates: Vec<forge::templates::Template>,
+    template: Option<usize>,
     /// Whether a token is available; checked once, as it may run `gh`.
     logged_in: Option<bool>,
     /// When "Create" was pressed; the dialog waits for the jobs to finish.
@@ -56,7 +59,11 @@ pub struct NewPrForm {
 
 pub struct LoginForm {
     kind: ForgeKind,
+    /// GitHub Enterprise, GitLab, Gitea or Bitbucket on the user's own server.
+    self_hosted: bool,
     host: String,
+    /// Bitbucket username or Azure DevOps organization.
+    user: String,
     token: String,
     /// GitHub CLI token for `.0`, looked up again when the host changes.
     gh: Option<(String, Option<String>)>,
@@ -92,12 +99,19 @@ pub fn new_pull_request(tab: &RepoTab, branch: &str) -> ForgeDialog {
         .map(|b| b.name.clone())
         .collect();
     let title = branch_summary(tab, branch);
-    ForgeDialog::NewPullRequest(NewPrForm {
+    let templates = forge::templates::find(tab.path());
+    let body = templates
+        .first()
+        .map(|t| t.body.clone())
+        .unwrap_or_default();
+    ForgeDialog::NewPullRequest(Box::new(NewPrForm {
         hosted: tab.hosted.clone(),
         remote,
         title: title.clone(),
         auto_title: title,
-        body: String::new(),
+        body,
+        template: (!templates.is_empty()).then_some(0),
+        templates,
         source: branch.into(),
         target,
         locals,
@@ -107,13 +121,15 @@ pub fn new_pull_request(tab: &RepoTab, branch: &str) -> ForgeDialog {
         logged_in: None,
         submitted: None,
         error: None,
-    })
+    }))
 }
 
 pub fn login(kind: ForgeKind, host: &str) -> ForgeDialog {
     ForgeDialog::Login(LoginForm {
         kind,
+        self_hosted: kind.default_host() != Some(host),
         host: host.into(),
+        user: String::new(),
         token: String::new(),
         gh: None,
     })
@@ -121,11 +137,7 @@ pub fn login(kind: ForgeKind, host: &str) -> ForgeDialog {
 
 /// The remote that points at the hosted repository (usually `origin`).
 fn hosted_remote(tab: &RepoTab) -> String {
-    tab.remotes
-        .iter()
-        .find(|r| tab.hosted.is_some() && forge::parse_remote_url(&r.url) == tab.hosted)
-        .map(|r| r.name.clone())
-        .unwrap_or_else(|| "origin".into())
+    crate::hosted::hosted_remote_name(tab).unwrap_or_else(|| "origin".into())
 }
 
 /// The summary of the last commit on `branch`, used as the default title.
@@ -197,17 +209,6 @@ fn is_auth_error(e: &str) -> bool {
     needs_login(e) || e.contains("HTTP 401")
 }
 
-fn token_url(kind: ForgeKind, host: &str) -> String {
-    match kind {
-        ForgeKind::GitHub => {
-            format!("https://{host}/settings/tokens/new?scopes=repo&description=Ferrum")
-        }
-        ForgeKind::GitLab => {
-            format!("https://{host}/-/user_settings/personal_access_tokens?name=Ferrum&scopes=api")
-        }
-    }
-}
-
 fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     c.next()
@@ -218,7 +219,7 @@ fn capitalize(s: &str) -> String {
 // ----- Time -----
 
 /// Parses `2026-11-01T10:00:00Z`, `…00.123Z` or `…00+02:00` into Unix seconds.
-fn parse_timestamp(s: &str) -> Option<i64> {
+pub(crate) fn parse_timestamp(s: &str) -> Option<i64> {
     let s = s.trim();
     let num = |r: std::ops::Range<usize>| s.get(r)?.parse::<i64>().ok();
     let (y, mo, d) = (num(0..4)?, num(5..7)?, num(8..10)?);
@@ -257,7 +258,9 @@ fn parse_timestamp(s: &str) -> Option<i64> {
 pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmds: &mut Commands) {
     let Some(hosted) = tab.hosted.clone() else {
         ui.centered_and_justified(|ui| {
-            ui.weak(t!("This repository has no GitHub or GitLab remote."));
+            ui.weak(t!(
+                "This repository has no remote on a known hosting service."
+            ));
         });
         return;
     };
@@ -282,6 +285,7 @@ pub fn show_view(ui: &mut egui::Ui, tab: &mut RepoTab, _settings: &Settings, cmd
         {
             cmds.push(Command::OpenUrl(hosted.web_url()));
         }
+        crate::hosted::remote_picker(ui, tab, cmds);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add_enabled(!loading, egui::Button::new(t!("⟳ Refresh")))
@@ -562,7 +566,9 @@ fn new_pr_dialog(
 ) -> bool {
     let Some(hosted) = f.hosted.clone() else {
         ui.heading(t!("New pull request"));
-        ui.label(t!("This repository has no GitHub or GitLab remote."));
+        ui.label(t!(
+            "This repository has no remote on a known hosting service."
+        ));
         return !ui.button(t!("Close")).clicked();
     };
     let noun = hosted.kind.request_name();
@@ -618,7 +624,10 @@ fn new_pr_dialog(
             .hint_text(t!("A short summary"))
             .desired_width(f32::INFINITY),
     );
-    ui.label(t!("Description"));
+    ui.horizontal(|ui| {
+        ui.label(t!("Description"));
+        template_picker(ui, f);
+    });
     ui.add(
         egui::TextEdit::multiline(&mut f.body)
             .hint_text(t!("What changes and why (Markdown)"))
@@ -737,29 +746,119 @@ fn new_pr_dialog(
     keep
 }
 
-fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bool {
-    ui.heading(t!("Log in to {}", f.kind.name()));
-    ui.add_space(4.0);
-    ui.horizontal(|ui| {
-        for kind in [ForgeKind::GitHub, ForgeKind::GitLab] {
-            if ui.radio_value(&mut f.kind, kind, kind.name()).changed() {
-                // Swap the public hosts; keep self-hosted ones.
-                if ["github.com", "gitlab.com", ""].contains(&f.host.as_str()) {
-                    f.host = match kind {
-                        ForgeKind::GitHub => "github.com".into(),
-                        ForgeKind::GitLab => "gitlab.com".into(),
-                    };
+/// The services offered when adding an account: (kind, self-hosted, name).
+const SERVICES: [(ForgeKind, bool, &str); 8] = [
+    (ForgeKind::GitHub, false, "GitHub"),
+    (ForgeKind::GitHub, true, "GitHub Enterprise"),
+    (ForgeKind::GitLab, false, "GitLab"),
+    (ForgeKind::GitLab, true, "GitLab Server"),
+    (ForgeKind::Bitbucket, false, "Bitbucket"),
+    (ForgeKind::BitbucketServer, true, "Bitbucket Server"),
+    (ForgeKind::Azure, false, "Azure DevOps"),
+    (ForgeKind::Gitea, true, "Gitea / Forgejo"),
+];
+
+/// Shows the template list when the repository has several templates.
+fn template_picker(ui: &mut egui::Ui, f: &mut NewPrForm) {
+    if f.templates.is_empty() {
+        return;
+    }
+    let current = f
+        .template
+        .and_then(|i| f.templates.get(i))
+        .map_or_else(|| t!("No template"), |t| t.name.clone());
+    egui::ComboBox::from_id_salt("pr-template")
+        .selected_text(t!("Template: {}", current))
+        .show_ui(ui, |ui| {
+            let unchanged = f
+                .template
+                .and_then(|i| f.templates.get(i))
+                .is_none_or(|t| t.body == f.body)
+                || f.body.trim().is_empty();
+            for i in 0..f.templates.len() {
+                if ui
+                    .selectable_label(f.template == Some(i), &f.templates[i].name)
+                    .on_hover_text(if unchanged {
+                        t!("Replaces the description")
+                    } else {
+                        t!("Added after what you wrote")
+                    })
+                    .clicked()
+                {
+                    let body = &f.templates[i].body;
+                    if unchanged {
+                        f.body = body.clone();
+                    } else {
+                        f.body = format!("{}\n\n{body}", f.body.trim_end());
+                    }
+                    f.template = Some(i);
                 }
             }
+        });
+}
+
+fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bool {
+    ui.heading(t!("Add account"));
+    ui.add_space(4.0);
+    egui::Grid::new("login-services")
+        .num_columns(4)
+        .spacing([6.0, 6.0])
+        .show(ui, |ui| {
+            for (i, (kind, self_hosted, name)) in SERVICES.iter().enumerate() {
+                let on = f.kind == *kind && f.self_hosted == *self_hosted;
+                let tile = egui::Button::selectable(on, *name).min_size(vec2(130.0, 30.0));
+                if ui.add(tile).clicked() && !on {
+                    f.kind = *kind;
+                    f.self_hosted = *self_hosted;
+                    // Keep a typed server; swap the public hosts.
+                    let public = SERVICES
+                        .iter()
+                        .filter_map(|(k, _, _)| k.default_host())
+                        .any(|h| h == f.host);
+                    if !self_hosted {
+                        f.host = kind.default_host().unwrap_or_default().into();
+                    } else if public {
+                        f.host.clear();
+                    }
+                }
+                if i % 4 == 3 {
+                    ui.end_row();
+                }
+            }
+        });
+    ui.add_space(6.0);
+    if f.self_hosted {
+        ui.label(t!("Server"));
+        ui.add(
+            egui::TextEdit::singleline(&mut f.host)
+                .hint_text("git.example.com")
+                .desired_width(f32::INFINITY),
+        );
+    }
+    let host = f.host.trim().trim_end_matches('/').to_ascii_lowercase();
+    let host = host
+        .strip_prefix("https://")
+        .map(str::to_owned)
+        .unwrap_or(host);
+    match f.kind.user_label() {
+        Some("Organization") => {
+            ui.label(t!("Organization"));
+            ui.add(
+                egui::TextEdit::singleline(&mut f.user)
+                    .hint_text(t!("dev.azure.com/<organization>"))
+                    .desired_width(f32::INFINITY),
+            );
         }
-    });
-    ui.label("Host");
-    ui.add(
-        egui::TextEdit::singleline(&mut f.host)
-            .hint_text("github.com")
-            .desired_width(f32::INFINITY),
-    );
-    let host = f.host.trim().to_ascii_lowercase();
+        Some(_) => {
+            ui.label(t!("Username"));
+            ui.add(
+                egui::TextEdit::singleline(&mut f.user)
+                    .hint_text(t!("For app passwords; empty for an access token"))
+                    .desired_width(f32::INFINITY),
+            );
+        }
+        None => {}
+    }
 
     ui.label(t!("Personal access token"));
     let token = ui.add(
@@ -768,20 +867,21 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
             .hint_text(t!("Paste the token here"))
             .desired_width(f32::INFINITY),
     );
-    let scopes = match f.kind {
-        ForgeKind::GitHub => "repo",
-        ForgeKind::GitLab => "api",
-    };
-    ui.horizontal(|ui| {
+    let url = f.kind.token_url(&host);
+    ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
         if ui
             .add_enabled(!host.is_empty(), egui::Link::new(t!("Create a token")))
-            .on_hover_text(token_url(f.kind, &host))
+            .on_hover_text(&url)
             .clicked()
         {
-            cmds.push(Command::OpenUrl(token_url(f.kind, &host)));
+            cmds.push(Command::OpenUrl(url.clone()));
         }
-        ui.weak(t!("on {} with the \"{}\" scope.", host, scopes));
+        ui.weak(t!(
+            "on {} with the \"{}\" scope.",
+            host,
+            f.kind.token_scopes()
+        ));
     });
 
     if f.kind == ForgeKind::GitHub && !host.is_empty() {
@@ -790,19 +890,19 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
         }
         if let Some((_, Some(gh))) = &f.gh {
             ui.add_space(4.0);
+            let mut used = false;
             ui.horizontal(|ui| {
                 ui.weak(t!("The GitHub CLI is logged in on this computer."));
                 if ui.button(t!("Use GitHub CLI login")).clicked() {
                     cmds.push(Command::VerifyAccount {
                         kind: f.kind,
                         host: host.clone(),
-                        token: gh.clone(),
+                        token: Credentials::token(gh),
                     });
-                    f.token.clear();
-                    f.host.clear();
+                    used = true;
                 }
             });
-            if f.host.is_empty() {
+            if used {
                 return false;
             }
         }
@@ -811,7 +911,10 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
     let note = t!("The token is saved in Ferrum's settings file on this computer.");
     ui.weak(note);
 
-    let ready = !host.is_empty() && !f.token.trim().is_empty();
+    let needs_user = f.kind == ForgeKind::Azure;
+    let ready = !host.is_empty()
+        && !f.token.trim().is_empty()
+        && (!needs_user || !f.user.trim().is_empty());
     let enter = token.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     ui.add_space(8.0);
     let mut keep = true;
@@ -825,7 +928,10 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
                 cmds.push(Command::VerifyAccount {
                     kind: f.kind,
                     host: host.clone(),
-                    token: f.token.trim().to_owned(),
+                    token: Credentials {
+                        token: f.token.trim().to_owned(),
+                        user: f.user.trim().to_owned(),
+                    },
                 });
                 keep = false;
             }
@@ -900,11 +1006,11 @@ mod tests {
     #[test]
     fn builds_token_urls() {
         assert_eq!(
-            token_url(ForgeKind::GitHub, "github.com"),
-            "https://github.com/settings/tokens/new?scopes=repo&description=Ferrum"
+            ForgeKind::GitHub.token_url("github.com"),
+            "https://github.com/settings/tokens/new?scopes=repo,notifications,write:public_key&description=Ferrum"
         );
         assert_eq!(
-            token_url(ForgeKind::GitLab, "gitlab.example.com"),
+            ForgeKind::GitLab.token_url("gitlab.example.com"),
             "https://gitlab.example.com/-/user_settings/personal_access_tokens?name=Ferrum&scopes=api"
         );
     }

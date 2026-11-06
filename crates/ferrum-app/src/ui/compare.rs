@@ -248,6 +248,7 @@ pub fn show(
             .on_hover_text(t!("Swap the order of the two sides"))
             .clicked();
         refresh = ui.button("↻").on_hover_text(t!("Reload")).clicked();
+        crate::ui::ai_review::compare_button(ui, &view.from.rev, &view.to.rev, cmds);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             close = ui.button(t!("Close")).clicked();
         });

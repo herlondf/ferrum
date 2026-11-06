@@ -1,0 +1,255 @@
+//! Strings of hosted services: accounts, SSH keys, prompts, issues, reviews.
+
+pub static T: &[(&str, &str)] = &[
+    // ----- Accounts -----
+    ("Account", "Conta"),
+    ("Add account", "Adicionar conta"),
+    ("Add account…", "Adicionar conta…"),
+    (
+        "Add an account to see its details and repositories.",
+        "Adicione uma conta para ver os detalhes e repositórios dela.",
+    ),
+    (
+        "Used to list and create pull requests and issues, clone your repositories and add SSH keys.",
+        "Usadas para listar e criar pull requests e issues, clonar seus repositórios e adicionar chaves SSH.",
+    ),
+    ("Repositories", "Repositórios"),
+    ("Service", "Serviço"),
+    ("Server", "Servidor"),
+    ("Username", "Usuário"),
+    ("Organization", "Organização"),
+    ("Login", "Login"),
+    ("Status", "Situação"),
+    ("Not checked", "Não verificado"),
+    ("✔ Token works ({})", "✔ O token funciona ({})"),
+    ("Enable notifications", "Ativar notificações"),
+    (
+        "Show the unread GitHub notifications in the toolbar",
+        "Mostra as notificações não lidas do GitHub na barra de ferramentas",
+    ),
+    ("Update token…", "Atualizar token…"),
+    ("Use for {}", "Usar para {}"),
+    (
+        "Several accounts on one server: the first one is used for pull requests and issues",
+        "Várias contas no mesmo servidor: a primeira é usada para pull requests e issues",
+    ),
+    ("Set up SSH…", "Configurar SSH…"),
+    ("Search repositories", "Pesquisar repositórios"),
+    ("Loading repositories…", "Carregando repositórios…"),
+    ("No repositories match", "Nenhum repositório corresponde"),
+    ("From your accounts", "Das suas contas"),
+    (
+        "For app passwords; empty for an access token",
+        "Para senhas de app; vazio para um token de acesso",
+    ),
+    (
+        "dev.azure.com/<organization>",
+        "dev.azure.com/<organização>",
+    ),
+    // ----- Remote -----
+    ("Remote: {}", "Remoto: {}"),
+    (
+        "Remote used for pull requests and issues",
+        "Remoto usado para pull requests e issues",
+    ),
+    (
+        "This repository has no remote on a known hosting service.",
+        "Este repositório não tem remoto em um serviço de hospedagem conhecido.",
+    ),
+    ("The request stopped.", "A requisição parou."),
+    ("Open website", "Abrir site"),
+    // ----- Pull request templates -----
+    ("No template", "Sem modelo"),
+    ("Template: {}", "Modelo: {}"),
+    ("Replaces the description", "Substitui a descrição"),
+    (
+        "Added after what you wrote",
+        "Adicionado depois do que você escreveu",
+    ),
+    // ----- SSH keys -----
+    ("🔐 SSH keys", "🔐 Chaves SSH"),
+    ("SSH keys", "Chaves SSH"),
+    (
+        "SSH configuration: system ssh, with a running ssh-agent.",
+        "Configuração SSH: ssh do sistema, com um ssh-agent em execução.",
+    ),
+    (
+        "SSH configuration: system ssh; no ssh-agent is running.",
+        "Configuração SSH: ssh do sistema; nenhum ssh-agent em execução.",
+    ),
+    ("Generate new key…", "Gerar nova chave…"),
+    ("Add existing key…", "Adicionar chave existente…"),
+    (
+        "Set up SSH for an account…",
+        "Configurar SSH para uma conta…",
+    ),
+    (
+        "No SSH keys found in ~/.ssh.",
+        "Nenhuma chave SSH encontrada em ~/.ssh.",
+    ),
+    ("Location", "Local"),
+    ("Fingerprint", "Impressão digital"),
+    ("Comment", "Comentário"),
+    ("Public key", "Chave pública"),
+    ("Copy to clipboard", "Copiar para a área de transferência"),
+    ("Add to ssh-agent", "Adicionar ao ssh-agent"),
+    (
+        "The agent remembers the passphrase until you log out",
+        "O agente lembra a senha da chave até você sair da sessão",
+    ),
+    ("Added {} to the ssh-agent", "{} adicionada ao ssh-agent"),
+    ("Add to account ⏷", "Adicionar à conta ⏷"),
+    ("Added the key to {} on {}", "Chave adicionada a {} em {}"),
+    ("Remove from list", "Remover da lista"),
+    ("Created {}", "{} criada"),
+    ("Passphrase", "Senha da chave"),
+    ("Optional", "Opcional"),
+    ("Repeat", "Repetir"),
+    ("The passphrases differ.", "As senhas são diferentes."),
+    ("Generate ED25519 key", "Gerar chave ED25519"),
+    (
+        "1. Select or generate a key.\n2. Copy its public key, or add it to an account directly.\n3. Use SSH URLs (git@…) for your remotes.",
+        "1. Selecione ou gere uma chave.\n2. Copie a chave pública ou adicione-a direto a uma conta.\n3. Use URLs SSH (git@…) nos seus remotos.",
+    ),
+    // ----- SSH setup -----
+    ("Set up SSH", "Configurar SSH"),
+    (
+        "Ferrum creates or picks an SSH key and adds it to your account, so git can use SSH URLs without passwords.",
+        "O Ferrum cria ou escolhe uma chave SSH e a adiciona à sua conta, para o git usar URLs SSH sem senhas.",
+    ),
+    ("1. Account", "1. Conta"),
+    ("2. Key", "2. Chave"),
+    ("3. Add it to the account", "3. Adicionar à conta"),
+    (
+        "Add a GitHub, GitLab or Gitea account first.",
+        "Adicione primeiro uma conta do GitHub, GitLab ou Gitea.",
+    ),
+    (
+        "The token needs the \"{}\" scope to add keys.",
+        "O token precisa do escopo \"{}\" para adicionar chaves.",
+    ),
+    ("Generate a new ED25519 key", "Gerar uma nova chave ED25519"),
+    ("Add key to account", "Adicionar chave à conta"),
+    (
+        "✔ Done. The account accepts this key now.",
+        "✔ Pronto. A conta aceita esta chave agora.",
+    ),
+    (
+        "Trust the host key of {}…",
+        "Confiar na chave de host de {}…",
+    ),
+    ("Copy public key", "Copiar chave pública"),
+    // ----- Prompts and hosts -----
+    ("Authentication", "Autenticação"),
+    ("Unknown SSH host", "Host SSH desconhecido"),
+    (
+        "Check the fingerprint against the one the service publishes before trusting it.",
+        "Compare a impressão digital com a publicada pelo serviço antes de confiar.",
+    ),
+    ("Trust and connect", "Confiar e conectar"),
+    ("Password", "Senha"),
+    (
+        "Remember until Ferrum closes",
+        "Lembrar até fechar o Ferrum",
+    ),
+    (
+        "A git credential helper, when set up, saves it for next time.",
+        "Um credential helper do git, se configurado, guarda para a próxima vez.",
+    ),
+    ("Trust SSH host", "Confiar no host SSH"),
+    (
+        "{} is not in your known hosts, so ssh refused to connect.",
+        "{} não está nos seus hosts conhecidos, por isso o ssh recusou a conexão.",
+    ),
+    ("Reading the host keys…", "Lendo as chaves do host…"),
+    (
+        "The server sent these key fingerprints:",
+        "O servidor enviou estas impressões digitais:",
+    ),
+    (
+        "Compare them with the fingerprints the service publishes (for example in its SSH documentation) before trusting the host.",
+        "Compare-as com as impressões digitais publicadas pelo serviço (por exemplo, na documentação de SSH) antes de confiar no host.",
+    ),
+    (
+        "Added to known_hosts. Try the operation again.",
+        "Adicionado ao known_hosts. Tente a operação de novo.",
+    ),
+    ("Trust host", "Confiar no host"),
+    (
+        "The home folder was not found.",
+        "A pasta pessoal não foi encontrada.",
+    ),
+    // ----- Notifications -----
+    ("Notifications", "Notificações"),
+    ("Mark all as read", "Marcar todas como lidas"),
+    ("No unread notifications", "Nenhuma notificação não lida"),
+    ("1 unread notification", "1 notificação não lida"),
+    ("{} unread notifications", "{} notificações não lidas"),
+    (
+        "Notifications could not be loaded: {}",
+        "Não foi possível carregar as notificações: {}",
+    ),
+    // ----- Issues -----
+    ("📋 Issues", "📋 Issues"),
+    ("Issues", "Issues"),
+    ("New issue…", "Nova issue…"),
+    ("New issue", "Nova issue"),
+    ("Issue title", "Título da issue"),
+    (
+        "Describe the problem or idea (Markdown)",
+        "Descreva o problema ou a ideia (Markdown)",
+    ),
+    ("Create issue", "Criar issue"),
+    (
+        "Log in to {} to see issues.",
+        "Entre no {} para ver as issues.",
+    ),
+    ("Loading issues…", "Carregando issues…"),
+    ("No issues match", "Nenhuma issue corresponde"),
+    (
+        "{} has no issues Ferrum can list.",
+        "O {} não tem issues que o Ferrum possa listar.",
+    ),
+    ("Open issues", "Abertas"),
+    ("Closed", "Fechadas"),
+    ("Search titles", "Pesquisar títulos"),
+    ("Assignee", "Responsável"),
+    ("Recent ⏷", "Recentes ⏷"),
+    ("Clear recent searches", "Limpar pesquisas recentes"),
+    ("author", "autor"),
+    ("assignee", "responsável"),
+    ("label", "rótulo"),
+    ("by {}, updated {}", "por {}, atualizada {}"),
+    ("assigned to {}", "atribuída a {}"),
+    ("{} comments", "{} comentários"),
+    ("Copy number", "Copiar número"),
+    // ----- AI review -----
+    ("AI code review", "Revisão de código por IA"),
+    ("AI code review…", "Revisão de código por IA…"),
+    (
+        "Ask the AI tool from Settings > AI to review the changes of this branch",
+        "Pede à ferramenta de IA de Configurações > IA que revise as mudanças deste branch",
+    ),
+    ("AI review", "Revisão por IA"),
+    (
+        "AI code review of the changes between the two commits",
+        "Revisão de código por IA das mudanças entre os dois commits",
+    ),
+    ("Base", "Base"),
+    ("Changes of", "Mudanças de"),
+    (
+        "Reviews git diff {}...{} with: {}",
+        "Revisa git diff {}...{} com: {}",
+    ),
+    ("Save as default prompt", "Salvar como prompt padrão"),
+    ("Reviewing…", "Revisando…"),
+    ("Start review", "Iniciar revisão"),
+    (
+        "No changes between {} and {}.",
+        "Nenhuma mudança entre {} e {}.",
+    ),
+    (
+        "The AI tool returned an empty answer.",
+        "A ferramenta de IA devolveu uma resposta vazia.",
+    ),
+];

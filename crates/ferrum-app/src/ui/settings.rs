@@ -2,12 +2,10 @@
 //! keyboard shortcuts and version information.
 
 use eframe::egui::{self, RichText};
-use ferrum_core::forge::ForgeKind;
 
 use crate::command::{Command, Commands, Op};
 use crate::settings::{PullChoice, Settings, ThemeChoice};
-use crate::ui::dialogs::{Dialog, dirs_home};
-use crate::ui::forge;
+use crate::ui::dialogs::dirs_home;
 
 const REPO_URL: &str = "https://github.com/herlondf/ferrum";
 
@@ -22,13 +20,14 @@ enum Section {
     Commit,
     Ai,
     Accounts,
+    Ssh,
     Shortcuts,
     Commands,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 11] = [
+    const ALL: [Section; 12] = [
         Section::General,
         Section::Appearance,
         Section::Git,
@@ -37,6 +36,7 @@ impl Section {
         Section::Commit,
         Section::Ai,
         Section::Accounts,
+        Section::Ssh,
         Section::Shortcuts,
         Section::Commands,
         Section::About,
@@ -52,6 +52,7 @@ impl Section {
             Section::Commit => t!("✔ Commit"),
             Section::Ai => t!("💡 AI"),
             Section::Accounts => t!("☁ Accounts"),
+            Section::Ssh => t!("🔐 SSH keys"),
             Section::Shortcuts => t!("⌘ Shortcuts"),
             Section::Commands => t!("▶ Custom commands"),
             Section::About => t!("📝 About"),
@@ -69,6 +70,7 @@ pub struct SettingsWindow {
     /// (`None` inside when git is not found).
     git_version: Option<Option<String>>,
     prefs: crate::ui::preferences::State,
+    accounts: crate::ui::accounts::State,
 }
 
 impl SettingsWindow {
@@ -81,6 +83,7 @@ impl SettingsWindow {
             "tools" => Section::Tools,
             "profiles" => Section::Profiles,
             "accounts" => Section::Accounts,
+            "ssh" => Section::Ssh,
             "shortcuts" => Section::Shortcuts,
             "commands" => Section::Commands,
             "about" => Section::About,
@@ -145,7 +148,12 @@ pub fn show(
                             Section::Profiles => profiles(ui, win, settings, cmds),
                             Section::Commit => super::commit_settings::commit(ui, settings),
                             Section::Ai => super::commit_settings::ai(ui, settings),
-                            Section::Accounts => accounts(ui, settings, cmds),
+                            Section::Accounts => {
+                                crate::ui::accounts::accounts(ui, &mut win.accounts, settings, cmds)
+                            }
+                            Section::Ssh => {
+                                crate::ui::accounts::ssh_keys(ui, &mut win.accounts, settings, cmds)
+                            }
                             Section::Shortcuts => crate::ui::shortcuts::section(ui, settings),
                             Section::Commands => {
                                 crate::ui::custom_commands::settings_section(ui, settings, cmds)
@@ -364,56 +372,6 @@ fn profiles(
         settings.profiles.remove(i);
         win.profile = None;
     }
-}
-
-fn accounts(ui: &mut egui::Ui, settings: &mut Settings, cmds: &mut Commands) {
-    heading(ui, &t!("Accounts"));
-    let note = t!("Used to list and create pull requests and merge requests.");
-    ui.weak(note);
-    ui.add_space(6.0);
-    let mut remove = None;
-    if settings.accounts.is_empty() {
-        ui.weak(t!("No accounts yet."));
-    } else {
-        egui::Grid::new("settings-accounts")
-            .num_columns(4)
-            .striped(true)
-            .spacing([16.0, 8.0])
-            .show(ui, |ui| {
-                for (i, a) in settings.accounts.iter().enumerate() {
-                    ui.label(a.kind.name());
-                    ui.label(&a.host);
-                    ui.label(RichText::new(&a.username).strong());
-                    if ui.small_button(t!("Remove")).clicked() {
-                        remove = Some(i);
-                    }
-                    ui.end_row();
-                }
-            });
-    }
-    if let Some(i) = remove {
-        settings.accounts.remove(i);
-    }
-    ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        if ui.button(t!("Add {} account…", "GitHub")).clicked() {
-            cmds.push(Command::Dialog(Dialog::Forge(forge::login(
-                ForgeKind::GitHub,
-                "github.com",
-            ))));
-        }
-        if ui.button(t!("Add {} account…", "GitLab")).clicked() {
-            cmds.push(Command::Dialog(Dialog::Forge(forge::login(
-                ForgeKind::GitLab,
-                "gitlab.com",
-            ))));
-        }
-    });
-    ui.add_space(10.0);
-    let stored = t!("Tokens are stored in Ferrum's settings file on this computer.");
-    let cli = t!("Without a saved GitHub account, the GitHub CLI login (gh auth login) is used.");
-    ui.weak(stored);
-    ui.weak(cli);
 }
 
 /// Mirrors `FerrumApp::shortcuts` in app.rs.

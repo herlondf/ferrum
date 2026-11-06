@@ -13,6 +13,8 @@ use crate::{Error, Result};
 static PROGRAM: RwLock<Option<PathBuf>> = RwLock::new(None);
 static VERBOSE: AtomicBool = AtomicBool::new(false);
 static LOG: Mutex<Vec<LogEntry>> = Mutex::new(Vec::new());
+/// Variables added to every git command (the askpass helper, see `askpass.rs`).
+static GLOBAL_ENV: RwLock<Vec<(String, String)>> = RwLock::new(Vec::new());
 const LOG_LEN: usize = 200;
 const LOG_OUTPUT_LEN: usize = 4000;
 
@@ -22,6 +24,17 @@ pub fn set_program(path: Option<PathBuf>) {
     if let Ok(mut p) = PROGRAM.write() {
         *p = path;
     }
+}
+
+/// Sets variables passed to every git command from now on.
+pub fn set_global_env(env: Vec<(String, String)>) {
+    if let Ok(mut e) = GLOBAL_ENV.write() {
+        *e = env;
+    }
+}
+
+pub fn global_env() -> Vec<(String, String)> {
+    GLOBAL_ENV.read().map(|e| e.clone()).unwrap_or_default()
 }
 
 /// The git executable new `Git` instances use.
@@ -148,7 +161,7 @@ impl Git {
             .args(["-c", "core.editor=true", "-c", "core.quotepath=false"])
             .args(args)
             .stdin(Stdio::null());
-        for (k, v) in &self.env {
+        for (k, v) in global_env().iter().chain(&self.env) {
             cmd.env(k, v);
         }
         no_window(&mut cmd);

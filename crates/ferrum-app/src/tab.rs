@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use eframe::egui;
 use ferrum_core::cli::Git;
-use ferrum_core::forge::{self, HostedRepo};
+use ferrum_core::forge::HostedRepo;
 use ferrum_core::graph::Graph;
 use ferrum_core::ops::ResetMode;
 use ferrum_core::*;
@@ -26,6 +26,7 @@ pub enum View {
     PullRequests,
     /// README, remotes and statistics (`ui::overview`).
     Overview,
+    Issues,
 }
 
 pub struct Message {
@@ -131,6 +132,7 @@ pub struct RepoTab {
     pub file_view: Option<blame::FileView>,
     pub file_tools: crate::ui::file_window::FileTools,
     pub prs: forge_ui::PrState,
+    pub issues: crate::ui::issues::IssueState,
     pub sidebar: crate::ui::sidebar_model::SidebarState,
     pub pane: crate::ui::focus::PaneFocus,
     pub diff_options: crate::ui::diff_prefs::TabDiffOptions,
@@ -198,6 +200,7 @@ impl RepoTab {
             file_view: None,
             file_tools: Default::default(),
             prs: Default::default(),
+            issues: Default::default(),
             sidebar: Default::default(),
             pane: Default::default(),
             diff_options: Default::default(),
@@ -251,12 +254,7 @@ impl RepoTab {
         self.submodules = self.repo.submodules().unwrap_or_default();
         self.worktrees = self.repo.worktrees().unwrap_or_default();
         self.uses_lfs = self.repo.uses_lfs();
-        self.hosted = self
-            .remotes
-            .iter()
-            .find(|r| r.name == "origin")
-            .or_else(|| self.remotes.first())
-            .and_then(|r| forge::parse_remote_url(&r.url));
+        self.hosted = crate::hosted::hosted_for(self);
         self.apply_search();
         self.refresh_status();
         self.keep_selected_commit();
