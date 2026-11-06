@@ -1,8 +1,12 @@
 pub mod activity;
+pub mod ai_message;
 pub mod avatars;
 pub mod background;
 pub mod blame;
 pub mod changes;
+pub mod changes_tools;
+pub mod commit_box;
+pub mod commit_settings;
 pub mod conflicts;
 pub mod details;
 pub mod dialogs;

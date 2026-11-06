@@ -19,18 +19,22 @@ enum Section {
     Git,
     Tools,
     Profiles,
+    Commit,
+    Ai,
     Accounts,
     Shortcuts,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 8] = [
+    const ALL: [Section; 10] = [
         Section::General,
         Section::Appearance,
         Section::Git,
         Section::Tools,
         Section::Profiles,
+        Section::Commit,
+        Section::Ai,
         Section::Accounts,
         Section::Shortcuts,
         Section::About,
@@ -43,6 +47,8 @@ impl Section {
             Section::Git => t!("🔧 Git"),
             Section::Tools => t!("🛠 Tools"),
             Section::Profiles => t!("👤 Profiles"),
+            Section::Commit => t!("✔ Commit"),
+            Section::Ai => t!("💡 AI"),
             Section::Accounts => t!("☁ Accounts"),
             Section::Shortcuts => t!("⌘ Shortcuts"),
             Section::About => t!("📝 About"),
@@ -132,6 +138,8 @@ pub fn show(
                                 crate::ui::preferences::tools(ui, settings);
                             }
                             Section::Profiles => profiles(ui, win, settings, cmds),
+                            Section::Commit => super::commit_settings::commit(ui, settings),
+                            Section::Ai => super::commit_settings::ai(ui, settings),
                             Section::Accounts => accounts(ui, settings, cmds),
                             Section::Shortcuts => shortcuts(ui),
                             Section::About => about(ui, win, cmds),
@@ -400,7 +408,7 @@ fn accounts(ui: &mut egui::Ui, settings: &mut Settings, cmds: &mut Commands) {
 }
 
 /// Mirrors `FerrumApp::shortcuts` in app.rs.
-fn shortcut_list() -> [(&'static str, String); 16] {
+fn shortcut_list() -> [(&'static str, String); 19] {
     [
         ("Mod+P", t!("Command palette")),
         ("Mod+O", t!("Open repository")),
@@ -418,6 +426,9 @@ fn shortcut_list() -> [(&'static str, String); 16] {
         ("Mod+W", t!("Close tab")),
         ("Mod+Tab", t!("Next tab")),
         ("Mod+Shift+Tab", t!("Previous tab")),
+        ("Enter", t!("Stage or unstage the selected files")),
+        ("Mod+Enter", t!("Commit")),
+        ("Mod+Shift+Enter", t!("Commit and push")),
     ]
 }
 

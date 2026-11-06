@@ -5,6 +5,7 @@ mod accent;
 mod app;
 mod benchmark;
 mod command;
+mod commit_prefs;
 mod desktop_notify;
 mod external;
 #[cfg(test)]

@@ -184,14 +184,6 @@ pub static T: &[(&str, &str)] = &[
     ("Staged ({})", "Preparadas ({})"),
     ("Unstage all", "Remover tudo da preparação"),
     ("Nothing staged yet.", "Nada preparado ainda."),
-    (
-        "{}\nDouble-click to unstage",
-        "{}\nClique duas vezes para remover da preparação",
-    ),
-    (
-        "{}\nDouble-click to stage",
-        "{}\nClique duas vezes para preparar",
-    ),
     ("Unstage", "Remover da preparação"),
     ("Stage", "Preparar"),
     ("Discard changes…", "Descartar alterações…"),
@@ -227,18 +219,10 @@ pub static T: &[(&str, &str)] = &[
         "Discard the selected changes? This cannot be undone.",
         "Descartar as alterações selecionadas? Isso não pode ser desfeito.",
     ),
-    (
-        "Commit summary\n\nDescription (optional)",
-        "Resumo do commit\n\nDescrição (opcional)",
-    ),
     ("Amend last commit", "Corrigir o último commit (amend)"),
     (
         "Replace the last commit with the staged changes and this message",
         "Substituir o último commit pelas alterações preparadas e por esta mensagem",
-    ),
-    (
-        "Summary length (72 or fewer is recommended)",
-        "Tamanho do resumo (recomendado: 72 ou menos)",
     ),
     ("Amend commit", "Corrigir commit (amend)"),
     ("Commit 1 file", "Fazer commit de 1 arquivo"),

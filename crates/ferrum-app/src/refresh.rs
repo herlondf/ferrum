@@ -98,8 +98,11 @@ impl RepoTab {
         let path = self.path().to_path_buf();
         let ctx = ctx.clone();
         let (prefs, limit) = self.history.ext.load_options();
+        let amend = self.changes.amend;
         std::thread::spawn(move || {
             let result = RepoTab::new(path).map(|mut t| {
+                // The staged list depends on amend mode.
+                t.changes.amend = amend;
                 t.history.ext.prefs = prefs;
                 t.history.ext.limit = limit;
                 match kind {

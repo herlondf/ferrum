@@ -48,7 +48,8 @@ pub struct FerrumApp {
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
 /// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
-/// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`.
+/// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
+/// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -107,6 +108,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             }
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
             "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
+            "local" => out.push(Command::DevStep(DevStep::Changes(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -594,6 +596,11 @@ impl FerrumApp {
                 DevStep::Sidebar(arg) => {
                     if let Some(t) = self.tab() {
                         sidebar::dev_step(t, &arg);
+                    }
+                }
+                DevStep::Changes(arg) => {
+                    if let Some(t) = self.tabs.get_mut(self.active) {
+                        changes::dev_step(t, &mut self.settings, &arg);
                     }
                 }
             },
@@ -1105,7 +1112,7 @@ impl eframe::App for FerrumApp {
             if state_banner {
                 egui::Panel::top("banner").show(ui, |ui| self.banner(ui, &mut cmds));
             }
-            let settings = &self.settings;
+            let settings = &mut self.settings;
             let tab = &mut self.tabs[self.active];
             if self.dialog.is_none() {
                 focus::handle(&ctx, tab);
@@ -1135,7 +1142,7 @@ impl eframe::App for FerrumApp {
                 }
                 View::Changes => {
                     egui::CentralPanel::default_margins()
-                        .show(ui, |ui| changes::show(ui, tab, &mut cmds));
+                        .show(ui, |ui| changes::show(ui, tab, settings, &mut cmds));
                 }
                 View::Conflicts => {
                     egui::CentralPanel::default_margins()

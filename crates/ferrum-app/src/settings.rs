@@ -108,6 +108,8 @@ pub struct Settings {
     pub background: BackgroundSettings,
     /// History view options, global and per repository.
     pub history: crate::ui::history_model::HistorySettings,
+    pub commit: crate::commit_prefs::CommitPrefs,
+    pub ai: crate::commit_prefs::AiPrefs,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -162,6 +164,8 @@ impl Default for Settings {
             repos: Default::default(),
             background: BackgroundSettings::default(),
             history: Default::default(),
+            commit: Default::default(),
+            ai: Default::default(),
         }
     }
 }

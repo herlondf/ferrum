@@ -23,7 +23,16 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   treemap of changed folders.
 - **Commit details**: message, files and diff; side-by-side **image diff**.
 - **Local changes**: stage/unstage/discard whole files, hunks or single lines;
-  commit and amend; prepared messages for merges, reverts and cherry-picks.
+  flat, tree or single-list view; filter; drag files between lists; hide
+  untracked / show ignored files; `.gitignore` by file, folder, extension or
+  pattern (optionally untracking) and built-in templates; large-file warning for
+  files outside Git LFS; copy or save changes as a patch; reset a file to a revision.
+- **Commit box**: subject and description fields with length limits and a
+  ruler (wrap at ruler), recent messages, drafts kept per worktree,
+  `commit.template`, `Co-authored-by:` completion, sign-off, amend (shows the
+  last commit's changes, warns if already pushed), commit and push, live hook
+  output with "commit without hooks", detached HEAD warning, and an optional
+  AI-written message from a configurable CLI (`claude -p`, `codex exec -`).
 - **Branches, remotes, tags, stashes, submodules and worktrees** in the sidebar,
   each with a context menu (checkout, merge, rebase, rename, delete, push, track…).
 - **Sidebar**: branch folders by `/` (with counts, drag a branch onto a folder to
@@ -86,6 +95,8 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Collapse / expand the selected merge | Left / Right |
 | Refresh | F5 or Ctrl+R |
 | Commit (in the message box) | Ctrl+Enter |
+| Commit and push | Ctrl+Shift+Enter |
+| Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
 | New branch | Ctrl+B |
 | Stash | Ctrl+Shift+S |
 | Fetch / Pull / Push | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
