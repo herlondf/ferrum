@@ -45,6 +45,12 @@ struct Lane {
 
 /// Builds the graph for commits in topological order (children before parents).
 pub fn layout(commits: &[CommitInfo]) -> Graph {
+    layout_with(commits, |_, _, _| true)
+}
+
+/// Like [`layout`], drawing only the parent edges `keep(row, n, parent)`
+/// accepts (first-parent view, collapsed merges).
+pub fn layout_with(commits: &[CommitInfo], keep: impl Fn(usize, usize, Oid) -> bool) -> Graph {
     let mut lanes: Vec<Option<Lane>> = Vec::new();
     let mut next_color = 0;
     let mut graph = Graph::default();
@@ -55,7 +61,7 @@ pub fn layout(commits: &[CommitInfo]) -> Graph {
         c
     };
 
-    for commit in commits {
+    for (row, commit) in commits.iter().enumerate() {
         let mut lines = Vec::new();
         // Lanes that start in this row (they have no line above the center).
         let mut opened = vec![];
@@ -96,7 +102,13 @@ pub fn layout(commits: &[CommitInfo]) -> Graph {
         // Lower half: the first parent always continues this lane, so branches run
         // in parallel until their common ancestor, where they converge. Other
         // parents (merges) join a lane already waiting for them, or open one.
-        for (n, &parent) in commit.parents.iter().enumerate() {
+        let parents = commit
+            .parents
+            .iter()
+            .enumerate()
+            .filter(|&(n, &p)| keep(row, n, p))
+            .map(|(_, &p)| p);
+        for (n, parent) in parents.enumerate() {
             let existing = lanes
                 .iter()
                 .position(|l| l.is_some_and(|l| l.expects == parent));
@@ -165,6 +177,11 @@ fn free_slot(lanes: &mut Vec<Option<Lane>>) -> usize {
             lanes.len() - 1
         }
     }
+}
+
+/// Position of each commit in a list.
+pub fn index_of(commits: &[CommitInfo]) -> std::collections::HashMap<Oid, usize> {
+    commits.iter().enumerate().map(|(i, c)| (c.id, i)).collect()
 }
 
 #[cfg(test)]
@@ -246,6 +263,20 @@ mod tests {
                     .any(|l| l.half == Half::Bottom && l.from == i && l.to == i)
             );
         }
+    }
+
+    #[test]
+    fn skipped_parents_draw_no_edge() {
+        // Without the merge's second parent, the feature lane is never opened.
+        let commits = [
+            commit(4, &[2, 3]),
+            commit(3, &[1]),
+            commit(2, &[1]),
+            commit(1, &[]),
+        ];
+        let g = layout_with(&commits, |_, n, _| n == 0);
+        assert_eq!(g.rows[0].lines.len(), 1);
+        assert_eq!(g.rows[1].lane, 1, "the feature tip opens its own lane");
     }
 
     #[test]
