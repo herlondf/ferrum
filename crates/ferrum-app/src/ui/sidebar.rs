@@ -451,6 +451,8 @@ fn selection_bar(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: 
         {
             cmds.push(Command::Dialog(ref_dialogs::delete_branches(tab, &names)));
         }
+        let all: Vec<String> = st.selection.iter().cloned().collect();
+        crate::ui::sync_ui::selection_buttons(ui, tab, &all, cmds);
         if ui.small_button(t!("Clear")).clicked() {
             st.selection.clear();
         }
@@ -666,7 +668,7 @@ fn local_branch_menu(
         }
         crate::ui::worktrees::branch_menu(ui, tab, &name, false, cmds);
         if b.is_head && ui.button(t!("Pull")).clicked() {
-            cmds.push(Command::Dialog(Dialog::Pull));
+            cmds.push(Command::Dialog(Dialog::pull(tab)));
             ui.close();
         }
         if ui.button(t!("Push {}…", name)).clicked() {
@@ -706,29 +708,7 @@ fn local_branch_menu(
             cmds.push(Command::Dialog(ref_dialogs::delete_branches(tab, &names)));
             ui.close();
         }
-        let remote_branches: Vec<&BranchInfo> = tab
-            .branches
-            .iter()
-            .filter(|r| r.kind == BranchKind::Remote)
-            .collect();
-        if !remote_branches.is_empty() {
-            ui.menu_button(t!("Track remote branch"), |ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(300.0)
-                    .show(ui, |ui| {
-                        for r in remote_branches {
-                            let checked = b.upstream.as_deref() == Some(&r.name);
-                            if ui.selectable_label(checked, &r.name).clicked() {
-                                cmds.run(Op::SetUpstream {
-                                    branch: name.clone(),
-                                    upstream: r.name.clone(),
-                                });
-                                ui.close();
-                            }
-                        }
-                    });
-            });
-        }
+        crate::ui::sync_ui::branch_menu(ui, tab, b, cmds);
         if let Some(m) = &b.missing_upstream {
             ui.colored_label(
                 ui.visuals().warn_fg_color,
@@ -979,6 +959,7 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
                     cmds.push(Command::Copy(remote.url.clone()));
                     ui.close();
                 }
+                crate::ui::sync_ui::remote_menu(ui, tab, remote, cmds);
                 history_options::ref_menu(ui, tab, &format!("refs/remotes/{prefix}"), cmds);
             });
             if h.open {
@@ -1062,15 +1043,9 @@ fn remote_branch_row(
     {
         cmds.push(Command::SelectCommit(t));
     }
-    let checkout = |cmds: &mut Commands| match local {
-        Some(l) => cmds.run(Op::Checkout(l.name.clone())),
-        None => {
-            let local_name = b.split_remote().map_or(b.name.as_str(), |(_, n)| n);
-            cmds.push(Command::Dialog(Dialog::checkout_remote(
-                &b.name, local_name,
-            )));
-        }
-    };
+    // Asks how to update a local branch that is behind or has diverged.
+    let checkout =
+        |cmds: &mut Commands| cmds.push(crate::ui::sync_dialogs::checkout_remote(tab, b));
     if (resp.double_clicked() || action == Some(NavAction::Activate)) && !tab.busy() {
         checkout(cmds);
     }
@@ -1161,6 +1136,7 @@ fn tags(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Comm
             cmds.push(Command::Dialog(Dialog::create_tag("HEAD", &head)));
             ui.close();
         }
+        crate::ui::sync_ui::push_tags_button(ui, tab, &[], cmds);
         ui.menu_button(t!("Sort tags"), |ui| sort_menu(ui, st, true));
     });
     if !h.open {

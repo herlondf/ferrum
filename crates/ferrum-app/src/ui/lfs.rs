@@ -304,7 +304,12 @@ fn track_dialog(
             );
             let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let ok = !new.trim().is_empty();
-            if (ui.add_enabled(ok, egui::Button::new(t!("Track"))).clicked() || enter) && ok {
+            if (ui
+                .add_enabled(ok, egui::Button::new(t!("Track with LFS")))
+                .clicked()
+                || enter)
+                && ok
+            {
                 cmds.push(part(PartOp::LfsTrack(new.trim().to_owned())));
                 new.clear();
                 *waiting = true;

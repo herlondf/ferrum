@@ -129,6 +129,11 @@ impl Git {
         self
     }
 
+    /// The cancel token set with [`Git::with_cancel`].
+    pub fn cancel_token(&self) -> Option<&CancelToken> {
+        self.cancel.as_ref()
+    }
+
     pub fn command(&self, args: &[&str]) -> Command {
         let mut cmd = Command::new(&self.program);
         cmd.current_dir(&self.dir)

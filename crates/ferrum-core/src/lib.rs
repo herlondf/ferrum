@@ -24,6 +24,7 @@ pub mod refs;
 mod repo;
 pub mod stats;
 pub mod submodule;
+pub mod sync;
 pub mod update;
 
 pub use git2::Oid;

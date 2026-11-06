@@ -51,6 +51,7 @@ impl FerrumApp {
         if self.tabs.iter().any(|t| t.live.refreshing()) {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+        crate::sync::auto_fetch(&mut self.tabs, &self.settings.sync, ctx);
         self.check_for_update(ctx);
     }
 

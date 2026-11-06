@@ -242,7 +242,8 @@ fn partial_stash_snapshot_rename_and_drop() {
     );
 
     // A snapshot from the toolbar dropdown keeps the working copy.
-    h.get_by_label("⏷").click();
+    // Fetch, Pull and Push have their own ⏷ before the one of Stash.
+    h.get_all_by_label("⏷").nth(3).unwrap().click();
     frames(&mut h);
     h.get_by_label("Save a snapshot").click();
     settle(&mut h);

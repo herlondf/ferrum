@@ -118,6 +118,9 @@ pub struct Settings {
     /// Submodule options (Settings > Git).
     #[serde(default)]
     pub submodules: crate::repo_parts::SubmodulePrefs,
+    /// Fetch, pull and push options and the automatic fetch.
+    #[serde(default)]
+    pub sync: crate::sync::SyncSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -177,6 +180,7 @@ impl Default for Settings {
             diff: Default::default(),
             refs: Default::default(),
             submodules: Default::default(),
+            sync: Default::default(),
         }
     }
 }

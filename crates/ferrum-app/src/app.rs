@@ -48,6 +48,7 @@ pub struct FerrumApp {
 /// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`,
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login|
 /// submodule|submodule-update|lfs`,
+/// `dialog:fetch|pull|push-many|push-tags|track|remote`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
 /// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
@@ -133,6 +134,27 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 let d = match arg {
                     "branch" => Dialog::create_branch(&head, &head),
                     "push" => Dialog::push(t, &head),
+                    "pull" => Dialog::pull(t),
+                    "fetch" => Dialog::Sync(crate::ui::sync_dialogs::fetch(t, None)),
+                    "push-tags" => Dialog::Sync(crate::ui::sync_dialogs::push_tags(t, &[])),
+                    "push-many" => {
+                        let names = t
+                            .branches
+                            .iter()
+                            .filter(|b| b.kind == ferrum_core::BranchKind::Local);
+                        let names = names.map(|b| b.name.clone()).collect();
+                        Dialog::Sync(crate::ui::sync_dialogs::push_many(t, names))
+                    }
+                    "track" => match t.current_branch() {
+                        Some(b) => Dialog::Sync(crate::ui::sync_dialogs::track(t, b)),
+                        None => continue,
+                    },
+                    "remote" => match t.remotes.first() {
+                        Some(r) => {
+                            Dialog::Sync(crate::ui::sync_dialogs::edit_remote(&r.name, &r.url))
+                        }
+                        None => continue,
+                    },
                     "stash" => Dialog::stash(),
                     "checkout" => crate::ui::ref_dialogs::quick_checkout(),
                     "tag" => Dialog::create_tag("HEAD", &head),
@@ -438,6 +460,7 @@ impl FerrumApp {
         match cmd {
             Command::Run(op) => match self.tabs.get_mut(self.active) {
                 Some(t) => {
+                    let op = crate::sync::with_options(op, &self.settings.sync);
                     let then = crate::repo_parts::after(&op, t, &self.settings.submodules);
                     t.run(op, ctx);
                     if let Some(next) = then {
@@ -659,6 +682,11 @@ impl FerrumApp {
                     crate::repo_settings::store_history(history, &mut self.tabs, self.active);
                 }
             }
+            Command::Sync(f) => {
+                if let Some(t) = self.tabs.get_mut(self.active) {
+                    f(t, &mut self.settings.sync);
+                }
+            }
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -774,44 +802,13 @@ impl FerrumApp {
             };
             ui.separator();
             let busy = tab.busy();
-            let has_remote = !tab.remotes.is_empty();
             use crate::prefs::ToolbarButton as Tb;
             let show = |b| self.settings.prefs.shows(b);
             ui.add_enabled_ui(!busy, |ui| {
-                if show(Tb::Fetch)
-                    && ui
-                        .add_enabled(has_remote, egui::Button::new("🔄 Fetch"))
-                        .on_hover_text(t!("Fetch all remotes (Ctrl+Shift+F)"))
-                        .clicked()
-                {
-                    cmds.run(Op::Fetch { remote: None });
-                }
-                if show(Tb::Pull) {
-                    let pull = ui.add_enabled(
-                        has_remote && tab.head.is_some(),
-                        egui::Button::new("⬇ Pull"),
-                    );
-                    let mode = self.settings.pull.label();
-                    let tip = t!("Pull — {} (Ctrl+Shift+D)\nRight-click for options", mode);
-                    if pull.on_hover_text(tip).clicked() {
-                        cmds.run(Op::Pull(self.settings.pull.mode()));
-                    }
-                }
-                if show(Tb::Push)
-                    && ui
-                        .add_enabled(
-                            has_remote && tab.head.is_some(),
-                            egui::Button::new("⬆ Push"),
-                        )
-                        .on_hover_text(t!("Push (Ctrl+Shift+U)"))
-                        .clicked()
-                    && let Some(b) = &tab.head
-                {
-                    cmds.push(Command::Dialog(Dialog::push(tab, b)));
-                }
+                crate::ui::sync_ui::toolbar(ui, tab, &self.settings, cmds);
                 ui.menu_button("☰", |ui| {
                     if ui.button(t!("Pull with options…")).clicked() {
-                        cmds.push(Command::Dialog(Dialog::Pull));
+                        cmds.push(Command::Dialog(Dialog::pull(tab)));
                         ui.close();
                     }
                     if ui.button(t!("Add remote…")).clicked() {

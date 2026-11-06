@@ -26,6 +26,9 @@ mod refs_tests;
 mod repo_parts;
 mod repo_settings;
 mod settings;
+mod sync;
+#[cfg(test)]
+mod sync_tests;
 mod tab;
 mod ui;
 #[cfg(test)]

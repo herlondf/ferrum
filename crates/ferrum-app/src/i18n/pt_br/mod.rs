@@ -15,6 +15,7 @@ mod parts;
 mod preferences;
 mod refs;
 mod sidebar;
+mod sync;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
     activity::T,
@@ -30,4 +31,5 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     preferences::T,
     refs::T,
     sidebar::T,
+    sync::T,
 ];

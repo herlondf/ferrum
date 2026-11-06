@@ -85,6 +85,11 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/submodules.rs"),
     include_str!("ui/worktrees.rs"),
     include_str!("i18n/pt_br/parts.rs"),
+    include_str!("sync.rs"),
+    include_str!("ui/sync_dialogs.rs"),
+    include_str!("ui/sync_ui.rs"),
+    include_str!("ui/filter_combo.rs"),
+    include_str!("i18n/pt_br/sync.rs"),
 ];
 
 pub fn git(dir: &Path, args: &[&str]) -> String {
@@ -538,10 +543,8 @@ fn push_and_pull_through_the_toolbar() {
 
     let mut h = harness(p);
     frames(&mut h);
+    // A plain click publishes main to origin and sets the upstream.
     h.get_by_label("⬆ Push").click();
-    frames(&mut h);
-    // The dialog proposes origin/main and setting the upstream.
-    h.get_by_role_and_label(Role::Button, "Push").click();
     settle(&mut h);
     assert_eq!(git(remote.path(), &["log", "--format=%s", "main"]), "first");
     assert_eq!(
