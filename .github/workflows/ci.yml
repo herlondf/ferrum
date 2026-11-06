@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+    # A version tag (v0.2.0) also publishes a GitHub release with the installers.
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -47,16 +49,55 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, name: linux-x86_64, bin: ferrum }
-          - { os: windows-latest, name: windows-x86_64, bin: ferrum.exe }
-          - { os: macos-latest, name: macos-arm64, bin: ferrum }
+          # The oldest supported Ubuntu, so the binaries run on older glibc too.
+          - { os: ubuntu-22.04, name: linux-x86_64 }
+          - { os: windows-latest, name: windows-x86_64 }
+          - { os: macos-latest, name: macos-arm64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p ferrum
+
+      - name: Package (.deb, .rpm, AppImage, tarball)
+        if: runner.os == 'Linux'
+        run: |
+          cargo install --locked cargo-deb cargo-generate-rpm
+          sudo curl -sSfL -o /usr/local/bin/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          sudo chmod +x /usr/local/bin/appimagetool
+          scripts/package-linux.sh
+      - name: Package (Ferrum.app)
+        if: runner.os == 'macOS'
+        run: scripts/package-macos.sh
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path target/release/ferrum.exe, README.md, LICENSE-MIT, LICENSE-APACHE `
+            -DestinationPath "dist/Ferrum-$version-windows-x86_64.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: ferrum-${{ matrix.name }}
-          path: target/release/${{ matrix.bin }}
+          path: dist/*
+
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -14,6 +14,7 @@ fi
 install -Dm755 target/release/ferrum "$HOME/.local/bin/ferrum"
 install -Dm644 packaging/linux/ferrum.png "$HOME/.local/share/icons/hicolor/256x256/apps/ferrum.png"
 install -Dm644 packaging/linux/ferrum.desktop "$HOME/.local/share/applications/ferrum.desktop"
+install -Dm644 packaging/linux/io.github.herlondf.Ferrum.metainfo.xml "$HOME/.local/share/metainfo/io.github.herlondf.Ferrum.metainfo.xml"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 

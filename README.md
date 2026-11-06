@@ -25,6 +25,19 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Profiles**: per-repository name, email, SSH key and commit signing.
 - **Command palette** (Ctrl+P), keyboard shortcuts, light/dark theme, zoom,
   tabs that reopen with the app.
+- **Status and activity**: the toolbar shows the repository, branch,
+  ahead/behind and the running operation with its progress; a click opens the
+  **Activity** window with every operation, the exact git commands, their
+  output and result (user and background operations apart). Running
+  operations (fetch, pull, push, clone…) can be cancelled.
+- **Live refresh** without freezing: the working folder is watched for
+  changes (or polled at a set interval), reloads run in the background, and
+  long operations that finish while the window is in the background raise a
+  desktop notification. Window size and position, panel widths and scroll
+  positions are remembered.
+- **Update check** once a day against GitHub Releases ("Version X available";
+  nothing is downloaded or replaced). Each of these can be turned off in
+  Settings.
 
 Writes go through the `git` command line, so hooks, credential helpers, SSH
 config and Git LFS behave exactly as in the terminal. Reads use libgit2 for speed.
@@ -69,8 +82,15 @@ dev rust cargo clippy --all-targets
 
 Without the container, plain `cargo build` / `cargo test` work too.
 
-CI builds and tests on Linux, Windows and macOS, and uploads release binaries
-as artifacts.
+CI builds and tests on Linux, Windows and macOS and uploads the installers as
+artifacts; pushing a `v*` tag publishes them as a GitHub release:
+
+- Linux: `.deb`, `.rpm`, AppImage and a tarball (`scripts/package-linux.sh`,
+  needs `cargo-deb`, `cargo-generate-rpm` and `appimagetool`)
+- macOS: `Ferrum.app` in a zip (`scripts/package-macos.sh`, unsigned)
+- Windows: zip with `ferrum.exe`
+- Flatpak: `packaging/flatpak/io.github.herlondf.Ferrum.yml`
+  (`scripts/flatpak-build.sh`; AppStream metadata in `packaging/linux`)
 
 ### Development aids
 
@@ -79,6 +99,8 @@ as artifacts.
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
   the steps are listed in `startup_commands` in `app.rs`.
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
+- `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
+  graph layout, status…) and prints the best and average of each.
 
 ## License
 

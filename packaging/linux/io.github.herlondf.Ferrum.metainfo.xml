@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.herlondf.Ferrum</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>Ferrum</name>
+  <summary>A fast, cross-platform Git client</summary>
+  <developer id="io.github.herlondf">
+    <name>Herlon D. Filgueira</name>
+  </developer>
+  <description>
+    <p>
+      Ferrum is a Git client for Linux, Windows and macOS. It shows the history
+      as a graph, lets you stage files, hunks and lines, commit, branch, merge,
+      rebase interactively, resolve conflicts and work with GitHub and GitLab
+      pull requests.
+    </p>
+    <ul>
+      <li>History graph with search, commit details and diffs</li>
+      <li>Staging of whole files, hunks or single lines</li>
+      <li>Fetch, pull and push with live progress, and an activity log of every git command</li>
+      <li>Interactive rebase, conflict resolution, stashes, tags, worktrees and submodules</li>
+      <li>GitHub and GitLab pull requests</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">ferrum.desktop</launchable>
+  <url type="homepage">https://github.com/herlondf/ferrum</url>
+  <url type="bugtracker">https://github.com/herlondf/ferrum/issues</url>
+  <url type="vcs-browser">https://github.com/herlondf/ferrum</url>
+  <categories>
+    <category>Development</category>
+    <category>RevisionControl</category>
+  </categories>
+  <keywords>
+    <keyword>git</keyword>
+    <keyword>version control</keyword>
+  </keywords>
+  <provides>
+    <binary>ferrum</binary>
+  </provides>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-06"/>
+  </releases>
+</component>
