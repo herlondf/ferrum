@@ -62,8 +62,8 @@ pub fn find(text: &str, rules: &[IssueRule], hosted: Option<&HostedRepo>) -> Vec
     }
     if let Some(h) = hosted {
         let pattern = match h.kind {
-            ForgeKind::GitHub => r"(?:^|[\s(\[])(#(\d+))\b",
             ForgeKind::GitLab => r"(?:^|[\s(\[])([#!](\d+))\b",
+            _ => r"(?:^|[\s(\[])(#(\d+))\b",
         };
         with_regex(pattern, |re| {
             for caps in re.captures_iter(text) {
@@ -71,10 +71,11 @@ pub fn find(text: &str, rules: &[IssueRule], hosted: Option<&HostedRepo>) -> Vec
                     continue;
                 };
                 let n = n.as_str();
-                let url = match (h.kind, m.as_str().starts_with('!')) {
-                    (ForgeKind::GitHub, _) => format!("{}/issues/{n}", h.web_url()),
-                    (ForgeKind::GitLab, false) => format!("{}/-/issues/{n}", h.web_url()),
-                    (ForgeKind::GitLab, true) => format!("{}/-/merge_requests/{n}", h.web_url()),
+                let n: u64 = n.parse().unwrap_or_default();
+                let url = if m.as_str().starts_with('!') || !h.kind.has_issues() {
+                    h.request_url(n)
+                } else {
+                    h.issue_url(n)
                 };
                 links.push(Link {
                     range: m.range(),

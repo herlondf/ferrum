@@ -75,13 +75,32 @@ impl Profile {
     }
 }
 
-/// A GitHub or GitLab login. Tokens are kept in the app's settings file.
+/// A login on a hosted service. Tokens are kept in the app's settings file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForgeAccount {
     pub kind: ForgeKind,
     pub host: String,
     pub username: String,
     pub token: String,
+    /// Bitbucket Cloud: the username for an app password. Azure DevOps: the organization.
+    #[serde(default)]
+    pub user: String,
+    /// Show this account's GitHub notifications in the toolbar.
+    #[serde(default = "yes")]
+    pub notifications: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl ForgeAccount {
+    pub fn credentials(&self) -> ferrum_core::forge::Credentials {
+        ferrum_core::forge::Credentials {
+            token: self.token.clone(),
+            user: self.user.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +143,9 @@ pub struct Settings {
     /// Commit details: active tab, file list mode, collapsed pane.
     #[serde(default)]
     pub details: crate::ui::details_model::DetailsSettings,
+    /// Hosted services: remote per repository, issue searches, review prompt.
+    #[serde(default)]
+    pub forge: crate::hosted::ForgePrefs,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -185,6 +207,7 @@ impl Default for Settings {
             submodules: Default::default(),
             sync: Default::default(),
             details: Default::default(),
+            forge: Default::default(),
         }
     }
 }
@@ -196,16 +219,21 @@ impl Settings {
         self.recent.truncate(MAX_RECENT);
     }
 
-    /// Token for a forge host: a saved account, or the GitHub CLI login.
-    pub fn token_for(&self, kind: ForgeKind, host: &str) -> Option<String> {
+    /// Token for a forge host: the first saved account for it, or the GitHub CLI login.
+    pub fn token_for(
+        &self,
+        kind: ForgeKind,
+        host: &str,
+    ) -> Option<ferrum_core::forge::Credentials> {
         self.accounts
             .iter()
             .find(|a| a.kind == kind && a.host.eq_ignore_ascii_case(host))
-            .map(|a| a.token.clone())
+            .map(ForgeAccount::credentials)
             .or_else(|| {
                 (kind == ForgeKind::GitHub)
                     .then(|| ferrum_core::forge::gh_cli_token(host))
                     .flatten()
+                    .map(|t| ferrum_core::forge::Credentials::token(&t))
             })
     }
 }

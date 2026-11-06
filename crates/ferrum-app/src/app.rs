@@ -8,6 +8,7 @@ use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
 mod background;
+mod hosted;
 mod parts;
 
 use crate::command::{Command, Commands, DevStep, Op};
@@ -35,6 +36,8 @@ pub struct FerrumApp {
     was_focused: bool,
     /// Background reloads, update check and the Activity window.
     bg: background::State,
+    /// Password prompts, notifications, AI review and SSH windows.
+    hosted: hosted::State,
     /// Dev aid: with `FERRUM_SCREENSHOT=out.ppm`, save the window after a few frames and quit.
     screenshot: Option<(PathBuf, u32)>,
     /// Dev aid: commands from `FERRUM_START`, run on the first frame.
@@ -65,6 +68,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "changes" => out.push(Command::SetView(View::Changes)),
             "history" => out.push(Command::SetView(View::History)),
             "prs" => out.push(Command::SetView(View::PullRequests)),
+            "issues" => out.push(Command::SetView(View::Issues)),
+            // hosted:notifications|review=BASE..HEAD|askpass=PROMPT|trust=HOST|ssh-setup…
+            "hosted" => out.push(Command::Hosted(crate::hosted::HostedCmd::Dev(arg.into()))),
             "commit" => {
                 if let Some(c) = tab.and_then(|t| t.commits.get(arg.parse::<usize>().unwrap_or(0)))
                 {
@@ -208,6 +214,7 @@ impl FerrumApp {
             applied: None,
             was_focused: true,
             bg: Default::default(),
+            hosted: Default::default(),
             screenshot,
             startup: Vec::new(),
         };
@@ -400,10 +407,14 @@ impl FerrumApp {
             }
             JobOutput::Account(acc) => {
                 let msg = t!("Logged in to {} as {}", acc.host, acc.username);
-                self.settings
-                    .accounts
-                    .retain(|a| !(a.kind == acc.kind && a.host.eq_ignore_ascii_case(&acc.host)));
+                // Several accounts per service; logging in again replaces the token.
+                self.settings.accounts.retain(|a| {
+                    !(a.kind == acc.kind
+                        && a.host.eq_ignore_ascii_case(&acc.host)
+                        && a.username == acc.username)
+                });
                 self.settings.accounts.push(acc);
+                self.hosted.notifications_changed();
                 self.info(msg);
                 if self.tab().is_some_and(|t| t.view == View::PullRequests) {
                     self.load_pull_requests();
@@ -612,7 +623,9 @@ impl FerrumApp {
                         kind,
                         host,
                         username,
-                        token,
+                        token: token.token,
+                        user: token.user,
+                        notifications: true,
                     }))
                 });
             }
@@ -702,6 +715,7 @@ impl FerrumApp {
                     f(t, &mut self.settings.sync);
                 }
             }
+            Command::Hosted(c) => self.handle_hosted(c, ctx),
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -800,6 +814,7 @@ impl FerrumApp {
                 if let Some(tab) = self.tabs.get(self.active) {
                     ui.separator();
                     crate::ui::tools::repository_menu(ui, tab.path(), cmds);
+                    crate::ui::issues::website_button(ui, tab, cmds);
                 }
                 if !self.settings.recent.is_empty() {
                     ui.separator();
@@ -913,6 +928,7 @@ impl FerrumApp {
                 {
                     cmds.push(Command::ShowPalette);
                 }
+                self.notifications_button(ui, cmds);
                 self.update_link(ui);
             });
         });
@@ -1076,6 +1092,7 @@ impl eframe::App for FerrumApp {
         self.apply_look(&ctx);
         self.poll_jobs(&ctx);
         self.background_tick(&ctx);
+        self.hosted_tick(&ctx);
 
         let mut cmds = Commands::default();
         for c in std::mem::take(&mut self.startup) {
@@ -1165,6 +1182,11 @@ impl eframe::App for FerrumApp {
                     egui::CentralPanel::default_margins()
                         .show(ui, |ui| forge_ui::show_view(ui, tab, settings, &mut cmds));
                 }
+                View::Issues => {
+                    egui::CentralPanel::default_margins().show(ui, |ui| {
+                        crate::ui::issues::show_view(ui, tab, settings, &mut cmds)
+                    });
+                }
             }
             if tab.rebase.is_some() {
                 rebase::show(&ctx, tab, &mut cmds);
@@ -1203,6 +1225,7 @@ impl eframe::App for FerrumApp {
 
         self.show_activity(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
+        self.hosted_windows(&ctx, &mut cmds);
 
         for c in cmds.take() {
             self.handle(c, &ctx);

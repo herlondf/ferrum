@@ -265,6 +265,14 @@ fn views(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Com
         if r.clicked() || a.is_some() {
             cmds.push(Command::SetView(View::PullRequests));
         }
+        if h.kind.has_issues() {
+            let on = tab.view == View::Issues;
+            let label = t!("📋 Issues");
+            let (r, a) = leaf(ui, st, "view:issues", egui::Button::selectable(on, label));
+            if r.clicked() || a.is_some() {
+                cmds.push(Command::SetView(View::Issues));
+            }
+        }
     }
 }
 
@@ -737,6 +745,7 @@ fn local_branch_menu(
         }
     }
     history_options::ref_menu(ui, tab, &format!("refs/heads/{name}"), cmds);
+    crate::ui::ai_review::menu_item(ui, tab, &name, cmds);
     ui.separator();
     pin_button(ui, st, &format!("refs/heads/{name}"));
     if ui.button(t!("Copy name")).clicked() {
@@ -1098,6 +1107,7 @@ fn remote_branch_row(
             }
         });
         history_options::ref_menu(ui, tab, &format!("refs/remotes/{}", b.name), cmds);
+        crate::ui::ai_review::menu_item(ui, tab, &b.name, cmds);
         ui.separator();
         pin_button(ui, st, &format!("refs/remotes/{}", b.name));
         if ui.button(t!("Copy name")).clicked() {

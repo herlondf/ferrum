@@ -1332,10 +1332,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
     }
     crate::ui::ref_dialogs::label_menu(ui, tab, &labels, cmds);
     if let Some(h) = &tab.hosted {
-        let url = match h.kind {
-            ferrum_core::forge::ForgeKind::GitHub => format!("{}/commit/{sha}", h.web_url()),
-            ferrum_core::forge::ForgeKind::GitLab => format!("{}/-/commit/{sha}", h.web_url()),
-        };
+        let url = h.commit_url(&sha);
         if ui.button(t!("Open on {}", h.kind.name())).clicked() {
             cmds.push(Command::OpenUrl(url));
             ui.close();

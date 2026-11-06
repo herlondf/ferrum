@@ -45,7 +45,7 @@ pub enum Command {
     VerifyAccount {
         kind: ferrum_core::forge::ForgeKind,
         host: String,
-        token: String,
+        token: ferrum_core::forge::Credentials,
     },
     Clone {
         url: String,
@@ -73,6 +73,8 @@ pub enum Command {
     Sync(crate::sync::SyncFn),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
+    /// Hosted services: reviews, notifications, SSH hosts (see `hosted.rs`).
+    Hosted(crate::hosted::HostedCmd),
 }
 
 pub enum DevStep {
@@ -257,7 +259,7 @@ pub enum Op {
     /// queued behind the `Push` of its branch.
     CreatePullRequest {
         hosted: HostedRepo,
-        token: String,
+        token: ferrum_core::forge::Credentials,
         pr: NewPullRequest,
     },
     /// Branch, tag and stash operations of `ui::ref_dialogs`.

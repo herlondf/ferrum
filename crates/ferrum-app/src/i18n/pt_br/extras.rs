@@ -62,13 +62,8 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Delete", "Excluir"),
     ("Accounts", "Contas"),
-    (
-        "Used to list and create pull requests and merge requests.",
-        "Usadas para listar e criar pull requests e merge requests.",
-    ),
     ("No accounts yet.", "Nenhuma conta ainda."),
     ("Remove", "Remover"),
-    ("Add {} account…", "Adicionar conta do {}…"),
     (
         "Tokens are stored in Ferrum's settings file on this computer.",
         "Os tokens ficam salvos no arquivo de configurações do Ferrum neste computador.",
@@ -191,10 +186,6 @@ pub static T: &[(&str, &str)] = &[
     ("{} hours ago", "há {} horas"),
     ("yesterday", "ontem"),
     ("{} days ago", "há {} dias"),
-    (
-        "This repository has no GitHub or GitLab remote.",
-        "Este repositório não tem remoto no GitHub ou GitLab.",
-    ),
     (
         "Open the repository in the browser",
         "Abrir o repositório no navegador",

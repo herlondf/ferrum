@@ -11,6 +11,7 @@ mod extras;
 mod file_history;
 mod flow;
 mod history;
+mod hosted;
 mod local;
 mod main;
 mod parts;
@@ -31,6 +32,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     file_history::T,
     flow::T,
     history::T,
+    hosted::T,
     local::T,
     preferences::T,
     refs::T,
