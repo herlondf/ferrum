@@ -134,6 +134,11 @@ impl Git {
         self.cancel.as_ref()
     }
 
+    /// The command log set with [`Git::with_log`].
+    pub fn log(&self) -> Option<&CommandLog> {
+        self.log.as_ref()
+    }
+
     pub fn command(&self, args: &[&str]) -> Command {
         let mut cmd = Command::new(&self.program);
         cmd.current_dir(&self.dir)
