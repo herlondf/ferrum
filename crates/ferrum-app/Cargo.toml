@@ -1,0 +1,10 @@
+[package]
+name = "ferrum"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+eframe = "0.37.0"
+ferrum-core = { version = "0.1.0", path = "../ferrum-core" }
+rfd = "0.17.2"

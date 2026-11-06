@@ -1,0 +1,9 @@
+[package]
+name = "ferrum-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+git2 = { version = "0.21.0", features = ["vendored-libgit2", "vendored-openssl"] }
+thiserror = "2.0.21"
