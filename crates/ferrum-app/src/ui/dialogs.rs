@@ -68,6 +68,10 @@ pub enum Dialog {
     Worktree(crate::ui::worktrees::WorktreeDialog),
     /// Merge, rebase, cherry-pick, revert, reword and local-changes prompts.
     Flow(crate::ui::flow_dialogs::FlowDialog),
+    GitFlow(crate::ui::gitflow::GitFlowDialog),
+    Bisect(crate::ui::bisect::BisectDialog),
+    /// Preview and options before applying a patch.
+    Patch(crate::ui::patches::PatchDialog),
 }
 
 impl Dialog {
@@ -612,6 +616,9 @@ fn body(
         Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Flow(d) => crate::ui::flow_dialogs::show(ui, d, tab, cmds, enter),
+        Dialog::GitFlow(d) => crate::ui::gitflow::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Bisect(d) => crate::ui::bisect::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Patch(d) => crate::ui::patches::show_dialog(ui, d, tab, cmds, enter),
     }
 }
 

@@ -123,6 +123,7 @@ pub fn state_label(s: RepoState) -> String {
         RepoState::CherryPick => t!("Cherry-pick in progress"),
         RepoState::Revert => t!("Revert in progress"),
         RepoState::Bisect => t!("Bisect in progress"),
+        RepoState::Am => t!("Applying patches"),
         RepoState::Other => t!("Operation in progress"),
     }
 }
@@ -135,6 +136,7 @@ pub fn state_name(s: RepoState) -> String {
         RepoState::CherryPick => t!("cherry-pick"),
         RepoState::Revert => t!("revert"),
         RepoState::Bisect => t!("bisect"),
+        RepoState::Am => t!("patch series"),
         _ => t!("operation"),
     }
 }

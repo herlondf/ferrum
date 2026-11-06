@@ -628,6 +628,14 @@ fn paint_row(
             ) + 4.0;
         }
     }
+    x = crate::ui::bisect::paint_mark(
+        &desc,
+        rect,
+        pos2(x, line1),
+        tab,
+        commit.id,
+        visuals.dark_mode,
+    );
     if ext.unpushed.contains(&commit.id) {
         x = icon(&desc, pos2(x, line1), "⬆", lane_color(2));
     }
@@ -1228,6 +1236,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             cmds.push(Command::Dialog(crate::ui::flow_dialogs::revert(tab, id)));
             ui.close();
         }
+        crate::ui::bisect::commit_menu(ui, tab, id, cmds);
         // Branches that are not checked out can simply be moved here.
         let movable: Vec<String> = tab
             .branches
@@ -1330,6 +1339,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
         cmds.push(Command::Copy(msg.trim_end().to_owned()));
         ui.close();
     }
+    crate::ui::patches::commit_menu(ui, id, cmds);
     crate::ui::ref_dialogs::label_menu(ui, tab, &labels, cmds);
     if let Some(h) = &tab.hosted {
         let url = match h.kind {

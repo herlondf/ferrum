@@ -56,6 +56,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         tab.conflicts.resolved.clear();
         return;
     }
+    if tab.state == RepoState::Bisect {
+        return crate::ui::bisect::banner(ui, tab, cmds);
+    }
     let info = conflicts::in_progress(tab);
     let tab = &*tab;
     let conflicts = tab.status.conflicted.len();
@@ -114,6 +117,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                         ui.label(t!("on"));
                         ui.strong(&head);
                     }
+                    RepoState::Am => crate::ui::patches::banner_text(ui, tab),
                     s => {
                         ui.strong(crate::util::state_label(s));
                     }
@@ -147,7 +151,7 @@ fn buttons(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands, conflicts: usi
         }
         if matches!(
             tab.state,
-            RepoState::Rebase | RepoState::CherryPick | RepoState::Revert
+            RepoState::Rebase | RepoState::CherryPick | RepoState::Revert | RepoState::Am
         ) && ui
             .button(t!("Skip"))
             .on_hover_text(t!("Leave out the commit being applied"))

@@ -714,6 +714,7 @@ fn local_branch_menu(
             ui.close();
         }
         crate::ui::sync_ui::branch_menu(ui, tab, b, cmds);
+        crate::ui::gitflow::branch_menu(ui, tab, &name, cmds);
         if let Some(m) = &b.missing_upstream {
             ui.colored_label(
                 ui.visuals().warn_fg_color,

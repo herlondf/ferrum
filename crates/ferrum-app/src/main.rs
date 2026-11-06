@@ -18,6 +18,8 @@ mod flow;
 #[cfg(test)]
 mod flow_tests;
 #[cfg(test)]
+mod fork_tools_tests;
+#[cfg(test)]
 mod history_tests;
 mod icon;
 mod jobs;

@@ -119,6 +119,7 @@ pub fn multi_menu(ui: &mut egui::Ui, tab: &RepoTab, id: Oid, cmds: &mut Commands
                 ui.close();
             }
         });
+        crate::ui::patches::multi_menu(ui, tab, &many, cmds);
     });
     ui.separator();
     if ui.button(t!("Clear selection")).clicked() {
