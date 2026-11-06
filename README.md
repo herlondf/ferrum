@@ -13,6 +13,13 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   commit and amend; prepared messages for merges, reverts and cherry-picks.
 - **Branches, remotes, tags, stashes, submodules and worktrees** in the sidebar,
   each with a context menu (checkout, merge, rebase, rename, delete, push, track…).
+- **Sidebar**: branch folders by `/` (with counts, drag a branch onto a folder to
+  move it), pinned branches and tags (also in the palette), quick filter, sorting
+  (alphabetical, most recent commit, folders first; `v2` before `v10`), upstream
+  icons (○ local only, ☁ published, ⚠ upstream gone), drag a branch onto another
+  to merge or rebase, double-click to check out / track / open, "Select stale
+  local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
+  per section. Open folders, pins and sort order are kept per repository.
 - **Fetch, pull and push** with live progress, force-with-lease and upstream setup.
 - **Interactive rebase** planner: reorder by drag and drop, reword, squash,
   fixup, edit, drop.
@@ -46,6 +53,8 @@ Git must be installed and on the `PATH`.
 | Undo | Ctrl+Z |
 | Next / previous tab, close tab | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+W |
 | Settings | Ctrl+, |
+| Move between sidebar, commit list and details | Tab / Shift+Tab |
+| Sidebar: move, open/close, check out, select | Arrows, Home/End, Enter, Space |
 
 On macOS, Cmd replaces Ctrl.
 
