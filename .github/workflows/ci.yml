@@ -40,6 +40,8 @@ jobs:
           git config --global user.name "CI"
           git config --global user.email "ci@example.com"
           git config --global init.defaultBranch main
+      # Test repositories (and submodule clones) keep LF line endings.
+      - run: git config --global core.autocrlf false
       - run: cargo test --workspace
 
   build:
