@@ -20,6 +20,7 @@ pub mod ops;
 pub mod rebase;
 mod repo;
 pub mod stats;
+pub mod sync;
 pub mod update;
 
 pub use git2::Oid;
