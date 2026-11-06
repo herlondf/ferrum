@@ -30,6 +30,9 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/rebase.rs"),
     include_str!("ui/settings.rs"),
     include_str!("ui/sidebar.rs"),
+    include_str!("ui/sidebar_model.rs"),
+    include_str!("ui/focus.rs"),
+    include_str!("i18n/pt_br/sidebar.rs"),
     include_str!("i18n/mod.rs"),
     include_str!("i18n/pt_br/mod.rs"),
     include_str!("i18n/pt_br/common.rs"),
@@ -390,3 +393,7 @@ fn push_and_pull_through_the_toolbar() {
     assert_eq!(git(p, &["log", "-1", "--format=%s"]), "from someone else");
     assert!(p.join("b.txt").exists());
 }
+
+/// Sidebar flows (in their own file to keep this one small).
+#[path = "ui_tests_sidebar.rs"]
+mod sidebar;

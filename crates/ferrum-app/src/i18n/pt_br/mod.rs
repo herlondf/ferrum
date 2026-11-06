@@ -6,5 +6,6 @@ mod common;
 mod editing;
 mod extras;
 mod main;
+mod sidebar;
 
-pub static TABLES: &[&[(&str, &str)]] = &[common::T, main::T, editing::T, extras::T];
+pub static TABLES: &[&[(&str, &str)]] = &[common::T, main::T, editing::T, extras::T, sidebar::T];

@@ -98,6 +98,9 @@ pub struct Settings {
     pub accounts: Vec<ForgeAccount>,
     /// Folder suggested when cloning.
     pub clone_dir: String,
+    /// Sidebar state per repository (pinned refs, open folders, sort).
+    #[serde(default)]
+    pub repos: std::collections::BTreeMap<String, crate::ui::sidebar_model::RepoPrefs>,
 }
 
 impl Default for Settings {
@@ -113,6 +116,7 @@ impl Default for Settings {
             profiles: Vec::new(),
             accounts: Vec::new(),
             clone_dir: String::new(),
+            repos: Default::default(),
         }
     }
 }

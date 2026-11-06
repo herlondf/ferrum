@@ -64,6 +64,8 @@ pub enum DevStep {
     Search(String),
     Select(ferrum_core::DiffSource, String),
     Theme(crate::settings::ThemeChoice),
+    /// `sidebar:open:KEY`, `sidebar:pin:REF`, `sidebar:filter:TEXT`, `sidebar:focus`.
+    Sidebar(String),
 }
 
 /// Collects commands while the UI is drawn.
@@ -142,6 +144,7 @@ pub enum Op {
         branch: String,
         upstream: String,
     },
+    UnsetUpstream(String),
     Merge {
         rev: String,
         mode: MergeMode,
@@ -251,6 +254,7 @@ impl Op {
             Op::DeleteBranch { name, .. } => t!("Delete branch {}", name),
             Op::MoveBranch { name, .. } => t!("Move branch {}", name),
             Op::SetUpstream { branch, upstream } => t!("Track {} from {}", upstream, branch),
+            Op::UnsetUpstream(b) => t!("Stop tracking for {}", b),
             Op::Merge { rev, .. } => t!("Merge {}", short(rev)),
             Op::Rebase { onto } => t!("Rebase onto {}", short(onto)),
             Op::InteractiveRebase { steps, .. } => {
@@ -352,6 +356,7 @@ impl Op {
             Op::DeleteBranch { name, force } => ops::delete_branch(git, name, *force),
             Op::MoveBranch { name, target } => ops::move_branch(git, name, target),
             Op::SetUpstream { branch, upstream } => ops::set_upstream(git, branch, upstream),
+            Op::UnsetUpstream(b) => ops::unset_upstream(git, b),
             Op::Merge { rev, mode } => ops::merge(git, rev, *mode),
             Op::Rebase { onto } => ops::rebase(git, onto),
             Op::InteractiveRebase { base, steps } => ferrum_core::rebase::run(git, *base, steps),

@@ -16,6 +16,7 @@ use crate::ui::{
     blame, changes, conflicts, details, forge as forge_ui, history, palette, rebase,
     settings as settings_ui, sidebar,
 };
+use crate::ui::{focus, sidebar_model};
 
 pub struct FerrumApp {
     pub(crate) tabs: Vec<RepoTab>,
@@ -41,7 +42,8 @@ pub struct FerrumApp {
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
-/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
+/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
+/// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -73,6 +75,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             }))),
             "palette" => out.push(Command::ShowPalette),
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
+            "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -152,7 +155,10 @@ impl FerrumApp {
 
     fn open(&mut self, path: PathBuf) {
         match RepoTab::open(path) {
-            Ok(tab) => {
+            Ok(mut tab) => {
+                let key = sidebar_model::repo_key(tab.path());
+                let prefs = self.settings.repos.get(&key).cloned().unwrap_or_default();
+                tab.sidebar = sidebar_model::SidebarState::with_prefs(prefs);
                 self.settings.add_recent(tab.path().to_path_buf());
                 if let Some(i) = self.tabs.iter().position(|t| t.path() == tab.path()) {
                     self.active = i;
@@ -546,6 +552,11 @@ impl FerrumApp {
                     if let Some(t) = self.tab() {
                         t.view = View::Changes;
                         t.select_change(source, path);
+                    }
+                }
+                DevStep::Sidebar(arg) => {
+                    if let Some(t) = self.tab() {
+                        sidebar::dev_step(t, &arg);
                     }
                 }
             },
@@ -1035,6 +1046,9 @@ impl eframe::App for FerrumApp {
             }
             let settings = &self.settings;
             let tab = &mut self.tabs[self.active];
+            if self.dialog.is_none() {
+                focus::handle(&ctx, tab);
+            }
             egui::Panel::left("sidebar")
                 .resizable(true)
                 .default_size(230.0)
@@ -1043,12 +1057,13 @@ impl eframe::App for FerrumApp {
                 });
             match tab.view {
                 View::History => {
-                    egui::Panel::bottom("details")
+                    let r = egui::Panel::bottom("details")
                         .resizable(true)
                         .default_size(300.0)
                         .show(ui, |ui| {
                             details::show(ui, tab, &mut cmds);
                         });
+                    tab.pane.details_rect = Some(r.response.rect);
                     egui::CentralPanel::default_margins().show(ui, |ui| {
                         history::search_bar(ui, tab, &mut cmds);
                         history::commit_list(ui, tab, &mut cmds);
@@ -1074,6 +1089,7 @@ impl eframe::App for FerrumApp {
             if tab.rebase.is_some() {
                 rebase::show(&ctx, tab, &mut cmds);
             }
+            focus::paint(&ctx, tab);
         }
 
         if let Some(mut d) = self.dialog.take() {
@@ -1106,6 +1122,12 @@ impl eframe::App for FerrumApp {
 
         for c in cmds.take() {
             self.handle(c, &ctx);
+        }
+        for t in &mut self.tabs {
+            if let Some(prefs) = t.sidebar.take_dirty() {
+                let key = sidebar_model::repo_key(t.path());
+                self.settings.repos.insert(key, prefs);
+            }
         }
         if self.tabs.iter().any(|t| t.job.is_some()) || self.global_job.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
