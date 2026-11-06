@@ -17,6 +17,9 @@ mod jobs;
 mod prefs;
 mod refresh;
 mod settings;
+mod sync;
+#[cfg(test)]
+mod sync_tests;
 mod tab;
 mod ui;
 #[cfg(test)]

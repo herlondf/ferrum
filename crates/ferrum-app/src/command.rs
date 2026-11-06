@@ -7,6 +7,7 @@ use ferrum_core::cli::Git;
 use ferrum_core::forge::{self, HostedRepo, NewPullRequest};
 use ferrum_core::ops::{self, MergeMode, PatchTarget, PullMode, PushOptions, ResetMode, Side};
 use ferrum_core::rebase::Step;
+use ferrum_core::sync;
 use ferrum_core::{FileChange, Identity, Oid, RepoState, StashInfo};
 
 use crate::jobs::{JobOutput, JobResult, Refresh};
@@ -66,6 +67,8 @@ pub enum Command {
     SetGlobalIdentity(ferrum_core::config::GlobalIdentity),
     /// Change history options or graph filters (see `ui::history_options`).
     History(crate::ui::history_options::HistoryFn),
+    /// Change remembered fetch/pull/push options (see `sync.rs`).
+    Sync(crate::sync::SyncFn),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }
@@ -138,6 +141,19 @@ pub enum Op {
     },
     Pull(PullMode),
     Push(PushOptions),
+    FetchWith(ferrum_core::sync::FetchOptions),
+    PullWith(ferrum_core::sync::PullOptions),
+    /// Branches (possibly renamed) and tags to one remote.
+    PushRefs(ferrum_core::sync::PushRequest),
+    /// Fast-forward (branch, target) pairs without checking them out.
+    FastForward(Vec<(String, String)>),
+    EditRemote {
+        old: String,
+        new: String,
+        url: String,
+    },
+    /// `git ls-remote` a remote name or URL, with a timeout.
+    TestRemote(String),
     PushTag {
         remote: String,
         tag: String,
@@ -275,6 +291,29 @@ impl Op {
             Op::Fetch { remote: Some(r) } => t!("Fetch {}", r),
             Op::Fetch { remote: None } => t!("Fetch all remotes"),
             Op::Pull(_) => t!("Pull"),
+            Op::FetchWith(o) => match o.remotes.as_slice() {
+                [] => t!("Fetch all remotes"),
+                [r] => t!("Fetch {}", r),
+                list => t!("Fetch {}", list.join(", ")),
+            },
+            Op::PullWith(o) => match (&o.remote, &o.branch) {
+                (Some(r), Some(b)) => t!("Pull {}/{}", r, b),
+                _ => t!("Pull"),
+            },
+            Op::PushRefs(r) => {
+                let mut what: Vec<String> = r.branches.iter().map(|b| b.0.clone()).collect();
+                what.extend(r.tags.iter().cloned());
+                if r.all_tags {
+                    what.push(t!("all tags"));
+                }
+                t!("Push {} to {}", what.join(", "), r.remote)
+            }
+            Op::FastForward(pairs) => match pairs.as_slice() {
+                [(b, to)] => t!("Fast-forward {} to {}", b, short(to)),
+                list => t!("Fast-forward {} branches", list.len()),
+            },
+            Op::EditRemote { old, .. } => t!("Edit remote {}", old),
+            Op::TestRemote(r) => t!("Test connection to {}", r),
             Op::Push(o) => t!("Push {} to {}", o.branch, o.remote),
             Op::PushTag { tag, remote } => t!("Push tag {} to {}", tag, remote),
             Op::DeleteRemoteRef { remote, name } => t!("Delete {} from {}", name, remote),
@@ -340,6 +379,8 @@ impl Op {
             | Op::ResolveWith { .. }
             | Op::SaveResolution { .. } => Refresh::Status,
             Op::SetIdentity(_) => Refresh::Status,
+            // Status, so "done" is reported.
+            Op::TestRemote(_) => Refresh::Status,
             Op::CreatePullRequest { .. } => Refresh::None,
             _ => Refresh::All,
         }
@@ -395,6 +436,14 @@ impl Op {
             Op::Fetch { remote } => ops::fetch(git, remote.as_deref(), p),
             Op::Pull(mode) => ops::pull(git, *mode, p),
             Op::Push(opts) => ops::push(git, opts, p),
+            Op::FetchWith(o) => sync::fetch(git, o, p),
+            Op::PullWith(o) => sync::pull(git, o, p),
+            Op::PushRefs(r) => sync::push(git, r, p),
+            Op::FastForward(pairs) => sync::fast_forward_many(git, pairs),
+            Op::EditRemote { old, new, url } => sync::edit_remote(git, old, new, url),
+            Op::TestRemote(r) => {
+                sync::test_connection(git, r, std::time::Duration::from_secs(30)).map(drop)
+            }
             Op::PushTag { remote, tag } => ops::push_tag(git, remote, tag, p),
             Op::DeleteRemoteRef { remote, name } => ops::delete_remote_ref(git, remote, name, p),
             Op::Checkout(b) => ops::checkout(git, b),

@@ -112,6 +112,9 @@ pub struct Settings {
     pub ai: crate::commit_prefs::AiPrefs,
     #[serde(default)]
     pub diff: crate::ui::diff_prefs::DiffPrefs,
+    /// Fetch, pull and push options and the automatic fetch.
+    #[serde(default)]
+    pub sync: crate::sync::SyncSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -169,6 +172,7 @@ impl Default for Settings {
             commit: Default::default(),
             ai: Default::default(),
             diff: Default::default(),
+            sync: Default::default(),
         }
     }
 }

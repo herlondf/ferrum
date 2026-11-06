@@ -138,6 +138,8 @@ pub struct RepoTab {
     pub message: Option<Message>,
     /// Background refresh and file watching (see `refresh.rs`).
     pub live: crate::refresh::Live,
+    /// Automatic fetch (see `sync.rs`).
+    pub sync: crate::sync::TabSync,
 }
 
 impl RepoTab {
@@ -195,6 +197,7 @@ impl RepoTab {
             queue: VecDeque::new(),
             message: None,
             live: Default::default(),
+            sync: Default::default(),
         })
     }
 
@@ -446,7 +449,6 @@ impl RepoTab {
     /// Runs an operation on behalf of the app (e.g. auto-fetch): it is listed
     /// under Background in the activity window and fails quietly. Returns
     /// `false`, doing nothing, while another operation is running or queued.
-    #[allow(dead_code)] // For auto-fetch.
     pub fn run_background(&mut self, op: Op, ctx: &egui::Context) -> bool {
         if self.job.is_some() || !self.queue.is_empty() {
             return false;
@@ -584,6 +586,7 @@ impl RepoTab {
             }],
             Op::Merge { .. }
             | Op::Pull(_)
+            | Op::PullWith(_)
             | Op::Rebase { .. }
             | Op::InteractiveRebase { .. }
             | Op::CherryPick { .. }
@@ -628,6 +631,7 @@ impl RepoTab {
                     target: self.branch_target(name)?.to_string(),
                 }]
             }
+            Op::FastForward(pairs) => crate::sync::undo_fast_forward(self, pairs)?,
             Op::CreateTag { name, .. } => vec![Op::DeleteTag(name.clone())],
             Op::DeleteTag(name) => {
                 let tag = self.tags.iter().find(|t| &t.name == name)?;

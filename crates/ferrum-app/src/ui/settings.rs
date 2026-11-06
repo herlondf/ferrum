@@ -237,6 +237,7 @@ fn general(ui: &mut egui::Ui, settings: &mut Settings) {
             ui.end_row();
         });
     crate::ui::background::settings_section(ui, &mut settings.background);
+    crate::ui::sync_ui::settings_section(ui, &mut settings.sync);
 }
 
 fn profiles(

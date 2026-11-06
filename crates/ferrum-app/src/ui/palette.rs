@@ -82,9 +82,24 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             entry(t!("Pull"), "Ctrl+Shift+D", move || {
                 Command::Run(Op::Pull(pull))
             }),
-            entry(t!("Pull with options…"), "", || {
-                Command::Dialog(Dialog::Pull)
-            }),
+            {
+                let d = crate::ui::sync_dialogs::pull(t);
+                entry(t!("Pull with options…"), "", move || {
+                    Command::Dialog(Dialog::Sync(d.clone()))
+                })
+            },
+            {
+                let d = crate::ui::sync_dialogs::fetch(t, None);
+                entry(t!("Fetch with options…"), "", move || {
+                    Command::Dialog(Dialog::Sync(d.clone()))
+                })
+            },
+            {
+                let d = crate::ui::sync_dialogs::push_tags(t, &[]);
+                entry(t!("Push tags…"), "", move || {
+                    Command::Dialog(Dialog::Sync(d.clone()))
+                })
+            },
             entry(t!("Stage all changes"), "", || Command::Run(Op::StageAll)),
             entry(t!("Unstage all changes"), "", || {
                 Command::Run(Op::UnstageAll)
@@ -105,24 +120,10 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             Command::Dialog(Dialog::create_branch(&h2, &h2))
         }));
         if let Some(b) = t.head.clone() {
-            let push = Dialog::push(t, &b);
-            if let Dialog::Push {
-                remote,
-                branch,
-                set_upstream,
-                ..
-            } = push
-            {
-                list.push(entry(t!("Push…"), "Ctrl+Shift+U", move || {
-                    Command::Dialog(Dialog::Push {
-                        remote: remote.clone(),
-                        branch: branch.clone(),
-                        set_upstream,
-                        force: false,
-                        tags: false,
-                    })
-                }));
-            }
+            let push = crate::ui::sync_dialogs::push(t, &b);
+            list.push(entry(t!("Push…"), "Ctrl+Shift+U", move || {
+                Command::Dialog(Dialog::Sync(push.clone()))
+            }));
         }
         if let Some(s) = t.stashes.first().cloned() {
             list.push(entry(

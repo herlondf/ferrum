@@ -3,13 +3,14 @@
 use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
-use ferrum_core::ops::{MergeMode, PushOptions, ResetMode};
+use ferrum_core::ops::{MergeMode, ResetMode};
 use ferrum_core::{BranchInfo, BranchKind, Identity};
 
 use crate::command::{Command, Commands, Op};
 use crate::settings::{Profile, Settings};
 use crate::tab::RepoTab;
 use crate::ui::forge as forge_ui;
+use crate::ui::sync_dialogs;
 use crate::util::valid_ref_name;
 
 pub enum Dialog {
@@ -61,14 +62,8 @@ pub enum Dialog {
         branch: String,
         mode: ResetMode,
     },
-    Push {
-        remote: String,
-        branch: String,
-        set_upstream: bool,
-        force: bool,
-        tags: bool,
-    },
-    Pull,
+    /// Fetch, pull, push, tracking and remotes (see `sync_dialogs`).
+    Sync(sync_dialogs::SyncDialog),
     Stash {
         message: String,
         untracked: bool,
@@ -169,24 +164,11 @@ impl Dialog {
     }
 
     pub fn push(tab: &RepoTab, branch: &str) -> Self {
-        let info = tab
-            .branches
-            .iter()
-            .find(|b| b.kind == BranchKind::Local && b.name == branch);
-        let upstream_remote = info
-            .and_then(|b| b.upstream.as_deref())
-            .and_then(|u| u.split_once('/'))
-            .map(|(r, _)| r.to_owned());
-        Dialog::Push {
-            remote: upstream_remote
-                .clone()
-                .or_else(|| tab.default_remote())
-                .unwrap_or_default(),
-            branch: branch.into(),
-            set_upstream: upstream_remote.is_none(),
-            force: false,
-            tags: false,
-        }
+        Dialog::Sync(sync_dialogs::push(tab, branch))
+    }
+
+    pub fn pull(tab: &RepoTab) -> Self {
+        Dialog::Sync(sync_dialogs::pull(tab))
     }
 
     pub fn stash() -> Self {
@@ -273,7 +255,9 @@ pub fn show(
     let mut open = true;
     let modal = egui::Modal::new(egui::Id::unique("ferrum-dialog")).show(ctx, |ui| {
         ui.set_width(460.0);
-        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift);
+        // Enter in an open drop-down (e.g. its filter field) is not "OK".
+        let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift)
+            && !egui::Popup::is_any_open(ctx);
         open = body(ui, dialog, tab, settings, cmds, enter);
     });
     if modal.should_close() {
@@ -283,7 +267,13 @@ pub fn show(
 }
 
 /// Draws OK/Cancel buttons. Returns Some(true) for OK, Some(false) for Cancel.
-fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool) -> Option<bool> {
+pub(crate) fn buttons(
+    ui: &mut egui::Ui,
+    ok: &str,
+    enabled: bool,
+    danger: bool,
+    enter: bool,
+) -> Option<bool> {
     ui.add_space(8.0);
     let mut result = None;
     ui.horizontal(|ui| {
@@ -304,7 +294,12 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool
     result
 }
 
-fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
+pub(crate) fn field(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+) -> egui::Response {
     ui.label(label);
     ui.add(
         egui::TextEdit::singleline(value)
@@ -313,7 +308,7 @@ fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui
     )
 }
 
-fn ref_name_warning(ui: &mut egui::Ui, name: &str) {
+pub(crate) fn ref_name_warning(ui: &mut egui::Ui, name: &str) {
     if !name.is_empty() && !valid_ref_name(name) {
         ui.colored_label(
             ui.visuals().warn_fg_color,
@@ -641,111 +636,7 @@ fn body(
                 None => true,
             }
         }
-        Dialog::Push {
-            remote,
-            branch,
-            set_upstream,
-            force,
-            tags,
-        } => {
-            ui.heading(t!("Push"));
-            let Some(t) = tab else { return false };
-            if t.remotes.is_empty() {
-                ui.label(t!("This repository has no remotes. Add one first (right-click Remotes in the sidebar)."));
-                return buttons(ui, &t!("OK"), true, false, enter).is_none();
-            }
-            egui::Grid::new("push-grid")
-                .num_columns(2)
-                .spacing([10.0, 6.0])
-                .show(ui, |ui| {
-                    ui.label(t!("Branch"));
-                    egui::ComboBox::from_id_salt("push-branch")
-                        .selected_text(branch.as_str())
-                        .show_ui(ui, |ui| {
-                            for b in t.branches.iter().filter(|b| b.kind == BranchKind::Local) {
-                                ui.selectable_value(branch, b.name.clone(), &b.name);
-                            }
-                        });
-                    ui.end_row();
-                    ui.label(t!("To remote"));
-                    egui::ComboBox::from_id_salt("push-remote")
-                        .selected_text(remote.as_str())
-                        .show_ui(ui, |ui| {
-                            for r in &t.remotes {
-                                ui.selectable_value(remote, r.name.clone(), &r.name);
-                            }
-                        });
-                    ui.end_row();
-                });
-            ui.checkbox(set_upstream, t!("Track this remote branch (set upstream)"));
-            ui.checkbox(tags, t!("Also push annotated tags"));
-            ui.checkbox(force, t!("Force push (with lease)"))
-                .on_hover_text(t!("Overwrites the remote branch, unless someone else pushed to it since your last fetch"));
-            if *force {
-                ui.colored_label(
-                    ui.visuals().warn_fg_color,
-                    t!("Force pushing rewrites history on the remote."),
-                );
-            }
-            match buttons(
-                ui,
-                &t!("Push"),
-                !remote.is_empty() && !branch.is_empty(),
-                *force,
-                enter,
-            ) {
-                Some(true) => {
-                    run(Op::Push(PushOptions {
-                        remote: remote.clone(),
-                        branch: branch.clone(),
-                        set_upstream: *set_upstream,
-                        force_with_lease: *force,
-                        tags: *tags,
-                    }));
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::Pull => {
-            ui.heading(t!("Pull"));
-            let branch = tab.and_then(|t| t.current_branch().cloned());
-            match branch.as_ref().and_then(|b| b.upstream.clone()) {
-                Some(u) => ui.label(t!(
-                    "Pull {} into {}",
-                    u,
-                    branch.as_ref().map_or("", |b| b.name.as_str())
-                )),
-                None => ui.colored_label(
-                    ui.visuals().warn_fg_color,
-                    t!("The current branch has no upstream; git will use its defaults."),
-                ),
-            };
-            for choice in [
-                crate::settings::PullChoice::Default,
-                crate::settings::PullChoice::Merge,
-                crate::settings::PullChoice::Rebase,
-                crate::settings::PullChoice::FastForwardOnly,
-            ] {
-                use crate::settings::PullChoice;
-                let label = match choice {
-                    PullChoice::Default => t!("Default (git config)"),
-                    PullChoice::Merge => t!("Merge"),
-                    PullChoice::Rebase => t!("Rebase"),
-                    PullChoice::FastForwardOnly => t!("Fast-forward only"),
-                };
-                ui.radio_value(&mut settings.pull, choice, label);
-            }
-            match buttons(ui, &t!("Pull"), true, false, enter) {
-                Some(true) => {
-                    run(Op::Pull(settings.pull.mode()));
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
+        Dialog::Sync(d) => sync_dialogs::show(ui, d, tab, settings, cmds, enter),
         Dialog::Stash {
             message,
             untracked,

@@ -90,10 +90,6 @@ pub static T: &[(&str, &str)] = &[
         "Track this remote branch (set upstream)",
         "Acompanhar esta branch remota (definir upstream)",
     ),
-    (
-        "Also push annotated tags",
-        "Fazer push também das tags anotadas",
-    ),
     ("Force push (with lease)", "Push forçado (with lease)"),
     (
         "Overwrites the remote branch, unless someone else pushed to it since your last fetch",
@@ -104,7 +100,6 @@ pub static T: &[(&str, &str)] = &[
         "O push forçado reescreve o histórico no remoto.",
     ),
     ("Pull", "Pull"),
-    ("Pull {} into {}", "Fazer pull de {} em {}"),
     (
         "The current branch has no upstream; git will use its defaults.",
         "A branch atual não tem upstream; o git usará os padrões dele.",

@@ -52,6 +52,20 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
   per section. Open folders, pins and sort order are kept per repository.
 - **Fetch, pull and push** with live progress, force-with-lease and upstream setup.
+  A plain click on the toolbar button runs with the remembered options;
+  Alt/Ctrl+click, right-click or the ⏷ next to it opens the dialog. Ahead/behind
+  counts on the Pull and Push buttons. Fetch options (prune, all tags), pull
+  with stash and reapply (`--autostash`), push to a remote branch with another
+  name, push several branches at once (atomic), push one, several or all tags,
+  warning about submodule commits that are not pushed. Searchable branch lists.
+- **Automatic background fetch** of open repositories every 10 minutes (with
+  `--prune`, never on top of a running operation; interval in Settings > General,
+  0 turns it off), can be turned off per remote from its sidebar menu.
+- **Fast-forward branches without checking them out** (branch menu, or several
+  at once from the sidebar selection), check out a remote branch whose local
+  branch is behind or has diverged (fast-forward, merge, rebase or reset),
+  change the tracking branch (and pull, with stash and reapply), edit and rename
+  remotes, copy their URL and test the connection.
 - **Interactive rebase** planner: reorder by drag and drop, reword, squash,
   fixup, edit, drop.
 - **Three-way conflict resolver** with per-conflict choices and an editable result.
@@ -110,7 +124,8 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
 | New branch | Ctrl+B |
 | Stash | Ctrl+Shift+S |
-| Fetch / Pull / Push | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
+| Fetch / Pull / Push (dialog) | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
+| Fetch / Pull / Push with options | Alt+click or right-click the toolbar button |
 | Undo | Ctrl+Z |
 | Next / previous tab, close tab | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+W |
 | Settings | Ctrl+, |
