@@ -1,34 +1,34 @@
-//! File history (commits that touched a file, with their diff) and blame.
+//! File history (commits that touched a file or folder, with their diff),
+//! blame (see `blame_view`) and the history of a line range (`file_lines`).
 
-use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use eframe::egui::{self, Align2, FontId, Rect, Sense, pos2, vec2};
-use ferrum_core::{DiffSource, FileCommit, FileDiff, Oid, Repo, short};
+use ferrum_core::diff::DiffConfig;
+use ferrum_core::{BranchKind, DiffSource, FileCommit, FileDiff, Oid, Repo, short};
 
-use crate::command::{Command, Commands};
+use crate::command::{Command, Commands, Op};
+use crate::external::{self, Launch};
 use crate::tab::{RepoTab, View};
-use crate::ui::{diff_extra, diff_view};
-use crate::util::{format_date, format_day};
+use crate::ui::dialogs::Dialog;
+use crate::ui::{blame_view, diff_extra, diff_view, file_lines};
+use crate::util::format_date;
 
 const HISTORY_ROW: f32 = 42.0;
-const BLAME_ROW: f32 = 18.0;
-const HASH_W: f32 = 62.0;
-const AUTHOR_W: f32 = 140.0;
-const DATE_W: f32 = 82.0;
-const GUTTER_W: f32 = HASH_W + AUTHOR_W + DATE_W + 12.0;
-const NUMBER_W: f32 = 52.0;
 
 /// Data loaded on a background thread, with its own repository handle.
-enum Load<T> {
+#[derive(Default)]
+pub(crate) enum Load<T> {
+    #[default]
     Idle,
     Pending(Receiver<Result<T, String>>),
     Done(Result<T, String>),
 }
 
 impl<T: Send + 'static> Load<T> {
-    fn start(
+    pub(crate) fn start(
         &mut self,
         repo: &Repo,
         work: impl FnOnce(&Repo) -> Result<T, String> + Send + 'static,
@@ -45,7 +45,7 @@ impl<T: Send + 'static> Load<T> {
     }
 
     /// The result once loaded; keeps the UI repainting while waiting.
-    fn poll(&mut self, ctx: &egui::Context) -> Option<&Result<T, String>> {
+    pub(crate) fn poll(&mut self, ctx: &egui::Context) -> Option<&Result<T, String>> {
         if let Load::Pending(rx) = self {
             match rx.try_recv() {
                 Ok(r) => *self = Load::Done(r),
@@ -62,133 +62,344 @@ impl<T: Send + 'static> Load<T> {
             _ => None,
         }
     }
+
+    pub(crate) fn ok(&self) -> Option<&T> {
+        match self {
+            Load::Done(Ok(v)) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn is_idle(&self) -> bool {
+        matches!(self, Load::Idle)
+    }
 }
 
-struct BlameRow {
-    commit: Oid,
-    block_start: bool,
-    /// Alternates between blocks, for the background.
-    odd_block: bool,
-    /// Shown only on the first line of a block.
-    gutter: Option<(String, String)>,
-    text: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    History,
+    Blame,
+    /// History of a line range.
+    Lines,
 }
 
-struct BlameData {
-    rows: Vec<BlameRow>,
-    /// Summary and full date of each commit, for tooltips.
-    commits: HashMap<Oid, (String, String)>,
-    /// Longest line in characters, for horizontal scrolling.
-    longest: usize,
+/// What a diff in the history shows: one file between two commits.
+#[derive(Clone, PartialEq)]
+pub(crate) struct DiffKey {
+    pub old: Option<Oid>,
+    pub new: Oid,
+    pub path: String,
+    pub old_path: Option<String>,
+    cfg: DiffConfig,
 }
 
 pub struct FileView {
+    /// Unique per view, for widget ids and keyboard routing.
+    pub(crate) id: u64,
     pub path: String,
-    pub blame: bool,
-    history: Load<Vec<FileCommit>>,
-    blame_data: Load<BlameData>,
-    selected: Option<usize>,
-    /// Diff of the selected history entry, for the commit it belongs to.
+    pub is_folder: bool,
+    pub mode: Mode,
+    /// Branch or ref the history and blame are relative to (`None`: HEAD).
+    pub base: Option<String>,
+    pub(crate) history: Load<Vec<FileCommit>>,
+    history_base: Option<Option<String>>,
+    pub(crate) selected: Option<usize>,
+    /// A second entry picked with Ctrl+click: the diff compares the two.
+    pub(crate) other: Option<usize>,
     diff: Load<Option<FileDiff>>,
-    diff_commit: Option<Oid>,
-    /// Commit under the pointer in the blame gutter (from the last frame).
-    hovered: Option<Oid>,
+    pub(crate) diff_key: Option<DiffKey>,
+    /// Folders: the files the selected commits changed, and the one shown.
+    files: Load<Vec<FileDiff>>,
+    files_key: Option<(Option<Oid>, Oid)>,
+    file_sel: Option<usize>,
+    pub(crate) blame: blame_view::BlameState,
+    pub(crate) lines: Option<file_lines::LinesState>,
+}
+
+/// What a view asks its owner to do after drawing.
+#[derive(Default, PartialEq, Eq)]
+pub(crate) struct Outcome {
+    /// Move the view to a separate window.
+    pub detach: bool,
+    /// Close the view (its window).
+    pub close: bool,
+}
+
+/// Where a view is drawn.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Place {
+    Main,
+    Window,
+}
+
+impl FileView {
+    pub fn new(repo: &Repo, path: String, mode: Mode) -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let path = path.trim_end_matches('/').to_owned();
+        let is_folder = repo.is_folder("HEAD", &path);
+        let mode = if is_folder && mode == Mode::Blame {
+            Mode::History
+        } else {
+            mode
+        };
+        FileView {
+            id: NEXT.fetch_add(1, Ordering::Relaxed),
+            blame: blame_view::BlameState::new(&path),
+            path,
+            is_folder,
+            mode,
+            base: None,
+            history: Load::Idle,
+            history_base: None,
+            selected: None,
+            other: None,
+            diff: Load::Idle,
+            diff_key: None,
+            files: Load::Idle,
+            files_key: None,
+            file_sel: None,
+            lines: None,
+        }
+    }
+
+    /// The revision history and blame start from.
+    pub(crate) fn base_rev(&self) -> String {
+        self.base.clone().unwrap_or_else(|| "HEAD".into())
+    }
+
+    /// Id of the diff view inside this view.
+    pub(crate) fn diff_id(&self, place: Place) -> String {
+        match place {
+            Place::Main => "file-history-diff".into(),
+            Place::Window => format!("file-history-diff-w{}", self.id),
+        }
+    }
+
+    pub(crate) fn entries(&self) -> &[FileCommit] {
+        self.history.ok().map_or(&[], Vec::as_slice)
+    }
+
+    /// Selects the history entry of a commit; returns whether it is listed.
+    pub(crate) fn select_commit(&mut self, id: Oid) -> bool {
+        let Some(i) = self.entries().iter().position(|e| e.commit.id == id) else {
+            return false;
+        };
+        self.selected = Some(i);
+        self.other = None;
+        self.mode = Mode::History;
+        true
+    }
+
+    fn reload(&mut self) {
+        self.history = Load::Idle;
+        self.history_base = None;
+        self.diff = Load::Idle;
+        self.diff_key = None;
+        self.files = Load::Idle;
+        self.files_key = None;
+        self.blame.reload();
+        if let Some(l) = &mut self.lines {
+            l.reload();
+        }
+    }
 }
 
 pub fn open(tab: &mut RepoTab, path: String, blame: bool) {
+    open_mode(tab, path, if blame { Mode::Blame } else { Mode::History });
+}
+
+pub fn open_mode(tab: &mut RepoTab, path: String, mode: Mode) {
+    let path = path.trim_end_matches('/').to_owned();
     match &mut tab.file_view {
-        Some(v) if v.path == path => v.blame = blame,
-        _ => {
-            tab.file_view = Some(FileView {
-                path,
-                blame,
-                history: Load::Idle,
-                blame_data: Load::Idle,
-                selected: None,
-                diff: Load::Idle,
-                diff_commit: None,
-                hovered: None,
-            })
+        Some(v) if v.path == path => {
+            if !(v.is_folder && mode == Mode::Blame) {
+                v.mode = mode;
+            }
         }
+        _ => tab.file_view = Some(FileView::new(&tab.repo, path, mode)),
     }
     tab.view = View::File;
 }
 
+/// The file view of the main window.
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
-    let Some(view) = &mut tab.file_view else {
+    let Some(mut view) = tab.file_view.take() else {
         return;
     };
-    // Start loading what the current mode needs (once).
-    if view.blame && matches!(view.blame_data, Load::Idle) {
-        let path = view.path.clone();
-        view.blame_data
-            .start(&tab.repo, move |r| load_blame(r, &path));
+    let out = show_view(ui, tab, &mut view, cmds, Place::Main);
+    tab.file_view = Some(view);
+    if out.detach {
+        // After the frame: the window starts drawing on the next one.
+        cmds.push(crate::ui::history_options::cmd(|t, _| {
+            if let Some(v) = t.file_view.take() {
+                crate::ui::file_window::detach(t, v);
+                t.view = View::History;
+            }
+        }));
     }
-    if !view.blame && matches!(view.history, Load::Idle) {
-        let path = view.path.clone();
+}
+
+/// Draws a file view (in the main window or a separate one).
+pub(crate) fn show_view(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    view: &mut FileView,
+    cmds: &mut Commands,
+    place: Place,
+) -> Outcome {
+    let mut out = Outcome::default();
+    // The history is needed by every mode (the blame shows it as a timeline).
+    if view.history_base.as_ref() != Some(&view.base) {
+        view.history_base = Some(view.base.clone());
+        view.selected = None;
+        view.other = None;
+        let (path, rev) = (view.path.clone(), view.base_rev());
         view.history.start(&tab.repo, move |r| {
-            r.file_history(&path).map_err(|e| e.to_string())
+            r.file_history_at(&path, &rev).map_err(|e| e.to_string())
         });
     }
+    view.history.poll(ui.ctx());
 
-    let dirty = [&tab.status.unstaged, &tab.status.staged]
-        .iter()
-        .any(|list| list.iter().any(|f| f.path == view.path));
+    toolbar(ui, tab, view, cmds, place, &mut out);
+    ui.separator();
 
+    match view.mode {
+        Mode::Blame => blame_view::show(ui, tab, view, cmds),
+        Mode::Lines => match &mut view.lines {
+            Some(l) => {
+                let id = format!("line-history-diff-{}", view.id);
+                file_lines::show(ui, &tab.repo, l, cmds, &id);
+            }
+            None => view.mode = Mode::History,
+        },
+        Mode::History => history_view(ui, tab, view, cmds, place),
+    }
+    out
+}
+
+fn toolbar(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    view: &mut FileView,
+    cmds: &mut Commands,
+    place: Place,
+    out: &mut Outcome,
+) {
     ui.horizontal(|ui| {
-        if ui
-            .button(t!("⬅ Back"))
-            .on_hover_text(t!("Back to the history"))
-            .clicked()
+        if place == Place::Main
+            && ui
+                .button(t!("⬅ Back"))
+                .on_hover_text(t!("Back to the history"))
+                .clicked()
         {
             cmds.push(Command::SetView(View::History));
         }
-        ui.separator();
-        if ui
-            .add(egui::Button::selectable(!view.blame, t!("History")))
-            .clicked()
-        {
-            view.blame = false;
+        if place == Place::Main {
+            ui.separator();
         }
         if ui
-            .add(egui::Button::selectable(view.blame, "Blame"))
+            .add(egui::Button::selectable(
+                view.mode == Mode::History,
+                t!("History"),
+            ))
             .clicked()
         {
-            view.blame = true;
+            view.mode = Mode::History;
+        }
+        let blame = ui.add_enabled(
+            !view.is_folder,
+            egui::Button::selectable(view.mode == Mode::Blame, "Blame"),
+        );
+        if blame.clicked() {
+            view.mode = Mode::Blame;
+        }
+        blame.on_disabled_hover_text(t!("Folders have no blame."));
+        if let Some(l) = &view.lines
+            && ui
+                .add(egui::Button::selectable(
+                    view.mode == Mode::Lines,
+                    file_lines::label(l),
+                ))
+                .on_hover_text(t!("History of the selected lines"))
+                .clicked()
+        {
+            view.mode = Mode::Lines;
         }
         ui.separator();
-        ui.add(egui::Label::new(egui::RichText::new(&view.path).strong()).truncate());
+        let icon = if view.is_folder { "📁 " } else { "" };
+        ui.add(
+            egui::Label::new(egui::RichText::new(format!("{icon}{}", view.path)).strong())
+                .truncate(),
+        );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("↻").on_hover_text(t!("Reload")).clicked() {
-                if view.blame {
-                    view.blame_data = Load::Idle;
-                } else {
-                    view.history = Load::Idle;
-                    view.diff = Load::Idle;
-                    view.diff_commit = None;
+            match place {
+                Place::Main => {
+                    if ui
+                        .button(t!("Open in a window"))
+                        .on_hover_text(t!("Show this history in a separate window"))
+                        .clicked()
+                    {
+                        out.detach = true;
+                    }
                 }
+                Place::Window => {
+                    if ui.button(t!("Close")).clicked() {
+                        out.close = true;
+                    }
+                }
+            }
+            if ui.button("↻").on_hover_text(t!("Reload")).clicked() {
+                view.reload();
             }
             if ui.small_button(t!("Copy path")).clicked() {
                 cmds.push(Command::Copy(view.path.clone()));
             }
+            base_menu(ui, tab, view);
         });
     });
-    ui.separator();
+}
 
-    if view.blame {
-        if dirty && matches!(view.blame_data, Load::Done(Ok(_))) {
-            ui.colored_label(
-                ui.visuals().warn_fg_color,
-                t!("⚠ This file has uncommitted changes. Blame shows the last committed version."),
-            );
-        }
-        blame_view(ui, view, cmds);
-    } else {
-        history_view(ui, &tab.repo, view, cmds);
+/// The branch the history is relative to.
+fn base_menu(ui: &mut egui::Ui, tab: &RepoTab, view: &mut FileView) {
+    let current = view.base.clone().unwrap_or_else(|| "HEAD".into());
+    let mut chosen = None;
+    egui::ComboBox::from_id_salt(("file-history-base", view.id))
+        .selected_text(&current)
+        .width(160.0)
+        .height(400.0)
+        .show_ui(ui, |ui| {
+            if ui
+                .selectable_label(view.base.is_none(), t!("HEAD (current branch)"))
+                .clicked()
+            {
+                chosen = Some(None);
+            }
+            for kind in [BranchKind::Local, BranchKind::Remote] {
+                for b in tab.branches.iter().filter(|b| b.kind == kind) {
+                    let on = view.base.as_deref() == Some(b.name.as_str());
+                    if ui.selectable_label(on, &b.name).clicked() {
+                        chosen = Some(Some(b.name.clone()));
+                    }
+                }
+            }
+            for t in &tab.tags {
+                let on = view.base.as_deref() == Some(t.name.as_str());
+                if ui.selectable_label(on, format!("🏷 {}", t.name)).clicked() {
+                    chosen = Some(Some(t.name.clone()));
+                }
+            }
+        })
+        .response
+        .on_hover_text(t!("Branch the history is shown for"));
+    if let Some(base) = chosen
+        && base != view.base
+    {
+        view.base = base;
+        view.blame.reset_to_base(&view.path);
     }
 }
 
-fn loading_or_error<T>(ui: &mut egui::Ui, result: Option<&Result<T, String>>) -> bool {
+pub(crate) fn loading_or_error<T>(ui: &mut egui::Ui, result: Option<&Result<T, String>>) -> bool {
     match result {
         None => {
             ui.horizontal(|ui| {
@@ -208,39 +419,68 @@ fn loading_or_error<T>(ui: &mut egui::Ui, result: Option<&Result<T, String>>) ->
 
 // ---- History ----
 
-fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut Commands) {
-    let ctx = ui.ctx().clone();
-    if loading_or_error(ui, view.history.poll(&ctx)) {
-        return;
-    }
-    let Load::Done(Ok(entries)) = &view.history else {
-        return;
-    };
-    if entries.is_empty() {
-        ui.weak(t!("No commits touched this file."));
-        return;
-    }
-    if view.selected.is_none() {
-        view.selected = Some(0);
-    }
+/// The two sides the diff compares: (old commit and path, new commit and path).
+type Sides = (Option<(Oid, String)>, (Oid, String));
 
-    // Load the diff of the selected entry when the selection changes.
-    let entry = view.selected.and_then(|i| entries.get(i));
-    if let Some(e) = entry
-        && view.diff_commit != Some(e.commit.id)
-    {
-        let (id, path, old) = (e.commit.id, e.path.clone(), e.old_path.clone());
-        view.diff_commit = Some(id);
-        view.diff.start(repo, move |r| {
-            let file = r
-                .commit_file_diff(id, &path, old.as_deref())
-                .map_err(|e| e.to_string())?;
-            Ok(find_file(file.into_iter().collect(), &path, old.as_deref()))
-        });
+/// What the selection compares: one commit with its parent, or two commits.
+fn sides(entries: &[FileCommit], selected: usize, other: Option<usize>) -> Option<Sides> {
+    let e = entries.get(selected)?;
+    match other.and_then(|o| entries.get(o).map(|x| (o, x))) {
+        Some((o, x)) if o != selected => {
+            // Older entries come later in the list.
+            let (newer, older) = if o > selected { (e, x) } else { (x, e) };
+            Some((
+                Some((older.commit.id, older.path.clone())),
+                (newer.commit.id, newer.path.clone()),
+            ))
+        }
+        _ => {
+            let old_path = e.old_path.clone().unwrap_or_else(|| e.path.clone());
+            let old = e.commit.parents.first().map(|p| (*p, old_path));
+            Some((old, (e.commit.id, e.path.clone())))
+        }
     }
+}
+
+fn history_view(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    view: &mut FileView,
+    cmds: &mut Commands,
+    place: Place,
+) {
+    if loading_or_error(ui, view.history.poll(ui.ctx())) {
+        return;
+    }
+    // Moved out while drawing, so the view can change.
+    let history = std::mem::take(&mut view.history);
+    if let Some(entries) = history.ok() {
+        history_body(ui, tab, view, entries, cmds, place);
+    }
+    view.history = history;
+}
+
+fn history_body(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    view: &mut FileView,
+    entries: &[FileCommit],
+    cmds: &mut Commands,
+    place: Place,
+) {
+    let ctx = ui.ctx().clone();
+    if entries.is_empty() {
+        ui.weak(if view.is_folder {
+            t!("No commits touched this folder.")
+        } else {
+            t!("No commits touched this file.")
+        });
+        return;
+    }
+    let selected = *view.selected.get_or_insert(0);
 
     let mut clicked = None;
-    egui::Panel::left("file-history-list")
+    egui::Panel::left(("file-history-list", view.id))
         .resizable(true)
         .default_size(380.0)
         .show(ui, |ui| {
@@ -251,7 +491,7 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
             });
             ui.spacing_mut().item_spacing.y = 0.0;
             egui::ScrollArea::vertical()
-                .id_salt("file-history-rows")
+                .id_salt(("file-history-rows", view.id))
                 .auto_shrink(false)
                 .show_rows(ui, HISTORY_ROW, entries.len(), |ui, range| {
                     for i in range {
@@ -260,90 +500,335 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
                             vec2(ui.available_width(), HISTORY_ROW),
                             Sense::click(),
                         );
-                        history_row(
-                            ui,
-                            rect,
-                            e,
-                            &view.path,
-                            view.selected == Some(i),
-                            resp.hovered(),
-                        );
+                        let state = if i == selected {
+                            RowState::Selected
+                        } else if view.other == Some(i) {
+                            RowState::Other
+                        } else {
+                            RowState::None
+                        };
+                        history_row(ui, rect, e, &view.path, state, resp.hovered());
                         if resp.clicked() {
-                            clicked = Some(i);
+                            let ctrl = ui.input(|i| i.modifiers.command);
+                            clicked = Some((i, ctrl));
                         }
                         resp.context_menu(|ui| {
-                            if ui.button(t!("Show in history")).clicked() {
-                                cmds.push(Command::SelectCommit(e.commit.id));
-                                ui.close();
-                            }
-                            if ui.button(t!("Copy hash")).clicked() {
-                                cmds.push(Command::Copy(e.commit.id.to_string()));
-                                ui.close();
-                            }
+                            entry_menu(ui, tab, view, entries, i, cmds);
                         });
                     }
                 });
         });
-    if clicked.is_some() {
-        view.selected = clicked;
+    match clicked {
+        // Ctrl+click picks a second commit to compare with.
+        Some((i, true)) if i != selected => {
+            view.other = if view.other == Some(i) { None } else { Some(i) };
+        }
+        Some((i, _)) => {
+            view.selected = Some(i);
+            view.other = None;
+        }
+        None => {}
     }
 
     egui::CentralPanel::default_margins().show(ui, |ui| {
-        let Some(e) = view.selected.and_then(|i| entries.get(i)) else {
+        let selected = view.selected.unwrap_or(0);
+        let Some((old, new)) = sides(entries, selected, view.other) else {
             return;
         };
-        ui.horizontal(|ui| {
-            ui.strong(&e.commit.summary);
-            ui.weak(e.commit.short_id());
-        });
-        if let Some(old) = &e.old_path {
-            ui.weak(t!("Renamed from {}", old));
-        } else if e.path != view.path {
-            ui.weak(t!("Named {} in this commit", e.path));
-        }
-        if loading_or_error(ui, view.diff.poll(&ctx)) {
-            return;
-        }
-        let Load::Done(Ok(file)) = &view.diff else {
-            return;
-        };
-        match file {
-            None => {
-                let note = t!("This commit does not change the file (for example, a merge).");
-                ui.weak(note);
+        let e = &entries[selected];
+        if let Some(o) = view.other.and_then(|o| entries.get(o)) {
+            let (a, b) = match &old {
+                Some((id, _)) => (short(*id), short(new.0)),
+                None => (String::new(), short(new.0)),
+            };
+            ui.horizontal(|ui| {
+                ui.strong(t!("Comparing {} with {}", a, b));
+                ui.weak(t!("(Ctrl+click a commit to change the comparison)"));
+            });
+            ui.weak(format!("{} · {}", o.commit.summary, e.commit.summary));
+        } else {
+            ui.horizontal(|ui| {
+                ui.strong(&e.commit.summary);
+                ui.weak(e.commit.short_id());
+            });
+            if let Some(old) = &e.old_path {
+                ui.weak(t!("Renamed from {}", old));
+            } else if e.path != view.path {
+                ui.weak(t!("Named {} in this commit", e.path));
             }
-            Some(f) => {
-                diff_extra::show_file(
-                    ui,
-                    "file-history-diff",
-                    repo,
-                    DiffSource::Commit(e.commit.id),
-                    f,
-                    diff_view::DiffMode::ReadOnly,
-                    false,
-                    None,
-                );
+        }
+        let cfg = tab.diff_options.config;
+
+        if view.is_folder {
+            let key = (old.as_ref().map(|o| o.0), new.0);
+            if view.files_key != Some(key) {
+                view.files_key = Some(key);
+                view.file_sel = None;
+                let folder = view.path.clone();
+                view.files.start(&tab.repo, move |r| {
+                    r.changed_files_between(key.0, key.1, &folder)
+                        .map_err(|e| e.to_string())
+                });
             }
+            if loading_or_error(ui, view.files.poll(&ctx)) {
+                return;
+            }
+            let files = view.files.ok().cloned().unwrap_or_default();
+            if files.is_empty() {
+                ui.weak(t!("No files in this folder changed."));
+                return;
+            }
+            let sel = *view.file_sel.get_or_insert(0);
+            egui::ScrollArea::vertical()
+                .id_salt(("folder-files", view.id))
+                .max_height((ui.available_height() * 0.3).max(60.0))
+                .show(ui, |ui| {
+                    for (i, f) in files.iter().enumerate() {
+                        let label = format!("{}  {}", f.kind.letter(), f.path);
+                        if ui.selectable_label(i == sel, label).clicked() {
+                            view.file_sel = Some(i);
+                        }
+                    }
+                });
+            ui.separator();
+            let Some(f) = files.get(view.file_sel.unwrap_or(0)) else {
+                return;
+            };
+            let key = DiffKey {
+                old: key.0,
+                new: key.1,
+                path: f.path.clone(),
+                old_path: f.old_path.clone(),
+                cfg,
+            };
+            diff_actions(ui, tab, &key, None, cmds);
+            show_diff(ui, tab, view, key, place);
+        } else {
+            let key = DiffKey {
+                old: old.as_ref().map(|o| o.0),
+                new: new.0,
+                path: new.1.clone(),
+                old_path: old.as_ref().map(|o| o.1.clone()).filter(|p| *p != new.1),
+                cfg,
+            };
+            diff_actions(ui, tab, &key, Some(view.id), cmds);
+            show_diff(ui, tab, view, key, place);
         }
     });
 }
 
-/// The file of a commit's diff that is `path` (or was `old_path`) in that commit.
-fn find_file(files: Vec<FileDiff>, path: &str, old_path: Option<&str>) -> Option<FileDiff> {
-    let pos = files
-        .iter()
-        .position(|f| f.path == path)
-        .or_else(|| {
-            files
-                .iter()
-                .position(|f| old_path.is_some_and(|o| f.path == o))
-        })
-        .or_else(|| {
-            files
-                .iter()
-                .position(|f| f.old_path.as_deref() == Some(path))
-        })?;
-    files.into_iter().nth(pos)
+/// Loads (when it changed) and shows the diff of `key`.
+fn show_diff(ui: &mut egui::Ui, tab: &RepoTab, view: &mut FileView, key: DiffKey, place: Place) {
+    if view.diff_key.as_ref() != Some(&key) {
+        view.diff_key = Some(key.clone());
+        view.diff.start(&tab.repo, move |r| {
+            r.file_diff_between(
+                key.old,
+                key.new,
+                &key.path,
+                key.old_path.as_deref(),
+                &key.cfg,
+            )
+            .map_err(|e| e.to_string())
+        });
+    }
+    if loading_or_error(ui, view.diff.poll(ui.ctx())) {
+        return;
+    }
+    let Some(file) = view.diff.ok() else {
+        return;
+    };
+    match file {
+        None if view.other.is_some() => {
+            ui.weak(t!("No differences in this file between these commits."));
+        }
+        None => {
+            let note = t!("This commit does not change the file (for example, a merge).");
+            ui.weak(note);
+        }
+        Some(f) => {
+            let new = view.diff_key.as_ref().map_or(key.new, |k| k.new);
+            diff_extra::show_file(
+                ui,
+                &view.diff_id(place),
+                &tab.repo,
+                DiffSource::Commit(new),
+                f,
+                diff_view::DiffMode::ReadOnly,
+                false,
+                None,
+            );
+        }
+    }
+}
+
+/// Buttons above a diff of the history. `view`: the file view to blame in
+/// (`None`: open the file's own view).
+fn diff_actions(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    key: &DiffKey,
+    view: Option<u64>,
+    cmds: &mut Commands,
+) {
+    ui.horizontal(|ui| {
+        if ui
+            .small_button(t!("Open in diff tool"))
+            .on_hover_text(t!("Compare the two versions in the external diff tool"))
+            .clicked()
+        {
+            match external_diff(&tab.repo, key) {
+                Ok(l) => cmds.push(Command::External(l)),
+                Err(e) => cmds.push(Command::Error(e)),
+            }
+        }
+        if ui
+            .small_button("Blame")
+            .on_hover_text(t!("Blame of the file at the newer revision"))
+            .clicked()
+        {
+            let pos = blame_view::Pos {
+                rev: Some(key.new),
+                path: key.path.clone(),
+                line: 0,
+            };
+            let blame = move |v: &mut FileView| {
+                v.mode = Mode::Blame;
+                v.blame.navigate(pos);
+            };
+            cmds.push(match view {
+                Some(id) => crate::ui::file_window::with_view(id, blame),
+                None => {
+                    let path = key.path.clone();
+                    crate::ui::history_options::cmd(move |t, _| {
+                        open_mode(t, path, Mode::Blame);
+                        if let Some(v) = &mut t.file_view {
+                            blame(v);
+                        }
+                    })
+                }
+            });
+        }
+    });
+}
+
+/// Writes both versions to temporary files for the diff tool.
+fn external_diff(repo: &Repo, key: &DiffKey) -> Result<Launch, String> {
+    let write = |id: Option<Oid>, path: &str| -> Result<std::path::PathBuf, String> {
+        let data = match id {
+            Some(id) => repo
+                .file_at(id, path)
+                .map_err(|e| e.to_string())?
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let tag = id.map_or_else(|| "empty".into(), short);
+        external::temp_file(&temp_name(path, &tag), &data)
+    };
+    let old_path = key.old_path.as_deref().unwrap_or(&key.path);
+    Ok(Launch::Diff {
+        left: write(key.old, old_path)?,
+        right: write(Some(key.new), &key.path)?,
+        cwd: repo.path().to_path_buf(),
+    })
+}
+
+/// `dir/main.rs` at `abc1234` -> `main.abc1234.rs`.
+fn temp_name(path: &str, tag: &str) -> String {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    match name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => format!("{stem}.{tag}.{ext}"),
+        _ => format!("{name}.{tag}"),
+    }
+}
+
+fn entry_menu(
+    ui: &mut egui::Ui,
+    tab: &RepoTab,
+    view: &FileView,
+    entries: &[FileCommit],
+    i: usize,
+    cmds: &mut Commands,
+) {
+    let e = &entries[i];
+    let selected = view.selected.unwrap_or(0);
+    if i != selected && ui.button(t!("Compare with the selected commit")).clicked() {
+        let vid = view.id;
+        cmds.push(crate::ui::file_window::with_view(vid, move |v| {
+            v.other = Some(i)
+        }));
+        ui.close();
+    }
+    if !view.is_folder {
+        if ui.button(t!("Blame at this revision")).clicked() {
+            let (vid, rev, path) = (view.id, e.commit.id, e.path.clone());
+            cmds.push(crate::ui::file_window::with_view(vid, move |v| {
+                v.mode = Mode::Blame;
+                v.blame.navigate(blame_view::Pos {
+                    rev: Some(rev),
+                    path,
+                    line: 0,
+                });
+            }));
+            ui.close();
+        }
+        let same_name = e.path == view.path;
+        let reset = ui
+            .add_enabled(
+                same_name,
+                egui::Button::new(t!("Reset file to this revision…")),
+            )
+            .on_disabled_hover_text(t!("The file had another name in this commit."));
+        if reset.clicked() {
+            cmds.push(Command::Dialog(Dialog::confirm(
+                &t!("Reset file"),
+                &t!(
+                    "Replace {} with its version from {}? Uncommitted changes in this file will be lost.",
+                    view.path,
+                    e.commit.short_id()
+                ),
+                Op::ResetFileTo {
+                    path: view.path.clone(),
+                    rev: e.commit.id.to_string(),
+                },
+                true,
+            )));
+            ui.close();
+        }
+        if ui.button(t!("Open in diff tool")).clicked() {
+            if let Some((old, new)) = sides(entries, i, None) {
+                let key = DiffKey {
+                    old: old.as_ref().map(|o| o.0),
+                    new: new.0,
+                    old_path: old.map(|o| o.1).filter(|p| *p != new.1),
+                    path: new.1,
+                    cfg: tab.diff_options.config,
+                };
+                match external_diff(&tab.repo, &key) {
+                    Ok(l) => cmds.push(Command::External(l)),
+                    Err(err) => cmds.push(Command::Error(err)),
+                }
+            }
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.button(t!("Show in history")).clicked() {
+        cmds.push(Command::SelectCommit(e.commit.id));
+        ui.close();
+    }
+    if ui.button(t!("Copy hash")).clicked() {
+        cmds.push(Command::Copy(e.commit.id.to_string()));
+        ui.close();
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RowState {
+    None,
+    Selected,
+    /// Picked with Ctrl+click for comparing.
+    Other,
 }
 
 fn history_row(
@@ -351,15 +836,20 @@ fn history_row(
     rect: Rect,
     e: &FileCommit,
     current_path: &str,
-    selected: bool,
+    state: RowState,
     hovered: bool,
 ) {
     let visuals = ui.visuals();
     let painter = ui.painter();
-    if selected {
-        painter.rect_filled(rect, 0.0, visuals.selection.bg_fill);
-    } else if hovered {
-        painter.rect_filled(rect, 0.0, visuals.widgets.hovered.weak_bg_fill);
+    let selected = state == RowState::Selected;
+    let fill = match state {
+        RowState::Selected => Some(visuals.selection.bg_fill),
+        RowState::Other => Some(visuals.selection.bg_fill.gamma_multiply(0.45)),
+        RowState::None if hovered => Some(visuals.widgets.hovered.weak_bg_fill),
+        RowState::None => None,
+    };
+    if let Some(fill) = fill {
+        painter.rect_filled(rect, 0.0, fill);
     }
     let (text, weak) = if selected {
         let c = visuals.selection.stroke.color;
@@ -407,231 +897,51 @@ fn history_row(
     );
 }
 
-// ---- Blame ----
-
-fn load_blame(repo: &Repo, path: &str) -> Result<BlameData, String> {
-    let lines = repo.blame(path).map_err(|e| e.to_string())?;
-    let mut commits = HashMap::new();
-    for l in &lines {
-        commits.entry(l.commit).or_insert_with(|| {
-            let summary = repo
-                .find_commit_info(l.commit)
-                .map(|c| c.summary)
-                .unwrap_or_default();
-            (summary, format_date(l.time, l.offset_minutes))
-        });
-    }
-    let odd = odd_blocks(lines.iter().map(|l| l.block_start));
-    let rows: Vec<BlameRow> = lines
-        .into_iter()
-        .zip(odd)
-        .map(|(l, odd_block)| BlameRow {
-            commit: l.commit,
-            block_start: l.block_start,
-            odd_block,
-            gutter: l.block_start.then(|| {
-                let date = format_day(l.time, l.offset_minutes);
-                (l.author, date)
-            }),
-            text: crate::util::expand_tabs(&l.text),
-        })
-        .collect();
-    let longest = rows
-        .iter()
-        .map(|r| r.text.chars().count())
-        .max()
-        .unwrap_or(0);
-    Ok(BlameData {
-        rows,
-        commits,
-        longest,
-    })
-}
-
-/// For each line, whether it belongs to an odd-numbered block.
-fn odd_blocks(starts: impl Iterator<Item = bool>) -> Vec<bool> {
-    let mut odd = true;
-    starts
-        .map(|start| {
-            if start {
-                odd = !odd;
-            }
-            odd
-        })
-        .collect()
-}
-
-fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
-    let ctx = ui.ctx().clone();
-    if loading_or_error(ui, view.blame_data.poll(&ctx)) {
-        return;
-    }
-    let Load::Done(Ok(data)) = &view.blame_data else {
-        return;
-    };
-    if data.rows.is_empty() {
-        ui.weak(t!("The file is empty."));
-        return;
-    }
-
-    let font = crate::util::code_font(12.0);
-    let row_h = crate::util::code_row_height(BLAME_ROW);
-    let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm'));
-    let content_w = GUTTER_W + NUMBER_W + 16.0 + data.longest as f32 * char_w;
-    let visuals = ui.visuals().clone();
-    let block_bg = visuals.faint_bg_color;
-    let hover_bg = visuals.selection.bg_fill.gamma_multiply(0.4);
-    let gutter_bg = visuals.extreme_bg_color;
-    let accent = visuals.hyperlink_color;
-    let weak = visuals.weak_text_color();
-    let separator = visuals.widgets.noninteractive.bg_stroke.color;
-    let mut hovered = None;
-
-    // Rows touch; show_rows must know there is no spacing between them.
-    ui.spacing_mut().item_spacing.y = 0.0;
-    egui::ScrollArea::both()
-        .id_salt("blame-rows")
-        .auto_shrink(false)
-        .show_rows(ui, row_h, data.rows.len(), |ui, range| {
-            let width = ui.available_width().max(content_w);
-            for i in range {
-                let row = &data.rows[i];
-                let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
-                // The gutter stays put while the code scrolls sideways.
-                let left = ui.clip_rect().left();
-                let gutter = Rect::from_x_y_ranges(left..=left + GUTTER_W, rect.y_range());
-                let resp = ui
-                    .interact(
-                        gutter,
-                        egui::Id::unique(("blame-gutter", i)),
-                        Sense::click(),
-                    )
-                    .on_hover_cursor(egui::CursorIcon::PointingHand);
-                if resp.hovered() {
-                    hovered = Some(row.commit);
-                }
-
-                let painter = ui.painter();
-                if row.odd_block {
-                    painter.rect_filled(rect, 0.0, block_bg);
-                }
-                painter.rect_filled(gutter, 0.0, gutter_bg.gamma_multiply(0.6));
-                // Lines from the commit under the pointer light up in the gutter.
-                if view.hovered == Some(row.commit) {
-                    painter.rect_filled(gutter, 0.0, hover_bg);
-                }
-                if row.block_start && i > 0 {
-                    painter.hline(rect.x_range(), rect.top(), (1.0, separator));
-                }
-                let y = rect.center().y;
-                if let Some((author, date)) = &row.gutter {
-                    let x = gutter.left() + 6.0;
-                    painter.text(
-                        pos2(x, y),
-                        Align2::LEFT_CENTER,
-                        short(row.commit),
-                        FontId::monospace(11.5),
-                        accent,
-                    );
-                    painter
-                        .with_clip_rect(Rect::from_x_y_ranges(
-                            x + HASH_W..=x + HASH_W + AUTHOR_W - 8.0,
-                            rect.y_range(),
-                        ))
-                        .text(
-                            pos2(x + HASH_W, y),
-                            Align2::LEFT_CENTER,
-                            author,
-                            FontId::proportional(12.0),
-                            visuals.text_color(),
-                        );
-                    painter
-                        .with_clip_rect(Rect::from_x_y_ranges(
-                            x + HASH_W + AUTHOR_W..=gutter.right() - 4.0,
-                            rect.y_range(),
-                        ))
-                        .text(
-                            pos2(x + HASH_W + AUTHOR_W, y),
-                            Align2::LEFT_CENTER,
-                            date,
-                            FontId::proportional(12.0),
-                            weak,
-                        );
-                }
-                painter.text(
-                    pos2(gutter.right() + NUMBER_W - 8.0, y),
-                    Align2::RIGHT_CENTER,
-                    (i + 1).to_string(),
-                    crate::util::code_font(11.0),
-                    weak,
-                );
-                let code_left = gutter.right() + NUMBER_W;
-                painter
-                    .with_clip_rect(Rect::from_x_y_ranges(
-                        code_left..=ui.clip_rect().right(),
-                        rect.y_range(),
-                    ))
-                    .text(
-                        pos2(rect.left() + GUTTER_W + NUMBER_W + 4.0, y),
-                        Align2::LEFT_CENTER,
-                        &row.text,
-                        font.clone(),
-                        visuals.text_color(),
-                    );
-
-                if resp.clicked() {
-                    cmds.push(Command::SelectCommit(row.commit));
-                }
-                if let Some((summary, date)) = data.commits.get(&row.commit) {
-                    resp.on_hover_ui(|ui| {
-                        ui.strong(summary);
-                        ui.weak(format!("{} · {date}", row.commit));
-                        ui.weak(t!("Click to show in the history"));
-                    });
-                }
-            }
-        });
-    view.hovered = hovered;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ferrum_core::ChangeKind;
+    use ferrum_core::CommitInfo;
 
-    #[test]
-    fn alternates_blocks() {
-        let starts = [true, false, true, true, false, false];
-        assert_eq!(
-            odd_blocks(starts.into_iter()),
-            [false, false, true, false, false, false]
-        );
-    }
-
-    fn file(path: &str, old: Option<&str>) -> FileDiff {
-        FileDiff {
+    fn entry(n: u8, path: &str, old: Option<&str>) -> FileCommit {
+        FileCommit {
+            commit: CommitInfo {
+                id: Oid::from_bytes(&[n; 20]).unwrap(),
+                summary: String::new(),
+                author: String::new(),
+                email: String::new(),
+                time: 0,
+                offset_minutes: 0,
+                parents: vec![Oid::from_bytes(&[n + 100; 20]).unwrap()],
+            },
             path: path.into(),
             old_path: old.map(Into::into),
-            kind: ChangeKind::Modified,
-            binary: false,
-            old_id: None,
-            new_id: None,
-            hunks: Vec::new(),
-            additions: 0,
-            deletions: 0,
-            old_mode: 0,
-            new_mode: 0,
-            skipped: None,
         }
     }
 
     #[test]
-    fn finds_the_file_in_a_commit() {
-        let files = || vec![file("a", None), file("b", Some("old-b"))];
-        assert_eq!(find_file(files(), "b", None).unwrap().path, "b");
-        // libgit2 may name the file differently than `git log --follow`.
-        assert_eq!(find_file(files(), "x", Some("a")).unwrap().path, "a");
-        assert_eq!(find_file(files(), "old-b", None).unwrap().path, "b");
-        assert!(find_file(files(), "zzz", None).is_none());
+    fn picks_the_sides_to_compare() {
+        let list = [
+            entry(1, "b", Some("a")),
+            entry(2, "a", None),
+            entry(3, "a", None),
+        ];
+        let id = |n: u8| Oid::from_bytes(&[n; 20]).unwrap();
+        // One commit: its parent, under the old name.
+        let (old, new) = sides(&list, 0, None).unwrap();
+        assert_eq!(old, Some((id(101), "a".into())));
+        assert_eq!(new, (id(1), "b".into()));
+        // Two commits: older to newer, whichever was picked first.
+        for (a, b) in [(0, 2), (2, 0)] {
+            let (old, new) = sides(&list, a, Some(b)).unwrap();
+            assert_eq!(old, Some((id(3), "a".into())));
+            assert_eq!(new, (id(1), "b".into()));
+        }
+    }
+
+    #[test]
+    fn names_temporary_files() {
+        assert_eq!(temp_name("src/main.rs", "abc1234"), "main.abc1234.rs");
+        assert_eq!(temp_name("Makefile", "abc1234"), "Makefile.abc1234");
+        assert_eq!(temp_name(".gitignore", "x"), ".gitignore.x");
     }
 }

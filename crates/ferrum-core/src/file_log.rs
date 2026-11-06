@@ -54,7 +54,16 @@ impl Repo {
         check_rev(rev)?;
         let fmt = format!("--format={RS}%H{FS}%P{FS}%an{FS}%ae{FS}%at{FS}%ai{FS}%s");
         if !self.is_folder(rev, path) {
-            let args = ["log", rev, "--follow", "--name-status", "-z", &fmt, "--", path];
+            let args = [
+                "log",
+                rev,
+                "--follow",
+                "--name-status",
+                "-z",
+                &fmt,
+                "--",
+                path,
+            ];
             return Ok(parse_file_log(&self.git().run(&args)?, path));
         }
         let folder = path.trim_end_matches('/');
@@ -162,7 +171,8 @@ impl Repo {
             }
         }
         opts.disable_pathspec_match(true);
-        let mut diff = repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
+        let mut diff =
+            repo.diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
         diff.find_similar(None)?;
         Ok(diff)
     }
@@ -463,7 +473,10 @@ mod tests {
         assert_eq!(d.path, "b.txt");
         assert_eq!(d.old_path.as_deref(), Some("a.txt"));
         assert_eq!(d.additions, 1);
-        assert_eq!(repo.file_at(v1, "a.txt").unwrap().unwrap(), b"1\n2\n3\n4\n5\n6\n");
+        assert_eq!(
+            repo.file_at(v1, "a.txt").unwrap().unwrap(),
+            b"1\n2\n3\n4\n5\n6\n"
+        );
         assert!(repo.file_at(v1, "b.txt").unwrap().is_none());
         let tracked = repo.tracked_files().unwrap();
         assert_eq!(tracked, ["b.txt"]);

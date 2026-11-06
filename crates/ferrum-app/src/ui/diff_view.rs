@@ -1102,12 +1102,12 @@ fn body(
                 let (h_idx, l_idx) = m.lines[g as usize];
                 let selectable =
                     selection.is_some() && inp.line_staging && line.kind != LineKind::Context;
-                let sense = if selectable {
-                    Sense::click()
-                } else {
-                    Sense::hover()
-                };
-                let resp = ui.interact(cell.rect, Id::unique((inp.id, "row", i, side)), sense);
+                // Clicks select lines; every line has a context menu.
+                let resp = ui.interact(
+                    cell.rect,
+                    Id::unique((inp.id, "row", i, side)),
+                    Sense::click(),
+                );
                 let is_sel = selection
                     .as_ref()
                     .is_some_and(|s| s.lines.contains(&(h_idx, l_idx)));
@@ -1150,7 +1150,15 @@ fn body(
                     },
                     prefs,
                 );
+                crate::ui::file_lines::diff_line_menu(
+                    &resp,
+                    inp.id,
+                    file,
+                    selection.as_deref(),
+                    (h_idx, l_idx),
+                );
                 if resp.clicked()
+                    && selectable
                     && let Some(sel) = selection.as_deref_mut()
                 {
                     let shift = ui.input(|i| i.modifiers.shift);

@@ -42,7 +42,8 @@ pub struct FerrumApp {
 
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
-/// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
+/// `file:PATH`, `blame:PATH`, `lines:PATH:A-B`, `finder:TEXT`, `file-window`,
+/// `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`,
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
@@ -68,6 +69,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             }
             "file" => out.push(Command::FileHistory(arg.into())),
             "blame" => out.push(Command::Blame(arg.into())),
+            "lines" | "finder" | "file-window" => {
+                out.push(crate::ui::file_window::dev_step(cmd, arg))
+            }
             "conflict" => out.push(Command::ResolveConflict(arg.into())),
             "rebase" => {
                 let n = arg.parse::<usize>().unwrap_or(3);
@@ -665,6 +669,8 @@ impl FerrumApp {
         if pressed(cmd, Key::F) && !crate::ui::diff_view::claim_find(ctx) {
             cmds.push(Command::FocusSearch);
         }
+        // Ctrl+G is Go to line in the blame under the pointer.
+        let _ = crate::ui::blame_view::claim_goto(ctx);
         history_options::shortcuts(ctx, &self.tabs[self.active], cmds);
         if pressed(cmd, Key::Num1) {
             cmds.push(Command::SetView(View::History));
@@ -1204,6 +1210,7 @@ impl eframe::App for FerrumApp {
         );
 
         self.show_activity(&ctx);
+        crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
 
         for c in cmds.take() {
             self.handle(c, &ctx);
