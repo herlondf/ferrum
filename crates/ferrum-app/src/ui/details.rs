@@ -10,7 +10,9 @@ use ferrum_core::diff::DiffConfig;
 use ferrum_core::{CommitDetails, DiffSource, Oid, Repo, StashInfo, short};
 
 use crate::command::{Command, Commands, Op};
+use crate::keymap::{self, Action};
 use crate::tab::{CommitView, RepoTab, View};
+use crate::ui::custom_commands;
 use crate::ui::details_model::{self, CommitWindow, DetailsSettings, DetailsTab, PaneState};
 use crate::ui::file_actions::{self, DiffSide};
 use crate::ui::focus::Pane;
@@ -61,14 +63,13 @@ pub fn shortcuts(
     if tab.view != View::History {
         return;
     }
-    let toggle = KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::ALT, Key::D);
-    if ctx.input_mut(|i| i.consume_shortcut(&toggle)) {
+    if keymap::pressed(ctx, Action::ToggleDetails) {
         prefs.collapsed = !prefs.collapsed;
     }
     if ctx.text_edit_focused() || egui::Popup::is_any_open(ctx) {
         return;
     }
-    let space = |ctx: &egui::Context| ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space));
+    let space = |ctx: &egui::Context| keymap::pressed(ctx, Action::LargeView);
     if tab.details.popup {
         if space(ctx) {
             tab.details.popup = false;
@@ -93,8 +94,7 @@ pub fn shortcuts(
         return;
     }
     let Some(view) = &tab.commit_view else { return };
-    let info = KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::C);
-    if ctx.input_mut(|i| i.consume_shortcut(&info)) {
+    if keymap::pressed(ctx, Action::CopyCommitInfo) {
         cmds.push(Command::Copy(commit_text(&view.details)));
         return;
     }
@@ -749,7 +749,8 @@ fn files(
                     );
                 }
                 ui.separator();
-                let button = egui::Button::new(t!("External diff")).shortcut_text("Ctrl+D");
+                let button = egui::Button::new(t!("External diff"))
+                    .shortcut_text(keymap::text(Action::ExternalDiff));
                 if ui.add(button).clicked() {
                     let cmd = env
                         .repo
@@ -769,6 +770,7 @@ fn files(
                     ui.close();
                 }
                 file_actions::workdir_menu(ui, &root, &f.path, cmds);
+                custom_commands::commit_file_menu(ui, &root, &f.path, id, cmds);
             };
             clicked = file_tree::changed_files(
                 ui,

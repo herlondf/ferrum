@@ -288,7 +288,7 @@ fn operation_row(ui: &mut egui::Ui, op: &Operation, selected: &mut Option<u64>) 
     }
 }
 
-fn details(ui: &mut egui::Ui, op: &Operation) {
+pub(crate) fn details(ui: &mut egui::Ui, op: &Operation) {
     let commands = op.commands();
     ui.horizontal(|ui| {
         ui.label(RichText::new(&op.label).strong().size(15.0));

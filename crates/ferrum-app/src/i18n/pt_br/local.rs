@@ -180,10 +180,6 @@ pub static T: &[(&str, &str)] = &[
     // ----- Settings -----
     ("✔ Commit", "✔ Commit"),
     ("💡 AI", "💡 IA"),
-    (
-        "Stage or unstage the selected files",
-        "Preparar ou remover da preparação os arquivos selecionados",
-    ),
     ("Subject soft limit", "Limite sugerido do assunto"),
     (
         "The length counter turns yellow after this many characters",

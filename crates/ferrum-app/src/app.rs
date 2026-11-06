@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, RichText};
 use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
@@ -45,7 +45,8 @@ pub struct FerrumApp {
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `lines:PATH:A-B`, `finder:TEXT`, `file-window`,
 /// `conflict:PATH`, `prs`, `rebase:N` (last N
-/// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`,
+/// commits), `settings`, `settings:SECTION` (appearance, git, tools, shortcuts,
+/// commands...), `palette`, `palette:QUERY`,
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login|
 /// submodule|submodule-update|lfs`,
 /// `dialog:fetch|pull|push-many|push-tags|track|remote`,
@@ -90,7 +91,8 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 "dark" => ThemeChoice::Dark,
                 _ => ThemeChoice::System,
             }))),
-            "palette" => out.push(Command::ShowPalette),
+            "palette" if arg.is_empty() => out.push(Command::ShowPalette),
+            "palette" => out.push(Command::DevStep(DevStep::Palette(arg.into()))),
             "activity" => out.push(Command::ShowActivity),
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
@@ -648,6 +650,7 @@ impl FerrumApp {
                     self.settings_window.select(&name);
                 }
                 DevStep::Theme(theme) => self.settings.theme = theme,
+                DevStep::Palette(q) => self.palette.open_with(&q),
                 DevStep::Search(q) => {
                     if let Some(t) = self.tab() {
                         t.history.search = q;
@@ -702,6 +705,12 @@ impl FerrumApp {
                     f(t, &mut self.settings.sync);
                 }
             }
+            Command::Custom(inv) => {
+                let tab = self.tabs.get(self.active);
+                for c in crate::custom_commands::resolve(inv, &self.settings, tab) {
+                    self.handle(c, ctx);
+                }
+            }
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -712,68 +721,76 @@ impl FerrumApp {
     }
 
     fn shortcuts(&mut self, ctx: &egui::Context, cmds: &mut Commands) {
-        let cmd = Modifiers::COMMAND;
-        let cs = Modifiers::COMMAND | Modifiers::SHIFT;
-        let pressed = |m: Modifiers, k: Key| {
-            ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
-        };
-        if pressed(cmd, Key::P) || pressed(cs, Key::P) {
+        use crate::keymap::Action as A;
+        let pressed = |a| crate::keymap::pressed(ctx, a);
+        if pressed(A::Palette) {
             cmds.push(Command::ShowPalette);
         }
-        if pressed(cmd, Key::O) {
+        if pressed(A::OpenRepo) {
             cmds.push(Command::OpenRepoDialog);
         }
-        if pressed(cmd, Key::Comma) {
+        if pressed(A::Settings) {
             cmds.push(Command::ShowSettings);
         }
         if self.tabs.is_empty() || self.dialog.is_some() {
             return;
         }
-        if pressed(Modifiers::NONE, Key::F5) || pressed(cmd, Key::R) {
+        if pressed(A::Refresh) {
             cmds.push(Command::Refresh);
         }
         // Ctrl+F searches the diff when it has the pointer or focus, else the history.
-        if pressed(cmd, Key::F) && !crate::ui::diff_view::claim_find(ctx) {
+        if pressed(A::Find) && !crate::ui::diff_view::claim_find(ctx) {
             cmds.push(Command::FocusSearch);
         }
         // Ctrl+G is Go to line in the blame under the pointer.
         let _ = crate::ui::blame_view::claim_goto(ctx);
         history_options::shortcuts(ctx, &self.tabs[self.active], cmds);
-        if pressed(cmd, Key::Num1) {
+        if pressed(A::ShowHistory) {
             cmds.push(Command::SetView(View::History));
         }
-        if pressed(cmd, Key::Num2) {
+        if pressed(A::ShowChanges) {
             cmds.push(Command::SetView(View::Changes));
         }
         crate::ui::ref_dialogs::shortcuts(ctx, &self.tabs[self.active], cmds);
-        if pressed(cs, Key::S) {
+        if pressed(A::Stash) {
             cmds.push(Command::Dialog(Dialog::stash()));
         }
-        if pressed(cs, Key::F) {
+        if pressed(A::Fetch) {
             cmds.run(Op::Fetch { remote: None });
         }
-        if pressed(cs, Key::D) {
+        if pressed(A::Pull) {
             cmds.run(Op::Pull(self.settings.pull.mode()));
         }
-        if pressed(cs, Key::U)
+        if pressed(A::Push)
             && let Some(b) = self.tabs[self.active].head.clone()
         {
             cmds.push(Command::Dialog(Dialog::push(&self.tabs[self.active], &b)));
         }
-        if pressed(cmd, Key::W) {
+        let dir = self.tabs[self.active].path().to_path_buf();
+        if pressed(A::Terminal) {
+            cmds.push(Command::External(crate::external::Launch::Terminal {
+                dir: dir.clone(),
+            }));
+        }
+        if pressed(A::FileManager) {
+            cmds.push(Command::External(crate::external::Launch::Reveal {
+                path: dir,
+            }));
+        }
+        if pressed(A::CloseTab) {
             cmds.push(Command::CloseTab(self.active));
         }
-        if pressed(cmd, Key::Tab) {
+        if pressed(A::NextTab) {
             cmds.push(Command::SelectTab((self.active + 1) % self.tabs.len()));
         }
-        if pressed(cs, Key::Tab) {
+        if pressed(A::PrevTab) {
             cmds.push(Command::SelectTab(
                 (self.active + self.tabs.len() - 1) % self.tabs.len(),
             ));
         }
         // Ctrl+Z belongs to text fields while one is focused.
         let typing = ctx.memory(|m| m.focused().is_some());
-        if !typing && pressed(cmd, Key::Z) {
+        if !typing && pressed(A::Undo) {
             cmds.push(Command::Undo);
         }
     }
@@ -800,6 +817,7 @@ impl FerrumApp {
                 if let Some(tab) = self.tabs.get(self.active) {
                     ui.separator();
                     crate::ui::tools::repository_menu(ui, tab.path(), cmds);
+                    crate::ui::custom_commands::repository_menu(ui, tab, cmds);
                 }
                 if !self.settings.recent.is_empty() {
                     ui.separator();
@@ -1081,6 +1099,8 @@ impl eframe::App for FerrumApp {
         for c in std::mem::take(&mut self.startup) {
             cmds.push(c);
         }
+        crate::keymap::begin_frame(&ctx, &self.settings.keymap);
+        crate::custom_commands::set_user_commands(&self.settings.custom.commands);
         self.shortcuts(&ctx, &mut cmds);
         crate::ui::diff_prefs::share_with_prefs(
             &ctx,
@@ -1195,13 +1215,14 @@ impl eframe::App for FerrumApp {
         palette::show(
             &ctx,
             &mut self.palette,
-            self.tabs.get(self.active),
+            self.tabs.get_mut(self.active),
             &names,
             &self.settings,
             &mut cmds,
         );
 
         self.show_activity(&ctx);
+        crate::ui::custom_commands::output_window(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
 
         for c in cmds.take() {

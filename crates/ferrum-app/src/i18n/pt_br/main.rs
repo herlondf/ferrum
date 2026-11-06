@@ -182,7 +182,6 @@ pub static T: &[(&str, &str)] = &[
         "Rebase interativo dos últimos 10 commits…",
     ),
     ("Switch to {}", "Alternar para {}"),
-    ("Type a command…", "Digite um comando…"),
     ("No matching command.", "Nenhum comando encontrado."),
     // ui/sidebar.rs
     ("📝 Local Changes ({})", "📝 Alterações locais ({})"),

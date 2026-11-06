@@ -91,8 +91,7 @@ pub fn external_diff(repo: &Repo, file: &FileDiff, left: DiffSide, right: DiffSi
 /// Ctrl+D was pressed (and no text field has the keyboard).
 pub fn external_diff_pressed(ctx: &egui::Context) -> bool {
     let typing = ctx.memory(|m| m.focused().is_some());
-    let shortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::D);
-    !typing && ctx.input_mut(|i| i.consume_shortcut(&shortcut))
+    !typing && crate::keymap::pressed(ctx, crate::keymap::Action::ExternalDiff)
 }
 
 /// Asks where to save a file and writes it.

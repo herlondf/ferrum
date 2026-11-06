@@ -118,8 +118,16 @@ pub fn run(git: &Git, program: &Program, mut progress: impl FnMut(&str)) -> Resu
 
     let (tx, rx) = mpsc::channel::<(Stream, String)>();
     let readers = [
-        reader(child.stdout.take().map(|s| Box::new(s) as _), Stream::Stdout, tx.clone()),
-        reader(child.stderr.take().map(|s| Box::new(s) as _), Stream::Stderr, tx),
+        reader(
+            child.stdout.take().map(|s| Box::new(s) as _),
+            Stream::Stdout,
+            tx.clone(),
+        ),
+        reader(
+            child.stderr.take().map(|s| Box::new(s) as _),
+            Stream::Stderr,
+            tx,
+        ),
     ];
     let (mut out, mut err) = (String::new(), String::new());
     loop {
@@ -286,8 +294,14 @@ mod tests {
     #[test]
     fn splits_words_and_quotes() {
         assert_eq!(split_args("a  b"), ["a", "b"]);
-        assert_eq!(split_args(r#"x "a b" 'c d' e\ f"#), ["x", "a b", "c d", "e f"]);
-        assert_eq!(split_args(r"C:\tools\run.exe --x"), [r"C:\tools\run.exe", "--x"]);
+        assert_eq!(
+            split_args(r#"x "a b" 'c d' e\ f"#),
+            ["x", "a b", "c d", "e f"]
+        );
+        assert_eq!(
+            split_args(r"C:\tools\run.exe --x"),
+            [r"C:\tools\run.exe", "--x"]
+        );
         assert_eq!(split_args(r#"say "" end"#), ["say", "", "end"]);
         assert!(split_args("   ").is_empty());
     }
@@ -303,7 +317,10 @@ mod tests {
         })
         .unwrap();
         assert_eq!(out.trim(), "hello");
-        assert_eq!(lines.iter().map(|l| l.trim()).collect::<Vec<_>>(), ["hello"]);
+        assert_eq!(
+            lines.iter().map(|l| l.trim()).collect::<Vec<_>>(),
+            ["hello"]
+        );
         let log = log.lock().unwrap();
         assert_eq!(log.len(), 1);
         assert_eq!(log[0].command, "echo hello");

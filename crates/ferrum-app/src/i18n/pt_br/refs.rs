@@ -24,10 +24,6 @@ pub static T: &[(&str, &str)] = &[
         "Envia o novo nome, exclui o antigo e passa a acompanhar o novo",
     ),
     ("Rename…  (F2)", "Renomear…  (F2)"),
-    (
-        "Rename the selected branch",
-        "Renomear a branch selecionada",
-    ),
     ("checked out in {}", "em checkout em {}"),
     (
         "Also delete their remote branches ({})",

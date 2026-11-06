@@ -1168,6 +1168,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
     let busy = tab.busy();
 
     ui.set_min_width(240.0);
+    crate::ui::custom_commands::commit_menu(ui, tab, id, cmds);
     ui.add_enabled_ui(!busy, |ui| {
         for l in labels.iter().filter(|l| l.kind == RefKind::Local && !l.is_head) {
             if ui.button(t!("Check out {}", l.name)).clicked() {

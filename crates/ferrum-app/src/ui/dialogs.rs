@@ -68,6 +68,8 @@ pub enum Dialog {
     Worktree(crate::ui::worktrees::WorktreeDialog),
     /// Merge, rebase, cherry-pick, revert, reword and local-changes prompts.
     Flow(crate::ui::flow_dialogs::FlowDialog),
+    /// Form, confirmation or approval before a custom command.
+    Custom(crate::ui::custom_commands::CustomDialog),
 }
 
 impl Dialog {
@@ -612,6 +614,9 @@ fn body(
         Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Flow(d) => crate::ui::flow_dialogs::show(ui, d, tab, cmds, enter),
+        Dialog::Custom(d) => {
+            crate::ui::custom_commands::show_dialog(ui, d, tab, settings, cmds, enter)
+        }
     }
 }
 

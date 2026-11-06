@@ -124,6 +124,12 @@ pub struct Settings {
     /// Commit details: active tab, file list mode, collapsed pane.
     #[serde(default)]
     pub details: crate::ui::details_model::DetailsSettings,
+    /// Keyboard shortcut overrides (Settings > Shortcuts), by action id.
+    #[serde(default)]
+    pub keymap: crate::keymap::Overrides,
+    /// Custom commands and approved shared ones.
+    #[serde(default)]
+    pub custom: crate::custom_commands::CustomSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -185,6 +191,8 @@ impl Default for Settings {
             submodules: Default::default(),
             sync: Default::default(),
             details: Default::default(),
+            keymap: Default::default(),
+            custom: Default::default(),
         }
     }
 }

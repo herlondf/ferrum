@@ -41,6 +41,34 @@ pub fn open(tab: &mut RepoTab) {
     }
 }
 
+/// Loads the tracked files for the command palette, unless already there.
+pub fn preload(tab: &mut RepoTab) {
+    let tools = &mut tab.file_tools;
+    if tools.candidates.is_empty() && matches!(tools.tracked, Load::Idle) {
+        tools
+            .tracked
+            .start(&tab.repo, |r| r.tracked_files().map_err(|e| e.to_string()));
+    }
+}
+
+/// Moves freshly loaded tracked files into the candidates. Returns true then.
+pub fn poll_candidates(ctx: &egui::Context, tab: &mut RepoTab) -> bool {
+    let tools = &mut tab.file_tools;
+    tools.tracked.poll(ctx);
+    if matches!(tools.tracked, Load::Done(Ok(_)))
+        && let Load::Done(Ok(list)) = std::mem::take(&mut tools.tracked)
+    {
+        tools.candidates = candidates(&list);
+        return true;
+    }
+    false
+}
+
+/// The tracked files and folders loaded last (for the palette).
+pub fn cached(tab: &RepoTab) -> &[String] {
+    &tab.file_tools.candidates
+}
+
 /// Tracked files and their folders (folders end with `/`).
 fn candidates(files: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::with_capacity(files.len() + files.len() / 4);
@@ -93,15 +121,11 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(mut f) = tab.file_tools.finder.take() else {
         return;
     };
-    let tools = &mut tab.file_tools;
-    tools.tracked.poll(ctx);
-    let loaded = !matches!(tools.tracked, Load::Pending(_));
-    if matches!(tools.tracked, Load::Done(Ok(_)))
-        && let Load::Done(Ok(list)) = std::mem::take(&mut tools.tracked)
-    {
-        tools.candidates = candidates(&list);
+    if poll_candidates(ctx, tab) {
         f.matches = None;
     }
+    let tools = &mut tab.file_tools;
+    let loaded = !matches!(tools.tracked, Load::Pending(_));
     let error = match &tools.tracked {
         Load::Done(Err(e)) => Some(e.clone()),
         _ => None,

@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
+use eframe::egui::{self, Key};
 use ferrum_core::message;
 use ferrum_core::ops::PushOptions;
 use ferrum_core::{ChangeKind, Oid, RepoState};
@@ -62,17 +62,10 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds:
     let subject_id = ui.make_persistent_id("commit-subject");
     let body_id = ui.make_persistent_id("commit-body");
     // Read the shortcuts before the text fields see the keys.
-    let commit_push = ui.input_mut(|i| {
-        i.consume_shortcut(&KeyboardShortcut::new(
-            Modifiers::COMMAND | Modifiers::SHIFT,
-            Key::Enter,
-        ))
-    });
+    use crate::keymap::{Action, pressed};
+    let commit_push = pressed(ui.ctx(), Action::CommitPush);
     let in_message = ui.memory(|m| m.has_focus(subject_id) || m.has_focus(body_id));
-    let commit_key = in_message
-        && ui.input_mut(|i| {
-            i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Enter))
-        });
+    let commit_key = in_message && pressed(ui.ctx(), Action::Commit);
 
     tools(ui, tab, settings);
     message_fields(ui, tab, settings, subject_id, body_id);
