@@ -13,10 +13,10 @@ use ferrum_core::*;
 use std::result::Result;
 
 use crate::command::Op;
-use crate::jobs::{Job, JobOutput, Refresh};
+use crate::jobs::{Job, JobOutput, JobSpec, Refresh};
 use crate::ui::{blame, conflicts, forge as forge_ui, rebase};
 
-const COMMIT_LIMIT: usize = 10_000;
+pub const COMMIT_LIMIT: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
@@ -133,14 +133,23 @@ pub struct RepoTab {
     pending_undo: Option<UndoEntry>,
     pub queue: VecDeque<Op>,
     pub message: Option<Message>,
+    /// Background refresh and file watching (see `refresh.rs`).
+    pub live: crate::refresh::Live,
 }
 
 impl RepoTab {
     pub fn open(path: PathBuf) -> Result<Self, String> {
+        let mut tab = Self::new(path)?;
+        tab.refresh_all();
+        Ok(tab)
+    }
+
+    /// A tab with nothing loaded yet.
+    pub fn new(path: PathBuf) -> Result<Self, String> {
         let repo = Repo::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let git = repo.git();
         let name = repo.name();
-        let mut tab = Self {
+        Ok(Self {
             repo,
             git,
             name,
@@ -174,9 +183,8 @@ impl RepoTab {
             pending_undo: None,
             queue: VecDeque::new(),
             message: None,
-        };
-        tab.refresh_all();
-        Ok(tab)
+            live: Default::default(),
+        })
     }
 
     pub fn path(&self) -> &std::path::Path {
@@ -197,14 +205,6 @@ impl RepoTab {
             error: true,
             at: Instant::now(),
         });
-    }
-
-    pub fn refresh(&mut self, kind: Refresh) {
-        match kind {
-            Refresh::None => {}
-            Refresh::Status => self.refresh_status(),
-            Refresh::All => self.refresh_all(),
-        }
     }
 
     /// Reloads everything: refs, history and local changes.
@@ -240,8 +240,22 @@ impl RepoTab {
             .and_then(|r| forge::parse_remote_url(&r.url));
         self.apply_search();
         self.refresh_status();
+        self.keep_selected_commit();
+        if let Some(e) = errors.into_iter().next() {
+            self.error(e);
+        }
+        if std::env::var_os("FERRUM_TIMING").is_some() {
+            eprintln!(
+                "refresh_all {}: {:?} ({} commits)",
+                self.name,
+                started.elapsed(),
+                self.commits.len()
+            );
+        }
+    }
 
-        // Keep the selected commit if it still exists.
+    /// Keeps the selected commit after a reload if it still exists.
+    pub fn keep_selected_commit(&mut self) {
         if let Some(id) = self.history.selected {
             if self.index.contains_key(&id) {
                 if self
@@ -255,17 +269,6 @@ impl RepoTab {
                 self.history.selected = None;
                 self.commit_view = None;
             }
-        }
-        if let Some(e) = errors.into_iter().next() {
-            self.error(e);
-        }
-        if std::env::var_os("FERRUM_TIMING").is_some() {
-            eprintln!(
-                "refresh_all {}: {:?} ({} commits)",
-                self.name,
-                started.elapsed(),
-                self.commits.len()
-            );
         }
     }
 
@@ -431,6 +434,9 @@ impl RepoTab {
             self.queue.push_back(op);
             return;
         }
+        // The background reload may not have landed yet; undo needs the real HEAD.
+        self.head = self.repo.head_branch();
+        self.head_oid = self.repo.head_oid();
         self.pending_undo = self.undo_for(&op);
         self.start(op, ctx);
     }
@@ -445,16 +451,46 @@ impl RepoTab {
         }
     }
 
+    /// Runs an operation on behalf of the app (e.g. auto-fetch): it is listed
+    /// under Background in the activity window and fails quietly. Returns
+    /// `false`, doing nothing, while another operation is running or queued.
+    #[allow(dead_code)] // For auto-fetch.
+    pub fn run_background(&mut self, op: Op, ctx: &egui::Context) -> bool {
+        if self.job.is_some() || !self.queue.is_empty() {
+            return false;
+        }
+        self.pending_undo = None;
+        self.start_job(op, ctx, true);
+        true
+    }
+
+    /// Stops the running operation and drops the queued ones.
+    pub fn cancel_job(&mut self) {
+        if let Some(job) = &self.job
+            && job.cancellable()
+        {
+            job.cancel();
+            self.queue.clear();
+        }
+    }
+
     fn start(&mut self, op: Op, ctx: &egui::Context) {
+        self.start_job(op, ctx, false);
+    }
+
+    fn start_job(&mut self, op: Op, ctx: &egui::Context, background: bool) {
         let git = self.git.clone();
-        let label = op.label();
-        let refresh = op.refresh();
         let is_commit = matches!(op, Op::Commit { .. });
-        let mut job = Job::spawn(label, refresh, ctx, move |progress| {
-            op.execute(&git, progress)
+        let spec = JobSpec::new(op.label(), op.refresh())
+            .repo(self.path())
+            .background(background)
+            .cancellable();
+        let mut job = Job::start(spec, ctx, move |env| {
+            op.execute(&env.git(&git), &|l| env.progress(l))
         });
         job.is_commit = is_commit;
         self.job = Some(job);
+        self.live.job_started();
     }
 
     /// Starts a job that is not a git operation (forge requests, searches).
@@ -469,15 +505,28 @@ impl RepoTab {
             return;
         }
         self.pending_undo = None;
-        self.job = Some(Job::spawn(label, Refresh::None, ctx, work));
+        let spec = JobSpec::new(label, Refresh::None).repo(self.path());
+        self.job = Some(Job::start(spec, ctx, move |env| work(&|l| env.progress(l))));
     }
 
     /// Checks the running job. Returns its output when it has just finished.
     pub fn poll_job(&mut self, ctx: &egui::Context) -> Option<JobOutput> {
         let result = self.job.as_ref()?.poll()?;
         let job = self.job.take()?;
-        self.refresh(job.refresh);
+        // Reloads in the background; the state is read now for the undo check.
+        self.request_refresh(job.refresh);
+        self.state = self.repo.state();
         let output = match result {
+            Err(_) if job.cancel_requested() => {
+                self.pending_undo = None;
+                self.changes.committing = false;
+                self.queue.clear();
+                self.info(t!("{} cancelled", job.label));
+                None
+            }
+            // Shown in the activity window; no error in the status bar.
+            Err(_) if job.background => None,
+            Ok(out) if job.background => Some(out),
             Ok(out) => {
                 if job.is_commit {
                     self.changes.message.clear();
@@ -518,10 +567,15 @@ impl RepoTab {
     }
 
     fn branch_target(&self, name: &str) -> Option<Oid> {
-        self.branches
-            .iter()
-            .find(|b| b.kind == BranchKind::Local && b.name == name)
-            .and_then(|b| b.target)
+        self.repo
+            .resolve(&format!("refs/heads/{name}"))
+            .ok()
+            .or_else(|| {
+                self.branches
+                    .iter()
+                    .find(|b| b.kind == BranchKind::Local && b.name == name)
+                    .and_then(|b| b.target)
+            })
     }
 
     /// How to undo `op`, based on the state before it runs.

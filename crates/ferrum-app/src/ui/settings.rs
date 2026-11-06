@@ -189,6 +189,7 @@ fn general(ui: &mut egui::Ui, settings: &mut Settings) {
             });
             ui.end_row();
         });
+    crate::ui::background::settings_section(ui, &mut settings.background);
 }
 
 fn profiles(

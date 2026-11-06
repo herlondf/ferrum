@@ -2,18 +2,33 @@
 mod i18n;
 
 mod app;
+mod benchmark;
 mod command;
+mod desktop_notify;
 mod icon;
 mod jobs;
+mod refresh;
 mod settings;
 mod tab;
 mod ui;
 #[cfg(test)]
 mod ui_tests;
 mod util;
+mod watcher;
 
 fn main() -> eframe::Result {
     let paths: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(Into::into).collect();
+    if paths
+        .first()
+        .is_some_and(|a| a.as_os_str() == "--benchmark")
+    {
+        let repo = paths.get(1).cloned().unwrap_or_else(|| ".".into());
+        let runs = paths
+            .get(2)
+            .and_then(|r| r.to_str()?.parse().ok())
+            .unwrap_or(3);
+        std::process::exit(benchmark::main(&repo, runs));
+    }
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

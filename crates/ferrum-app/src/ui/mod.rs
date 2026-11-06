@@ -1,3 +1,5 @@
+pub mod activity;
+pub mod background;
 pub mod blame;
 pub mod changes;
 pub mod conflicts;
