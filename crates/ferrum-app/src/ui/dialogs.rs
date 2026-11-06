@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
 use ferrum_core::ops::{MergeMode, PushOptions, ResetMode};
-use ferrum_core::{BranchInfo, BranchKind, Identity};
+use ferrum_core::{BranchKind, Identity};
 
 use crate::command::{Command, Commands, Op};
 use crate::settings::{Profile, Settings};
@@ -19,32 +19,9 @@ pub enum Dialog {
         op: Box<Op>,
         danger: bool,
     },
-    CreateBranch {
-        start: String,
-        start_label: String,
-        name: String,
-        checkout: bool,
-    },
-    RenameBranch {
-        old: String,
-        new: String,
-    },
-    DeleteBranch {
-        name: String,
-        force: bool,
-        remote: Option<(String, String)>,
-        delete_remote: bool,
-    },
     CheckoutRemote {
         remote_branch: String,
         local: String,
-    },
-    CreateTag {
-        rev: String,
-        label: String,
-        name: String,
-        message: String,
-        push_to: Option<String>,
     },
     DeleteTag {
         name: String,
@@ -69,11 +46,6 @@ pub enum Dialog {
         tags: bool,
     },
     Pull,
-    Stash {
-        message: String,
-        untracked: bool,
-        staged_only: bool,
-    },
     AddRemote {
         name: String,
         url: String,
@@ -99,6 +71,8 @@ pub enum Dialog {
         ssh_key: String,
     },
     Forge(forge_ui::ForgeDialog),
+    /// Branch, tag and stash dialogs (`ui::ref_dialogs`).
+    Refs(super::ref_dialogs::RefDialog),
 }
 
 impl Dialog {
@@ -112,22 +86,11 @@ impl Dialog {
     }
 
     pub fn create_branch(start: &str, label: &str) -> Self {
-        Dialog::CreateBranch {
-            start: start.into(),
-            start_label: label.into(),
-            name: String::new(),
-            checkout: true,
-        }
+        super::ref_dialogs::new_branch(start, label, "")
     }
 
     pub fn create_tag(rev: &str, label: &str) -> Self {
-        Dialog::CreateTag {
-            rev: rev.into(),
-            label: label.into(),
-            name: String::new(),
-            message: String::new(),
-            push_to: None,
-        }
+        super::ref_dialogs::new_tag(rev, label)
     }
 
     pub fn merge(rev: &str, label: &str) -> Self {
@@ -154,20 +117,6 @@ impl Dialog {
         }
     }
 
-    pub fn delete_branch(b: &BranchInfo) -> Self {
-        let remote = b
-            .upstream
-            .as_deref()
-            .and_then(|u| u.split_once('/'))
-            .map(|(r, n)| (r.to_owned(), n.to_owned()));
-        Dialog::DeleteBranch {
-            name: b.name.clone(),
-            force: false,
-            remote,
-            delete_remote: false,
-        }
-    }
-
     pub fn push(tab: &RepoTab, branch: &str) -> Self {
         let info = tab
             .branches
@@ -190,11 +139,7 @@ impl Dialog {
     }
 
     pub fn stash() -> Self {
-        Dialog::Stash {
-            message: String::new(),
-            untracked: true,
-            staged_only: false,
-        }
+        super::ref_dialogs::stash()
     }
 
     pub fn identity(id: &Identity) -> Self {
@@ -283,7 +228,13 @@ pub fn show(
 }
 
 /// Draws OK/Cancel buttons. Returns Some(true) for OK, Some(false) for Cancel.
-fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool) -> Option<bool> {
+pub(crate) fn buttons(
+    ui: &mut egui::Ui,
+    ok: &str,
+    enabled: bool,
+    danger: bool,
+    enter: bool,
+) -> Option<bool> {
     ui.add_space(8.0);
     let mut result = None;
     ui.horizontal(|ui| {
@@ -304,7 +255,12 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool
     result
 }
 
-fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui::Response {
+pub(crate) fn field(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+) -> egui::Response {
     ui.label(label);
     ui.add(
         egui::TextEdit::singleline(value)
@@ -313,7 +269,7 @@ fn field(ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str) -> egui
     )
 }
 
-fn ref_name_warning(ui: &mut egui::Ui, name: &str) {
+pub(crate) fn ref_name_warning(ui: &mut egui::Ui, name: &str) {
     if !name.is_empty() && !valid_ref_name(name) {
         ui.colored_label(
             ui.visuals().warn_fg_color,
@@ -344,87 +300,6 @@ fn body(
             match buttons(ui, &ok, true, *danger, enter && !*danger) {
                 Some(true) => {
                     run((**op).clone());
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::CreateBranch {
-            start,
-            start_label,
-            name,
-            checkout,
-        } => {
-            ui.heading(t!("New branch"));
-            ui.label(t!("Starting at {}", start_label));
-            field(ui, &t!("Name"), name, "feature/my-change").request_focus();
-            // Spaces become the replacement chosen in Settings > Git.
-            if name.contains(' ') {
-                *name = settings.prefs.branch_name(name);
-            }
-            ref_name_warning(ui, name);
-            ui.checkbox(checkout, t!("Check out after creating"));
-            let ok = valid_ref_name(name);
-            match buttons(ui, &t!("Create branch"), ok, false, enter) {
-                Some(true) => {
-                    run(Op::CreateBranch {
-                        name: name.trim().into(),
-                        start: start.clone(),
-                        checkout: *checkout,
-                    });
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::RenameBranch { old, new } => {
-            ui.heading(t!("Rename {}", old));
-            field(ui, &t!("New name"), new, "").request_focus();
-            ref_name_warning(ui, new);
-            let ok = valid_ref_name(new) && new.trim() != old;
-            match buttons(ui, &t!("Rename"), ok, false, enter) {
-                Some(true) => {
-                    run(Op::RenameBranch {
-                        old: old.clone(),
-                        new: new.trim().into(),
-                    });
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::DeleteBranch {
-            name,
-            force,
-            remote,
-            delete_remote,
-        } => {
-            ui.heading(t!("Delete {}", name));
-            ui.checkbox(force, t!("Delete even if it is not merged"))
-                .on_hover_text(t!(
-                    "Commits only on this branch may be lost (you can still undo right after)"
-                ));
-            if let Some((r, n)) = remote {
-                ui.checkbox(delete_remote, t!("Also delete {} from {}", n, r));
-            }
-            match buttons(ui, &t!("Delete"), true, true, false) {
-                Some(true) => {
-                    let mut ops = vec![Op::DeleteBranch {
-                        name: name.clone(),
-                        force: *force,
-                    }];
-                    if *delete_remote && let Some((r, n)) = remote {
-                        ops.push(Op::DeleteRemoteRef {
-                            remote: r.clone(),
-                            name: n.clone(),
-                        });
-                    }
-                    for op in ops {
-                        run(op);
-                    }
                     false
                 }
                 Some(false) => false,
@@ -462,73 +337,6 @@ fn body(
                         remote_branch: remote_branch.clone(),
                         local: local.trim().into(),
                     });
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::CreateTag {
-            rev: _,
-            label,
-            name,
-            message,
-            push_to,
-        } => {
-            ui.heading(t!("New tag"));
-            ui.label(t!("At {}", label));
-            field(ui, &t!("Name"), name, "v1.0.0").request_focus();
-            ref_name_warning(ui, name);
-            ui.label(t!("Message (optional — makes an annotated tag)"));
-            ui.add(
-                egui::TextEdit::multiline(message)
-                    .desired_rows(3)
-                    .desired_width(f32::INFINITY),
-            );
-            if let Some(t) = tab
-                && !t.remotes.is_empty()
-            {
-                let mut push = push_to.is_some();
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut push, t!("Push to"));
-                    let mut remote = push_to
-                        .clone()
-                        .or_else(|| t.default_remote())
-                        .unwrap_or_default();
-                    egui::ComboBox::from_id_salt("tag-remote")
-                        .selected_text(&remote)
-                        .show_ui(ui, |ui| {
-                            for r in &t.remotes {
-                                ui.selectable_value(&mut remote, r.name.clone(), &r.name);
-                            }
-                        });
-                    *push_to = push.then_some(remote);
-                });
-            }
-            match buttons(ui, &t!("Create tag"), valid_ref_name(name), false, false) {
-                Some(true) => {
-                    let Dialog::CreateTag {
-                        rev,
-                        name,
-                        message,
-                        push_to,
-                        ..
-                    } = dialog
-                    else {
-                        unreachable!()
-                    };
-                    let msg = Some(message.clone()).filter(|m| !m.trim().is_empty());
-                    run(Op::CreateTag {
-                        name: name.trim().into(),
-                        rev: rev.clone(),
-                        message: msg,
-                    });
-                    if let Some(remote) = push_to {
-                        run(Op::PushTag {
-                            remote: remote.clone(),
-                            tag: name.trim().into(),
-                        });
-                    }
                     false
                 }
                 Some(false) => false,
@@ -746,34 +554,6 @@ fn body(
                 None => true,
             }
         }
-        Dialog::Stash {
-            message,
-            untracked,
-            staged_only,
-        } => {
-            ui.heading(t!("Stash changes"));
-            field(
-                ui,
-                &t!("Message (optional)"),
-                message,
-                &t!("work in progress"),
-            )
-            .request_focus();
-            ui.checkbox(untracked, t!("Include new (untracked) files"));
-            ui.checkbox(staged_only, t!("Only staged changes"));
-            match buttons(ui, &t!("Stash"), true, false, enter) {
-                Some(true) => {
-                    run(Op::StashPush {
-                        message: message.clone(),
-                        untracked: *untracked && !*staged_only,
-                        staged_only: *staged_only,
-                    });
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
         Dialog::AddRemote { name, url } => {
             ui.heading(t!("Add remote"));
             field(ui, &t!("Name"), name, "origin").request_focus();
@@ -984,6 +764,7 @@ fn body(
             }
         }
         Dialog::Forge(d) => forge_ui::show_dialog(ui, d, tab, settings, cmds),
+        Dialog::Refs(d) => super::ref_dialogs::show(ui, d, tab, settings, cmds, enter),
     }
 }
 

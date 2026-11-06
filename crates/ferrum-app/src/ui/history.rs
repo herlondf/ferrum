@@ -1306,6 +1306,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
         cmds.push(Command::Copy(msg.trim_end().to_owned()));
         ui.close();
     }
+    crate::ui::ref_dialogs::label_menu(ui, tab, &labels, cmds);
     if let Some(h) = &tab.hosted {
         let url = match h.kind {
             ferrum_core::forge::ForgeKind::GitHub => format!("{}/commit/{sha}", h.web_url()),

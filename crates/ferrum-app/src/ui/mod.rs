@@ -24,6 +24,7 @@ pub mod issue_links;
 pub mod palette;
 pub mod preferences;
 pub mod rebase;
+pub mod ref_dialogs;
 pub mod settings;
 pub mod sidebar;
 pub mod sidebar_model;

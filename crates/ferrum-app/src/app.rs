@@ -128,6 +128,11 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                     "branch" => Dialog::create_branch(&head, &head),
                     "push" => Dialog::push(t, &head),
                     "stash" => Dialog::stash(),
+                    "checkout" => crate::ui::ref_dialogs::quick_checkout(),
+                    "tag" => Dialog::create_tag("HEAD", &head),
+                    "rename" => crate::ui::ref_dialogs::rename_branch(t, &head),
+                    "stashes" => crate::ui::ref_dialogs::drop_stashes(t),
+                    a if a.starts_with("tag=") => crate::ui::ref_dialogs::tag_details(t, &a[4..]),
                     "clone" => Dialog::Clone {
                         url: String::new(),
                         parent: String::new(),
@@ -672,13 +677,7 @@ impl FerrumApp {
         if pressed(cmd, Key::Num2) {
             cmds.push(Command::SetView(View::Changes));
         }
-        if pressed(cmd, Key::B) {
-            let head = self.tabs[self.active]
-                .head
-                .clone()
-                .unwrap_or_else(|| "HEAD".into());
-            cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
-        }
+        crate::ui::ref_dialogs::shortcuts(ctx, &self.tabs[self.active], cmds);
         if pressed(cs, Key::S) {
             cmds.push(Command::Dialog(Dialog::stash()));
         }
@@ -815,19 +814,30 @@ impl FerrumApp {
                 if show(Tb::Branch)
                     && ui
                         .button("🌿 Branch")
-                        .on_hover_text(t!("New branch (Ctrl+B)"))
+                        .on_hover_text(t!("New branch (Ctrl+Shift+B)"))
                         .clicked()
                 {
                     let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
                     cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
                 }
-                if show(Tb::Stash)
-                    && ui
+                if show(Tb::Stash) {
+                    let resp = ui
                         .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
-                        .on_hover_text(t!("Stash changes (Ctrl+Shift+S)"))
-                        .clicked()
-                {
-                    cmds.push(Command::Dialog(Dialog::stash()));
+                        .on_hover_text(t!("Stash changes (Ctrl+Shift+S)\nCtrl/Alt+click: quick stash without the dialog"));
+                    if resp.clicked() {
+                        // Ctrl or Alt+click stashes everything right away.
+                        let quick = ui.input(|i| i.modifiers.command || i.modifiers.alt);
+                        cmds.push(if quick {
+                            Command::Run(crate::ui::ref_dialogs::quick_stash())
+                        } else {
+                            Command::Dialog(Dialog::stash())
+                        });
+                    }
+                    ui.menu_button("⏷", |ui| {
+                        crate::ui::ref_dialogs::stashes_dropdown(ui, tab, cmds)
+                    })
+                    .response
+                    .on_hover_text(t!("Stashes"));
                 }
                 if let Some(s) = tab.stashes.first().filter(|_| show(Tb::Pop))
                     && ui

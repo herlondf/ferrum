@@ -112,7 +112,7 @@ fn select_stale_branches_and_delete() {
     h.get_by_label("1 selected");
     h.get_by_label("Delete…").click();
     frames(&mut h);
-    h.get_by_label("Yes, do it").click();
+    h.get_by_label("Delete").click();
     settle(&mut h);
     assert_eq!(git(p, &["branch", "--list", "solo"]), "");
     assert_eq!(git(p, &["branch", "--list", "main"]), "* main");

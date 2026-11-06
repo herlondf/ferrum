@@ -9,6 +9,7 @@ use crate::tab::{RepoTab, View};
 use crate::ui::dialogs::Dialog;
 use crate::ui::forge as forge_ui;
 use crate::ui::history_options;
+use crate::ui::ref_dialogs;
 use crate::ui::sidebar_model::{
     DragBranch, DropMenu, NavAction, Node, SidebarState, SortOrder, folder_paths, sort_by, tree,
 };
@@ -448,31 +449,12 @@ fn selection_bar(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: 
             )
             .clicked()
         {
-            cmds.push(Command::Dialog(delete_many(&names)));
+            cmds.push(Command::Dialog(ref_dialogs::delete_branches(tab, &names)));
         }
         if ui.small_button(t!("Clear")).clicked() {
             st.selection.clear();
         }
     });
-}
-
-fn delete_many(names: &[String]) -> Dialog {
-    let list = names.join("\n");
-    #[rustfmt::skip]
-    let text = t!("Delete {} local branches? Commits that are only on them will be lost.\n\n{}", names.len(), list);
-    let ops = names
-        .iter()
-        .map(|n| Op::DeleteBranch {
-            name: n.clone(),
-            force: true,
-        })
-        .collect();
-    Dialog::confirm(
-        &t!("Delete branches"),
-        &text,
-        Op::Sequence(t!("Delete {} branches", names.len()), ops),
-        true,
-    )
 }
 
 fn local_nodes(
@@ -533,10 +515,7 @@ fn local_nodes(
 fn local_folder_menu(ui: &mut egui::Ui, tab: &RepoTab, path: &str, cmds: &mut Commands) {
     let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
     if ui.button(t!("New branch in {}…", path)).clicked() {
-        let mut d = Dialog::create_branch(&head, &head);
-        if let Dialog::CreateBranch { name, .. } = &mut d {
-            *name = format!("{path}/");
-        }
+        let d = ref_dialogs::new_branch(&head, &head, &format!("{path}/"));
         cmds.push(Command::Dialog(d));
         ui.close();
     }
@@ -711,16 +690,14 @@ fn local_branch_menu(
             cmds.push(Command::Dialog(Dialog::create_branch(&name, &name)));
             ui.close();
         }
-        if ui.button(t!("Rename…")).clicked() {
-            cmds.push(Command::Dialog(Dialog::RenameBranch {
-                old: name.clone(),
-                new: name.clone(),
-            }));
+        if ui.button(t!("Rename…  (F2)")).clicked() {
+            cmds.push(Command::Dialog(ref_dialogs::rename_branch(tab, &name)));
             ui.close();
         }
         move_to_folder_menu(ui, tab, &name, cmds);
         if !b.is_head && ui.button(t!("Delete…")).clicked() {
-            cmds.push(Command::Dialog(Dialog::delete_branch(b)));
+            let names = [name.clone()];
+            cmds.push(Command::Dialog(ref_dialogs::delete_branches(tab, &names)));
             ui.close();
         }
         let remote_branches: Vec<&BranchInfo> = tab
@@ -1237,7 +1214,28 @@ fn tag_row(
                 }));
                 ui.close();
             }
+            for r in &tab.remotes {
+                if ui.button(t!("Delete from {}…", r.name)).clicked() {
+                    #[rustfmt::skip]
+                    let text = t!("Delete the tag {} from {}? The local tag is kept.", t.name, r.name);
+                    cmds.push(Command::Dialog(Dialog::confirm(
+                        &t!("Delete remote tag"),
+                        &text,
+                        Op::DeleteRemoteRef {
+                            remote: r.name.clone(),
+                            name: format!("refs/tags/{}", t.name),
+                        },
+                        true,
+                    )));
+                    ui.close();
+                }
+            }
         });
+        ui.separator();
+        if ui.button(t!("Details…")).clicked() {
+            cmds.push(Command::Dialog(ref_dialogs::tag_details(tab, &t.name)));
+            ui.close();
+        }
         pin_button(ui, st, &format!("refs/tags/{}", t.name));
         if ui.button(t!("Copy name")).clicked() {
             cmds.push(Command::Copy(t.name.clone()));
@@ -1262,6 +1260,8 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
     if h.add {
         cmds.push(Command::Dialog(Dialog::stash()));
     }
+    h.resp
+        .context_menu(|ui| ref_dialogs::stash_actions(ui, tab, cmds));
     if !h.open {
         return;
     }
@@ -1280,35 +1280,8 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
             if resp.clicked() || action.is_some() {
                 cmds.push(Command::ShowCommit(s.id));
             }
-            resp.on_hover_text(s.refname()).context_menu(|ui| {
-                ui.add_enabled_ui(!tab.busy(), |ui| {
-                    if ui.button(t!("Apply")).clicked() {
-                        cmds.run(Op::StashApply {
-                            stash: s.clone(),
-                            pop: false,
-                        });
-                        ui.close();
-                    }
-                    if ui.button(t!("Pop (apply and delete)")).clicked() {
-                        cmds.run(Op::StashApply {
-                            stash: s.clone(),
-                            pop: true,
-                        });
-                        ui.close();
-                    }
-                    if ui.button(t!("Drop…")).clicked() {
-                        let (r, m) = (s.refname(), &s.message);
-                        let text = t!("Delete {} ({})? This cannot be undone.", r, m);
-                        cmds.push(Command::Dialog(Dialog::confirm(
-                            &t!("Drop stash"),
-                            &text,
-                            Op::StashDrop(s.clone()),
-                            true,
-                        )));
-                        ui.close();
-                    }
-                });
-            });
+            resp.on_hover_text(s.refname())
+                .context_menu(|ui| ref_dialogs::stash_menu(ui, tab, s, cmds));
         }
     });
 }
