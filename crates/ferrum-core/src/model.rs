@@ -118,6 +118,14 @@ pub struct SubmoduleInfo {
     pub url: Option<String>,
     pub head: Option<Oid>,
     pub initialized: bool,
+    /// Branch followed by `submodule update --remote` (from .gitmodules).
+    pub branch: Option<String>,
+    /// Checked out at another commit than the one the parent records.
+    pub moved: bool,
+    /// Uncommitted changes to tracked files inside the submodule.
+    pub dirty: bool,
+    /// Untracked files inside the submodule.
+    pub untracked: bool,
 }
 
 #[derive(Debug, Clone)]

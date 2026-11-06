@@ -438,12 +438,26 @@ impl Repo {
             .inner
             .submodules()?
             .iter()
-            .map(|s| SubmoduleInfo {
-                name: s.name().ok().unwrap_or_default().to_owned(),
-                path: s.path().to_string_lossy().into_owned(),
-                url: s.url().ok().flatten().map(str::to_owned),
-                head: s.head_id(),
-                initialized: s.workdir_id().is_some(),
+            .map(|s| {
+                let name = lossy(s.name_bytes());
+                let status = self
+                    .inner
+                    .submodule_status(&name, git2::SubmoduleIgnore::None)
+                    .unwrap_or(git2::SubmoduleStatus::empty());
+                SubmoduleInfo {
+                    path: s.path().to_string_lossy().into_owned(),
+                    url: s.opt_url_bytes().map(lossy),
+                    head: s.head_id(),
+                    initialized: s.workdir_id().is_some(),
+                    branch: s.branch_bytes().map(lossy),
+                    moved: status.is_wd_modified(),
+                    dirty: status.intersects(
+                        git2::SubmoduleStatus::WD_INDEX_MODIFIED
+                            | git2::SubmoduleStatus::WD_WD_MODIFIED,
+                    ),
+                    untracked: status.is_wd_untracked(),
+                    name,
+                }
             })
             .collect())
     }

@@ -12,6 +12,7 @@ pub mod diff;
 pub mod forge;
 pub mod gitignore;
 pub mod graph;
+pub mod lfs;
 pub mod local;
 pub mod log;
 pub mod message;
@@ -20,6 +21,7 @@ pub mod ops;
 pub mod rebase;
 mod repo;
 pub mod stats;
+pub mod submodule;
 pub mod update;
 
 pub use git2::Oid;
