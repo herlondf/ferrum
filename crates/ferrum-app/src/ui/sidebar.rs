@@ -9,6 +9,7 @@ use crate::command::{Command, Commands, Op};
 use crate::tab::{RepoTab, View};
 use crate::ui::dialogs::Dialog;
 use crate::ui::forge as forge_ui;
+use crate::ui::history_options;
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     egui::ScrollArea::vertical()
@@ -106,6 +107,10 @@ fn local_branches(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                             for b in list {
                                 branch_row(ui, tab, b, f.len() + 1, cmds);
                             }
+                        })
+                        .header_response
+                        .context_menu(|ui| {
+                            history_options::ref_menu(ui, tab, &format!("refs/heads/{f}/"), cmds)
                         });
                 }
             }
@@ -132,6 +137,11 @@ fn branch_row(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, strip: usize, cm
         RichText::new(text).strong()
     } else {
         RichText::new(text)
+    };
+    let rich = if history_options::is_hidden(tab, &format!("refs/heads/{}", b.name)) {
+        rich.weak()
+    } else {
+        rich
     };
     let selected =
         b.target.is_some() && tab.history.selected == b.target && tab.view == View::History;
@@ -237,6 +247,7 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
             ui.close();
         }
     }
+    history_options::ref_menu(ui, tab, &format!("refs/heads/{name}"), cmds);
     ui.separator();
     if ui.button(t!("Copy name")).clicked() {
         cmds.push(Command::Copy(name));
@@ -266,6 +277,8 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                                 for b in group {
                                     remote_branch_row(ui, tab, b, prefix.len() + f.len() + 1, cmds);
                                 }
+                            }).header_response.context_menu(|ui| {
+                                history_options::ref_menu(ui, tab, &format!("refs/remotes/{}{f}/", prefix), cmds)
                             });
                         }
                     }
@@ -291,6 +304,7 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                     cmds.push(Command::Copy(remote.url.clone()));
                     ui.close();
                 }
+                history_options::ref_menu(ui, tab, &format!("refs/remotes/{}", prefix), cmds);
             });
         }
     });
@@ -396,6 +410,7 @@ fn remote_branch_row(
                 ui.close();
             }
         });
+        history_options::ref_menu(ui, tab, &format!("refs/remotes/{}", b.name), cmds);
         ui.separator();
         if ui.button(t!("Copy name")).clicked() {
             cmds.push(Command::Copy(b.name.clone()));

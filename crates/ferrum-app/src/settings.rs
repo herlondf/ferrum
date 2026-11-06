@@ -98,6 +98,8 @@ pub struct Settings {
     pub accounts: Vec<ForgeAccount>,
     /// Folder suggested when cloning.
     pub clone_dir: String,
+    /// History view options, global and per repository.
+    pub history: crate::ui::history_model::HistorySettings,
 }
 
 impl Default for Settings {
@@ -113,6 +115,7 @@ impl Default for Settings {
             profiles: Vec::new(),
             accounts: Vec::new(),
             clone_dir: String::new(),
+            history: Default::default(),
         }
     }
 }

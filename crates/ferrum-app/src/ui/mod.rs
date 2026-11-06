@@ -1,3 +1,4 @@
+pub mod avatars;
 pub mod blame;
 pub mod changes;
 pub mod conflicts;
@@ -6,8 +7,12 @@ pub mod dialogs;
 pub mod diff_view;
 pub mod forge;
 pub mod history;
+pub mod history_model;
+pub mod history_options;
 pub mod image_diff;
+pub mod issue_links;
 pub mod palette;
 pub mod rebase;
 pub mod settings;
 pub mod sidebar;
+pub mod stats;

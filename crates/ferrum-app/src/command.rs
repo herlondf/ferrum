@@ -56,6 +56,8 @@ pub enum Command {
     ShowSettings,
     ShowPalette,
     FocusSearch,
+    /// Change history options or graph filters (see `ui::history_options`).
+    History(crate::ui::history_options::HistoryFn),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }

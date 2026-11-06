@@ -25,6 +25,8 @@ pub enum JobOutput {
     OpenRepo(std::path::PathBuf),
     /// Commits found by a content search.
     SearchHits(std::collections::HashSet<ferrum_core::Oid>),
+    /// Commits and files found by a file path search.
+    PathHits(Vec<ferrum_core::log::PathHit>),
 }
 
 pub type JobResult = Result<JobOutput, String>;
