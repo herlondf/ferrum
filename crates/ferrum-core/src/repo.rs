@@ -486,11 +486,14 @@ impl Repo {
     }
 
     /// Commits from `base` (exclusive) to HEAD, oldest first, for interactive rebase.
-    pub fn commits_since(&self, base: Oid) -> Result<Vec<CommitInfo>> {
+    /// Commits after `base` up to HEAD, oldest first. `None` means all commits from the root.
+    pub fn commits_since(&self, base: Option<Oid>) -> Result<Vec<CommitInfo>> {
         let mut walk = self.inner.revwalk()?;
         walk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::REVERSE)?;
         walk.push_head()?;
-        walk.hide(base)?;
+        if let Some(base) = base {
+            walk.hide(base)?;
+        }
         let mut out = Vec::new();
         for oid in walk {
             out.push(commit_info(&self.inner.find_commit(oid?)?));
@@ -813,6 +816,25 @@ mod tests {
         let commit = commit.unwrap().unwrap();
         assert_eq!((commit.old_id, commit.kind), (None, ChangeKind::Added));
         assert_eq!(commit.new_id, Some(blob("HEAD:i.bin")));
+    }
+
+    #[test]
+    fn lists_commits_since_base_or_root() {
+        let t = TestRepo::new();
+        t.commit("a.txt", "a\n", "first");
+        let base = t.repo().head_oid().unwrap();
+        t.commit("b.txt", "b\n", "second");
+        t.commit("c.txt", "c\n", "third");
+        let repo = t.repo();
+        let summaries = |base| -> Vec<String> {
+            repo.commits_since(base)
+                .unwrap()
+                .into_iter()
+                .map(|c| c.summary)
+                .collect()
+        };
+        assert_eq!(summaries(Some(base)), ["second", "third"]);
+        assert_eq!(summaries(None), ["first", "second", "third"]);
     }
 
     #[test]

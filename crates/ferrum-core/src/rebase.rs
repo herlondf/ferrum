@@ -152,7 +152,7 @@ mod tests {
         t.commit("c.txt", "c\n", "C");
         let steps = t
             .repo()
-            .commits_since(base)
+            .commits_since(Some(base))
             .unwrap()
             .into_iter()
             .map(|commit| Step {
