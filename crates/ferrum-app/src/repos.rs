@@ -452,7 +452,10 @@ pub fn parse_args(args: &[OsString], cwd: &Path) -> Vec<Request> {
     args.iter()
         .map(|a| {
             let text = a.to_string_lossy();
-            if text.contains("://") && !Path::new(a).exists() {
+            if let Some(path) = text.strip_prefix("file://") {
+                // Desktop launchers may pass folders as file:// URLs.
+                Request::Open(abs(&percent_decode(path).into()))
+            } else if text.contains("://") && !Path::new(a).exists() {
                 match clone_url_from_link(&text) {
                     Some(url) => Request::Clone(url),
                     None => Request::Focus,
@@ -662,6 +665,10 @@ mod tests {
             Request::Clone("https://h/r.git".into()),
             Request::Focus,
         ];
+        assert_eq!(
+            parse_args(&args(&["file:///home/u/my%20repo"]), cwd),
+            [Request::Open("/home/u/my repo".into())]
+        );
         assert_eq!(decode(&encode(&reqs)), reqs);
         assert_eq!(decode(&encode(&[])), [Request::Focus]);
     }

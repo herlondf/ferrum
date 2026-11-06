@@ -77,6 +77,11 @@ impl FerrumApp {
     }
 
     #[cfg(test)]
+    pub fn active_index(&self) -> usize {
+        self.active
+    }
+
+    #[cfg(test)]
     pub fn has_dialog(&self) -> bool {
         self.dialog.is_some()
     }

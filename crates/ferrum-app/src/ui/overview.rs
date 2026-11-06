@@ -17,6 +17,8 @@ pub struct OverviewState {
     /// README file name and text; `Some(None)` when there is none.
     readme: Option<Option<(String, String)>>,
     markdown: Option<egui_commonmark::CommonMarkCache>,
+    /// HEAD when the summary was counted: a new commit counts again.
+    counted_at: Option<ferrum_core::Oid>,
 }
 
 impl OverviewState {
@@ -40,6 +42,11 @@ pub fn open(tab: &mut RepoTab) {
 
 fn load(tab: &mut RepoTab, ctx: &egui::Context) {
     let st = &mut tab.overview;
+    if st.counted_at != tab.head_oid {
+        st.counted_at = tab.head_oid;
+        st.summary = None;
+        st.loading = None;
+    }
     if let Some(rx) = &st.loading
         && let Ok(r) = rx.try_recv()
     {

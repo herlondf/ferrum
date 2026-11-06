@@ -267,3 +267,22 @@ fn repository_settings_set_the_commit_template() {
     settle(&mut h);
     assert_eq!(git(dir.path(), &["config", "commit.template"]), "tpl.txt");
 }
+
+#[test]
+fn tab_opens_in_its_own_window() {
+    let a = repo();
+    let b = repo();
+    let mut h = harness(a.path());
+    handle(&mut h, Command::OpenRepo(b.path().into()));
+    handle(&mut h, Command::Repos(RepoCmd::OpenInWindow(1)));
+    frames(&mut h);
+    assert_eq!(h.state().repo_state().windows, [b.path()]);
+    // The main window moved on to the other tab.
+    assert_eq!(h.state().tabs[h.state().active_index()].path(), a.path());
+    // A click in the window acts on the window's tab.
+    let count = h.get_all_by_label_contains("All Commits").count();
+    assert_eq!(count, 2, "sidebar of the main window and of the tab window");
+    // Closing the tab closes its window.
+    handle(&mut h, Command::CloseTab(1));
+    assert!(h.state().repo_state().windows.is_empty());
+}

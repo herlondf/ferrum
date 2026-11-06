@@ -6,6 +6,28 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 
 ## Features
 
+- **Repository Manager** (start screen, and Ctrl+T in a new tab): known
+  repositories in groups, rename (F2), remove from the list (Delete), open
+  (Enter or double-click), Ctrl/Shift+click to select several, missing folders
+  flagged with "Remove missing"; **source folders** scanned for repositories to
+  a chosen depth (Rescan picks up new ones); **workspaces** (nested with `/`),
+  each remembering its own tabs, switched from the manager or the command
+  palette ("Workspace: …"), shown in the window title. **Open Quickly**
+  (Ctrl+Shift+O) searches every known, recent and scanned repository.
+- **Tabs**: reopen closed tabs (Ctrl+Shift+T), middle-click to close, a dot for
+  uncommitted changes, same-named tabs show the folder that tells them apart (a
+  worktree shows "repo (worktree)"), and a menu with Close Others/All, Rename,
+  Color, Open in terminal, Show in file manager, Open in new window, Repository
+  settings and Move to workspace; optionally a vertical tab list.
+- **Repository overview** (sidebar > Overview): the rendered README, remotes and
+  counts of commits, contributors, branches and tags, and the size on disk.
+- **Opening**: drop a folder on the window (`git init` is offered when it is not
+  a repository); `ferrum PATH` and `ferrum log -- FILE` reuse the running window;
+  "Open in Desktop" links (`x-github-client://openRepo/…`,
+  `sourcetree://cloneRepo/…`) open the clone dialog. A stale `index.lock` can
+  be deleted from the error, and folders git does not trust can be added to
+  `safe.directory`. Repository settings (pull request remote, commit template,
+  issue link rules) are shared by all worktrees.
 - **History** with a colored branch graph, branch/tag labels, search by
   message/author/hash, inside changes (`git log -S`) or by file path (current
   branch or all, recent searches, Enter/F3 for the next match), keyboard
@@ -172,6 +194,9 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 |---|---|
 | Command palette | Ctrl+P |
 | Open repository | Ctrl+O |
+| Open Quickly (search known repositories) | Ctrl+Shift+O |
+| New tab (Repository Manager) / reopen closed tab | Ctrl+T / Ctrl+Shift+T |
+| Repository Manager: open, rename, remove from the list | Enter, F2, Delete |
 | History / Local changes | Ctrl+1 / Ctrl+2 |
 | Search commits (or find in the diff under the pointer) | Ctrl+F |
 | Next / previous match | Enter or F3 / Shift+Enter or Shift+F3 |
@@ -207,6 +232,18 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Interactive rebase: move the selected commits | Alt+Up / Alt+Down |
 
 On macOS, Cmd replaces Ctrl.
+
+### Single instance and links
+
+`ferrum PATH` and `ferrum log -- FILE` hand the request to a running Ferrum
+(through a socket in its data folder) and exit; set
+`FERRUM_NO_SINGLE_INSTANCE=1` to always start a new window. To clone from the
+browser's "Open in Desktop" buttons, register Ferrum for the
+`x-github-client` and `sourcetree` URL schemes: the Linux `.desktop` file does
+it already; on Windows add `HKEY_CURRENT_USER\Software\Classes\x-github-client`
+(with an empty `URL Protocol` value and `shell\open\command` =
+`"C:\path\to\ferrum.exe" "%1"`), and on macOS add the schemes to
+`CFBundleURLTypes` in `Ferrum.app/Contents/Info.plist`.
 
 ## Structure
 
@@ -249,7 +286,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `details:compare=0,3`, `details:workdir=1`, `details:popup`, `details:window`,
   see `details::dev_step`;
   merge, rebase and cherry-pick dialogs: `flow:merge=REV`, `flow:rebase=REV`,
-  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`).
+  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`;
+  repositories: `manager`, `quick:TEXT`, `overview`, `repo-settings`,
+  `workspace:NAME`, `vertical-tabs`, see `app/repos.rs`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,

@@ -147,6 +147,15 @@ fn matches(lib: &Library, filter: &str, p: &Path) -> bool {
             .is_some_and(|n| n.to_lowercase().contains(&f))
 }
 
+/// A path without the trailing separator git adds to working folders.
+pub fn shown_path(p: &Path) -> String {
+    let text = p.display().to_string();
+    match text.trim_end_matches(['/', '\\']) {
+        "" => text,
+        t => t.to_owned(),
+    }
+}
+
 pub fn display_name(lib: &Library, p: &Path) -> String {
     lib.custom_name(p)
         .map(str::to_owned)
@@ -193,7 +202,7 @@ fn repo_list(
             for p in recent {
                 if ui
                     .button(display_name(lib, p))
-                    .on_hover_text(p.display().to_string())
+                    .on_hover_text(shown_path(p))
                     .clicked()
                 {
                     cmds.push(Command::OpenRepo(p.clone()));
@@ -292,7 +301,7 @@ fn repo_list(
                 let resp = ui
                     .add(egui::Button::selectable(false, display_name(lib, p)))
                     .on_hover_text(t!("Double-click to open"));
-                ui.weak(p.display().to_string());
+                ui.weak(shown_path(p));
                 if resp.double_clicked() {
                     cmds.push(Command::OpenRepo(p.clone()));
                 }
@@ -351,7 +360,7 @@ fn row(
             text = text.color(crate::ui::tabs::color32(c));
         }
         let resp = ui.add(egui::Button::selectable(selected, text));
-        ui.weak(p.display().to_string());
+        ui.weak(shown_path(p));
         if !exists {
             ui.colored_label(ui.visuals().warn_fg_color, t!("⚠ missing"));
         }

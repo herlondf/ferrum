@@ -112,7 +112,10 @@ pub fn show(ctx: &egui::Context, q: &mut OpenQuickly, settings: &Settings, cmds:
                                     selected,
                                     egui::RichText::new(name).strong(),
                                 )
-                                .right_text(egui::RichText::new(p.display().to_string()).weak())
+                                .right_text(
+                                    egui::RichText::new(crate::ui::repo_manager::shown_path(p))
+                                        .weak(),
+                                )
                                 .min_size(egui::vec2(ui.available_width(), 24.0)),
                             );
                             if selected && (up || down) {

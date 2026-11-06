@@ -105,7 +105,19 @@ mod imp {
     use std::os::unix::net::{UnixListener, UnixStream};
 
     fn socket(dir: &Path) -> std::path::PathBuf {
-        dir.join("instance.sock")
+        let path = dir.join("instance.sock");
+        // Socket paths are limited to about 100 bytes: use the runtime folder
+        // with a name derived from the data folder instead.
+        if path.as_os_str().len() < 100 {
+            return path;
+        }
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        dir.hash(&mut h);
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        runtime.join(format!("ferrum-{:016x}.sock", h.finish()))
     }
 
     pub fn send(dir: &Path, message: &str) -> bool {
