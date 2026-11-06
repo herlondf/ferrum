@@ -469,19 +469,7 @@ impl Repo {
 
     /// Blame of `path` as of HEAD.
     pub fn blame(&self, path: &str) -> Result<Vec<BlameLine>> {
-        let head = self.inner.head()?.peel_to_tree()?;
-        let entry = head
-            .get_path(Path::new(path))
-            .map_err(|_| Error::Other(format!("{path} is not in the last commit (HEAD).")))?;
-        let blob = entry.to_object(&self.inner)?.peel_to_blob()?;
-        if blob.is_binary() {
-            return Err(Error::Other(format!("{path} is a binary file.")));
-        }
-        // `git blame` follows renames and moves, unlike libgit2's blame.
-        let out = self
-            .git()
-            .run(&["blame", "--porcelain", "HEAD", "--", path])?;
-        Ok(parse_blame(&out))
+        self.blame_at(path, "HEAD")
     }
 
     /// Commits that touched `path`, newest first, following renames.
@@ -642,7 +630,7 @@ fn collect_diffs(diff: &git2::Diff) -> Result<Vec<FileDiff>> {
 
 /// Parses `git log --name-status -z` output whose format starts each record
 /// with `RS`. Commits without a status entry (merges) keep the newer path.
-fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
+pub(crate) fn parse_file_log(out: &str, path: &str) -> Vec<FileCommit> {
     let mut current = path.to_owned();
     let mut list = Vec::new();
     for rec in out.split(RS).filter(|r| !r.trim().is_empty()) {
@@ -711,16 +699,20 @@ pub(crate) fn parse_offset(date: &str) -> i32 {
 /// Parses `git blame --porcelain`. Each line starts with a header
 /// (`<sha> <orig> <final> [count]`); commit details follow only the first
 /// time a commit appears; the line text comes after a tab.
-fn parse_blame(out: &str) -> Vec<BlameLine> {
+pub(crate) fn parse_blame(out: &str) -> Vec<BlameLine> {
+    #[derive(Default)]
     struct Info {
         author: String,
         time: i64,
         offset_minutes: i32,
+        path: String,
+        previous: Option<(Oid, String)>,
     }
     let mut commits: HashMap<Oid, Info> = HashMap::new();
     let mut lines = Vec::new();
     let mut current: Option<Oid> = None;
     let mut last: Option<Oid> = None;
+    let mut orig_line = 0;
     for line in out.lines() {
         if let Some(text) = line.strip_prefix('\t') {
             let Some(commit) = current else { continue };
@@ -732,6 +724,9 @@ fn parse_blame(out: &str) -> Vec<BlameLine> {
                 offset_minutes: info.map_or(0, |i| i.offset_minutes),
                 text: text.to_owned(),
                 block_start: last != Some(commit),
+                orig_line,
+                path: info.map(|i| i.path.clone()).unwrap_or_default(),
+                previous: info.and_then(|i| i.previous.clone()),
             });
             last = Some(commit);
             continue;
@@ -741,11 +736,12 @@ fn parse_blame(out: &str) -> Vec<BlameLine> {
             && let Ok(id) = Oid::from_str(key)
         {
             current = Some(id);
-            commits.entry(id).or_insert(Info {
-                author: String::new(),
-                time: 0,
-                offset_minutes: 0,
-            });
+            orig_line = value
+                .split(' ')
+                .next()
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
+            commits.entry(id).or_default();
             continue;
         }
         let Some(info) = current.and_then(|c| commits.get_mut(&c)) else {
@@ -755,6 +751,12 @@ fn parse_blame(out: &str) -> Vec<BlameLine> {
             "author" => info.author = value.to_owned(),
             "author-time" => info.time = value.parse().unwrap_or(0),
             "author-tz" => info.offset_minutes = parse_offset(value),
+            "filename" => info.path = value.to_owned(),
+            "previous" => {
+                info.previous = value
+                    .split_once(' ')
+                    .and_then(|(id, path)| Some((Oid::from_str(id).ok()?, path.to_owned())));
+            }
             _ => {}
         }
     }

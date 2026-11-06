@@ -11,6 +11,8 @@ mod desktop_notify;
 mod diff_tests;
 mod external;
 #[cfg(test)]
+mod file_history_tests;
+#[cfg(test)]
 mod history_tests;
 mod icon;
 mod jobs;

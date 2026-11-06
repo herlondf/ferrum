@@ -125,6 +125,7 @@ pub struct RepoTab {
     pub conflicts: conflicts::ConflictState,
     pub rebase: Option<rebase::RebasePlan>,
     pub file_view: Option<blame::FileView>,
+    pub file_tools: crate::ui::file_window::FileTools,
     pub prs: forge_ui::PrState,
     pub sidebar: crate::ui::sidebar_model::SidebarState,
     pub pane: crate::ui::focus::PaneFocus,
@@ -185,6 +186,7 @@ impl RepoTab {
             conflicts: Default::default(),
             rebase: None,
             file_view: None,
+            file_tools: Default::default(),
             prs: Default::default(),
             sidebar: Default::default(),
             pane: Default::default(),
@@ -628,6 +630,14 @@ impl RepoTab {
                     target: self.branch_target(name)?.to_string(),
                 }]
             }
+            // Undo is simple only when the file had no changes of its own.
+            Op::ResetFileTo { path, .. } if self.file_is_clean(path) => {
+                self.repo.file_at(self.head_oid?, path).ok()??;
+                vec![Op::ResetFileTo {
+                    path: path.clone(),
+                    rev: head?,
+                }]
+            }
             Op::CreateTag { name, .. } => vec![Op::DeleteTag(name.clone())],
             Op::DeleteTag(name) => {
                 let tag = self.tags.iter().find(|t| &t.name == name)?;
@@ -651,6 +661,12 @@ impl RepoTab {
             label: op.label(),
             ops,
         })
+    }
+
+    /// The file has no staged or unstaged changes.
+    fn file_is_clean(&self, path: &str) -> bool {
+        let s = &self.status;
+        !s.unstaged.iter().chain(&s.staged).any(|f| f.path == path)
     }
 
     /// The upstream remote of the current branch, or the first remote.

@@ -9,6 +9,7 @@ pub mod cli;
 pub mod config;
 pub mod conflict;
 pub mod diff;
+mod file_log;
 pub mod forge;
 pub mod gitignore;
 pub mod graph;

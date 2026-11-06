@@ -74,6 +74,9 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
                 Command::SetView(View::Changes)
             }),
             entry(t!("Search commits"), "Ctrl+F", || Command::FocusSearch),
+            entry(t!("File history…"), "", || {
+                crate::ui::history_options::cmd(|t, _| crate::ui::file_finder::open(t))
+            }),
             entry(t!("Refresh"), "F5", || Command::Refresh),
             entry(t!("Undo last action"), "Ctrl+Z", || Command::Undo),
             entry(t!("Fetch all remotes"), "Ctrl+Shift+F", || {

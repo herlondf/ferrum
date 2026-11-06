@@ -44,7 +44,7 @@ impl Default for DiffConfig {
 }
 
 impl DiffConfig {
-    fn options(&self) -> DiffOptions {
+    pub(crate) fn options(&self) -> DiffOptions {
         let mut opts = DiffOptions::new();
         opts.context_lines(if self.full_file {
             FULL_CONTEXT
@@ -220,7 +220,7 @@ pub struct SubmoduleCommits {
     pub truncated: bool,
 }
 
-fn collect(diff: &git2::Diff) -> Result<Vec<FileDiff>> {
+pub(crate) fn collect(diff: &git2::Diff) -> Result<Vec<FileDiff>> {
     let mut out = Vec::with_capacity(diff.deltas().len());
     for idx in 0..diff.deltas().len() {
         let patch = git2::Patch::from_diff(diff, idx)?;

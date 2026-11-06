@@ -86,7 +86,13 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Three-way conflict resolver** with per-conflict choices and an editable result.
 - **Cherry-pick, revert, reset (soft/mixed/hard), move branch** from the commit menu.
 - **Undo** for commits, checkouts, branch/tag changes, merges, rebases and more.
-- **File history and blame** (follows renames).
+- **File history and blame** (follows renames): history of files and folders
+  on any branch, compare two revisions (Ctrl+click), open them in the external
+  diff tool, reset a file to a revision (with undo); blame at any revision with
+  back/forward, a timeline of the file's commits, "blame before this change"
+  and Go to line; history of a range of lines (`git log -L`) from the blame or
+  any diff line's menu; a separate window per file; "File history…" in the
+  command palette finds files and folders by name.
 - **GitHub and GitLab**: list, check out and create pull/merge requests
   (uses your GitHub CLI login automatically, or a saved token).
 - **Profiles**: per-repository name, email, SSH key and commit signing.
@@ -127,7 +133,8 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Search commits (or find in the diff under the pointer) | Ctrl+F |
 | Next / previous match | Enter or F3 / Shift+Enter or Shift+F3 |
 | Jump to HEAD | Ctrl+0 (or Ctrl+1 in the history) |
-| Go to commit | Ctrl+G |
+| Go to commit (Go to line in the blame under the pointer) | Ctrl+G |
+| Blame: back / forward | Alt+Left / Alt+Right |
 | Only the current branch in the graph | Ctrl+Shift+A |
 | Show reflog | Ctrl+Shift+. |
 | Collapse / expand the selected merge | Left / Right |
