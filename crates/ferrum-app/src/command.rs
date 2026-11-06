@@ -4,12 +4,12 @@
 use std::path::PathBuf;
 
 use ferrum_core::cli::Git;
-use ferrum_core::forge::NewPullRequest;
+use ferrum_core::forge::{self, HostedRepo, NewPullRequest};
 use ferrum_core::ops::{self, MergeMode, PatchTarget, PullMode, PushOptions, ResetMode, Side};
 use ferrum_core::rebase::Step;
 use ferrum_core::{FileChange, Identity, Oid, RepoState, StashInfo};
 
-use crate::jobs::Refresh;
+use crate::jobs::{JobOutput, JobResult, Refresh};
 use crate::tab::View;
 use crate::ui::dialogs::Dialog;
 
@@ -201,6 +201,13 @@ pub enum Op {
         force: bool,
     },
     SetIdentity(Identity),
+    /// Opens a pull/merge request. An `Op` (not a plain job) so it can be
+    /// queued behind the `Push` of its branch.
+    CreatePullRequest {
+        hosted: HostedRepo,
+        token: String,
+        pr: NewPullRequest,
+    },
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -265,6 +272,9 @@ impl Op {
             Op::WorktreeAdd { path, .. } => format!("Add worktree {path}"),
             Op::WorktreeRemove { path, .. } => format!("Remove worktree {path}"),
             Op::SetIdentity(_) => "Set repository identity".into(),
+            Op::CreatePullRequest { hosted, .. } => {
+                format!("Create {}", hosted.kind.request_name())
+            }
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -280,8 +290,20 @@ impl Op {
             | Op::ResolveWith { .. }
             | Op::SaveResolution { .. } => Refresh::Status,
             Op::SetIdentity(_) => Refresh::Status,
+            Op::CreatePullRequest { .. } => Refresh::None,
             _ => Refresh::All,
         }
+    }
+
+    /// Runs the operation as a job, passing back results the app uses.
+    pub fn execute(&self, git: &Git, progress: &dyn Fn(&str)) -> JobResult {
+        match self {
+            Op::CreatePullRequest { hosted, token, pr } => {
+                forge::create_pull_request(hosted, token, pr).map(JobOutput::PullRequestCreated)
+            }
+            _ => self.run(git, progress).map(|()| JobOutput::Done),
+        }
+        .map_err(|e| e.to_string())
     }
 
     pub fn run(&self, git: &Git, progress: &dyn Fn(&str)) -> ferrum_core::Result<()> {
@@ -352,6 +374,9 @@ impl Op {
             } => ops::worktree_add(git, path, rev, new_branch.as_deref()),
             Op::WorktreeRemove { path, force } => ops::worktree_remove(git, path, *force),
             Op::SetIdentity(id) => ops::set_identity(git, id),
+            Op::CreatePullRequest { hosted, token, pr } => {
+                forge::create_pull_request(hosted, token, pr).map(|_| ())
+            }
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }

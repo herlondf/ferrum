@@ -142,13 +142,7 @@ fn check(mut resp: ureq::http::Response<ureq::Body>) -> Result<Value> {
     if (200..300).contains(&status) {
         return Ok(body);
     }
-    let detail = body
-        .get("message")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .or_else(|| body.get("message").map(|m| m.to_string()))
-        .or_else(|| body.get("error").map(|m| m.to_string()))
-        .unwrap_or_default();
+    let detail = error_detail(&body);
     let hint = match status {
         401 => " (the token is invalid or expired)",
         403 => " (the token lacks permission)",
@@ -156,6 +150,36 @@ fn check(mut resp: ureq::http::Response<ureq::Body>) -> Result<Value> {
         _ => "",
     };
     Err(Error::Other(format!("HTTP {status}{hint}: {detail}")))
+}
+
+/// The readable part of an API error: GitHub's `message` plus its `errors`
+/// list (e.g. "A pull request already exists"), GitLab's `message` (a string,
+/// list or field map) or `error`.
+fn error_detail(body: &Value) -> String {
+    fn text(v: &Value) -> Vec<String> {
+        match v {
+            Value::String(s) => vec![s.clone()],
+            Value::Array(a) => a.iter().flat_map(text).collect(),
+            Value::Object(o) => match o.get("message") {
+                Some(m) => text(m),
+                // GitLab validation errors: {"field": ["is invalid"]}.
+                None => o
+                    .iter()
+                    .flat_map(|(k, v)| text(v).into_iter().map(move |t| format!("{k} {t}")))
+                    .collect(),
+            },
+            Value::Null => Vec::new(),
+            other => vec![other.to_string()],
+        }
+    }
+    let mut parts = text(body.get("message").unwrap_or(&Value::Null));
+    if let Some(errors) = body.get("errors") {
+        parts.extend(text(errors));
+    }
+    if parts.is_empty() {
+        parts = text(body.get("error").unwrap_or(&Value::Null));
+    }
+    parts.join(": ")
 }
 
 fn net(e: ureq::Error) -> Error {
@@ -370,6 +394,31 @@ mod tests {
         assert_eq!(gl.api_base(), "https://gitlab.example.com/api/v4");
         assert!(parse_remote_url("https://bitbucket.org/a/b").is_none());
         assert!(parse_remote_url("/local/path/repo").is_none());
+    }
+
+    #[test]
+    fn explains_api_errors() {
+        let gh = json!({
+            "message": "Validation Failed",
+            "errors": [{"resource": "PullRequest", "code": "custom",
+                        "message": "A pull request already exists for a:feature."}]
+        });
+        assert_eq!(
+            error_detail(&gh),
+            "Validation Failed: A pull request already exists for a:feature."
+        );
+        let gl = json!({"message": ["Another open merge request already exists for this source branch: !3"]});
+        assert_eq!(
+            error_detail(&gl),
+            "Another open merge request already exists for this source branch: !3"
+        );
+        let fields = json!({"message": {"target_branch": ["is invalid"]}});
+        assert_eq!(error_detail(&fields), "target_branch is invalid");
+        assert_eq!(
+            error_detail(&json!({"error": "invalid_token"})),
+            "invalid_token"
+        );
+        assert_eq!(error_detail(&Value::Null), "");
     }
 
     #[test]
