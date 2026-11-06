@@ -232,8 +232,10 @@ fn history_view(ui: &mut egui::Ui, repo: &Repo, view: &mut FileView, cmds: &mut 
         let (id, path, old) = (e.commit.id, e.path.clone(), e.old_path.clone());
         view.diff_commit = Some(id);
         view.diff.start(repo, move |r| {
-            let files = r.commit_diff(id).map_err(|e| e.to_string())?;
-            Ok(find_file(files, &path, old.as_deref()))
+            let file = r
+                .commit_file_diff(id, &path, old.as_deref())
+                .map_err(|e| e.to_string())?;
+            Ok(find_file(file.into_iter().collect(), &path, old.as_deref()))
         });
     }
 

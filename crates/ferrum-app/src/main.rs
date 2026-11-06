@@ -23,6 +23,7 @@ fn main() -> eframe::Result {
                 width: 128,
                 height: 128,
             })),
+        persistence_path: data_dir(),
         ..Default::default()
     };
 
@@ -31,4 +32,17 @@ fn main() -> eframe::Result {
         options,
         Box::new(move |cc| Ok(Box::new(app::FerrumApp::new(cc, paths)))),
     )
+}
+
+/// Where settings are saved. `FERRUM_DATA_DIR` overrides it, and screenshot
+/// runs use a throwaway folder so development never touches real settings.
+fn data_dir() -> Option<std::path::PathBuf> {
+    let dir = std::env::var_os("FERRUM_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("FERRUM_SCREENSHOT")
+                .map(|_| std::env::temp_dir().join("ferrum-screenshot"))
+        })?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("app.ron"))
 }

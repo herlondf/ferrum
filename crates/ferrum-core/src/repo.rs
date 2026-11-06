@@ -189,6 +189,53 @@ impl Repo {
         })
     }
 
+    /// Files changed by a commit, without their content (cheap even for huge
+    /// commits). Load a file's diff with [`Repo::commit_file_diff`].
+    pub fn commit_files(&self, id: Oid) -> Result<Vec<FileDiff>> {
+        let diff = self.commit_tree_diff(id, &[])?;
+        let mut out = Vec::with_capacity(diff.deltas().len());
+        for delta in diff.deltas() {
+            out.push(patch_to_file_diff(&delta, None)?);
+        }
+        // Without a patch, binary is unknown: use what libgit2 already knows.
+        for (f, delta) in out.iter_mut().zip(diff.deltas()) {
+            f.binary = delta.flags().is_binary();
+        }
+        Ok(out)
+    }
+
+    /// Diff of one file in a commit. Give `old_path` for renamed files.
+    pub fn commit_file_diff(
+        &self,
+        id: Oid,
+        path: &str,
+        old_path: Option<&str>,
+    ) -> Result<Option<FileDiff>> {
+        let mut paths = vec![path];
+        paths.extend(old_path);
+        let diff = self.commit_tree_diff(id, &paths)?;
+        let files = collect_diffs(&diff)?;
+        Ok(files.into_iter().find(|f| f.path == path))
+    }
+
+    fn commit_tree_diff(&self, id: Oid, paths: &[&str]) -> Result<git2::Diff<'_>> {
+        let commit = self.inner.find_commit(id)?;
+        let new_tree = commit.tree()?;
+        let old_tree = commit.parent(0).ok().map(|p| p.tree()).transpose()?;
+        let mut opts = DiffOptions::new();
+        for p in paths {
+            opts.pathspec(p);
+        }
+        if !paths.is_empty() {
+            opts.disable_pathspec_match(true);
+        }
+        let mut diff =
+            self.inner
+                .diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))?;
+        diff.find_similar(None)?;
+        Ok(diff)
+    }
+
     /// Changes introduced by a commit, compared with its first parent.
     pub fn commit_diff(&self, id: Oid) -> Result<Vec<FileDiff>> {
         let commit = self.inner.find_commit(id)?;
@@ -296,10 +343,7 @@ impl Repo {
                 self.inner
                     .diff_tree_to_index(head.as_ref(), None, Some(&mut opts))?
             }
-            DiffSource::Commit(id) => {
-                let files = self.commit_diff(id)?;
-                return Ok(files.into_iter().find(|f| f.path == path));
-            }
+            DiffSource::Commit(id) => return self.commit_file_diff(id, path, None),
         };
         Ok(collect_diffs(&diff)?.into_iter().next())
     }
@@ -734,6 +778,38 @@ mod tests {
         // Root commit diffs against an empty tree.
         let root = d.info.parents[0];
         assert_eq!(repo.commit_diff(root).unwrap()[0].kind, ChangeKind::Added);
+    }
+
+    #[test]
+    fn lists_commit_files_and_loads_one_diff() {
+        let t = TestRepo::new();
+        t.commit("a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n", "first");
+        t.git.run(&["mv", "a.txt", "b.txt"]).unwrap();
+        t.write("b.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n");
+        t.write("c.txt", "c\n");
+        t.git.run(&["add", "-A"]).unwrap();
+        t.git
+            .run(&["commit", "-q", "-m", "rename and add"])
+            .unwrap();
+        let repo = t.repo();
+        let head = repo.head_oid().unwrap();
+        let files = repo.commit_files(head).unwrap();
+        let kinds: Vec<_> = files.iter().map(|f| (f.path.as_str(), f.kind)).collect();
+        assert_eq!(
+            kinds,
+            [("b.txt", ChangeKind::Renamed), ("c.txt", ChangeKind::Added)]
+        );
+        assert!(files.iter().all(|f| f.hunks.is_empty()));
+        assert_eq!(files[0].old_path.as_deref(), Some("a.txt"));
+
+        let renamed = repo
+            .commit_file_diff(head, "b.txt", Some("a.txt"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(renamed.kind, ChangeKind::Renamed);
+        assert_eq!((renamed.additions, renamed.deletions), (1, 0));
+        let added = repo.commit_file_diff(head, "c.txt", None).unwrap().unwrap();
+        assert_eq!(added.additions, 1);
     }
 
     #[test]

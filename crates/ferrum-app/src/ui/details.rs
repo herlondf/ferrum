@@ -28,7 +28,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         });
     egui::CentralPanel::default_margins().show(ui, |ui| {
         let Some(view) = &tab.commit_view else { return };
-        let Some(file) = view.selected_file.and_then(|i| view.files.get(i)) else {
+        let Some(file) = view.selected_file.and(view.diff.as_ref()) else {
             ui.centered_and_justified(|ui| ui.weak("No file selected."));
             return;
         };
@@ -186,6 +186,6 @@ fn file_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             }
         });
     if let Some(i) = clicked {
-        view.selected_file = Some(i);
+        tab.select_commit_file(i);
     }
 }

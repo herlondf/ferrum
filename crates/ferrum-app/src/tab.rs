@@ -51,8 +51,11 @@ pub struct HistoryState {
 /// A commit shown in the details panel.
 pub struct CommitView {
     pub details: CommitDetails,
+    /// Changed files, without content (see `diff`).
     pub files: Vec<FileDiff>,
     pub selected_file: Option<usize>,
+    /// Diff of the selected file, loaded when it is selected.
+    pub diff: Option<FileDiff>,
     /// Shown from the stash list rather than the history.
     pub is_stash: bool,
 }
@@ -324,23 +327,48 @@ impl RepoTab {
 
     /// Loads a commit into the details panel.
     pub fn load_commit(&mut self, id: Oid, is_stash: bool) {
+        // Only the file list here: diffs load per file, so huge commits stay fast.
         let result = self
             .repo
             .commit_details(id)
-            .and_then(|d| Ok((d, self.repo.commit_diff(id)?)));
+            .and_then(|d| Ok((d, self.repo.commit_files(id)?)));
         match result {
             Ok((details, files)) => {
-                let selected_file = (!files.is_empty()).then_some(0);
                 self.commit_view = Some(CommitView {
                     details,
                     files,
-                    selected_file,
+                    selected_file: None,
+                    diff: None,
                     is_stash,
                 });
+                self.select_commit_file(0);
             }
             Err(e) => {
                 self.commit_view = None;
                 self.error(e.to_string());
+            }
+        }
+    }
+
+    /// Selects a file of the shown commit and loads its diff.
+    pub fn select_commit_file(&mut self, i: usize) {
+        let Some(view) = &mut self.commit_view else {
+            return;
+        };
+        let Some(file) = view.files.get(i) else {
+            return;
+        };
+        let id = view.details.info.id;
+        view.selected_file = Some(i);
+        match self
+            .repo
+            .commit_file_diff(id, &file.path, file.old_path.as_deref())
+        {
+            Ok(diff) => view.diff = diff,
+            Err(e) => {
+                view.diff = None;
+                let msg = e.to_string();
+                self.error(msg);
             }
         }
     }
