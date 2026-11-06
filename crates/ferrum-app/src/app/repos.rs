@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
+use eframe::egui;
 use ferrum_core::library;
 
 use super::FerrumApp;
@@ -17,39 +17,6 @@ use crate::ui::{open_quickly, repo_dialogs, repo_manager, tabs};
 
 /// Most closed tabs remembered for Ctrl+Shift+T.
 const MAX_CLOSED: usize = 20;
-
-/// Shortcuts of this area, in one place so they can be made configurable.
-/// Ctrl+Shift combinations come first: Ctrl+T would also match Ctrl+Shift+T.
-pub const SHORTCUTS: &[(Modifiers, Key, Shortcut)] = &[
-    (
-        Modifiers::COMMAND.plus(Modifiers::SHIFT),
-        Key::T,
-        Shortcut::ReopenClosed,
-    ),
-    (
-        Modifiers::COMMAND.plus(Modifiers::SHIFT),
-        Key::O,
-        Shortcut::OpenQuickly,
-    ),
-    (Modifiers::COMMAND, Key::T, Shortcut::NewTab),
-];
-
-#[derive(Clone, Copy)]
-pub enum Shortcut {
-    NewTab,
-    ReopenClosed,
-    OpenQuickly,
-}
-
-impl Shortcut {
-    fn command(self) -> RepoCmd {
-        match self {
-            Shortcut::NewTab => RepoCmd::NewTab,
-            Shortcut::ReopenClosed => RepoCmd::ReopenClosed,
-            Shortcut::OpenQuickly => RepoCmd::OpenQuickly,
-        }
-    }
-}
 
 #[derive(Default)]
 pub struct State {
@@ -151,17 +118,18 @@ impl FerrumApp {
     }
 
     pub(super) fn repo_shortcuts(&mut self, ctx: &egui::Context, cmds: &mut Commands) {
-        for &(mods, key, s) in SHORTCUTS {
-            if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(mods, key))) {
-                cmds.push(Command::Repos(s.command()));
+        use crate::keymap::{Action, pressed};
+        for (a, c) in [
+            (Action::ReopenTab, RepoCmd::ReopenClosed),
+            (Action::OpenQuickly, RepoCmd::OpenQuickly),
+            (Action::NewTab, RepoCmd::NewTab),
+        ] {
+            if pressed(ctx, a) {
+                cmds.push(Command::Repos(c));
             }
         }
-        if self.repos.home_active
-            && !self.tabs.is_empty()
-            && ctx.input_mut(|i| {
-                i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::W))
-            })
-        {
+        // Close tab closes the Repository Manager tab when it is shown.
+        if self.repos.home_active && !self.tabs.is_empty() && pressed(ctx, Action::CloseTab) {
             cmds.push(Command::Repos(RepoCmd::CloseHome));
         }
     }

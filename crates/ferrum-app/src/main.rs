@@ -5,7 +5,10 @@ mod accent;
 mod app;
 mod benchmark;
 mod command;
+#[cfg(test)]
+mod commands_tests;
 mod commit_prefs;
+mod custom_commands;
 mod desktop_notify;
 #[cfg(test)]
 mod details_tests;
@@ -23,6 +26,7 @@ mod fork_tools_tests;
 mod history_tests;
 mod icon;
 mod jobs;
+mod keymap;
 #[cfg(test)]
 mod parts_tests;
 mod prefs;

@@ -8,8 +8,7 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use eframe::egui::{
-    self, Align, Align2, Color32, FontId, Id, Key, KeyboardShortcut, Layout, Modifiers, Rect,
-    Sense, UiBuilder, pos2, vec2,
+    self, Align, Align2, Color32, FontId, Id, Key, Layout, Rect, Sense, UiBuilder, pos2, vec2,
 };
 use ferrum_core::diff::{FILEMODE_LINK, FILEMODE_SUBMODULE};
 use ferrum_core::{ChangeKind, DiffLine, FileDiff, LineKind};
@@ -532,13 +531,11 @@ pub fn show(
         });
     } else {
         if active_view(&ctx).as_deref() == Some(id) {
-            let pressed = |k| {
-                ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, k)))
-            };
-            if pressed(Key::ArrowDown) {
+            use crate::keymap::{Action, pressed};
+            if pressed(&ctx, Action::NextHunk) {
                 nav = Some(Nav::NextHunk);
             }
-            if pressed(Key::ArrowUp) {
+            if pressed(&ctx, Action::PrevHunk) {
                 nav = Some(Nav::PrevHunk);
             }
         }

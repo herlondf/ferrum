@@ -152,7 +152,7 @@ fn workspaces_switch_their_tabs() {
     // Switching from the palette.
     h.key_press_modifiers(Modifiers::COMMAND, Key::P);
     frames(&mut h);
-    h.get_by(|n| n.placeholder() == Some("Type a command…"))
+    h.get_by(|n| n.placeholder() == Some("Type a command, branch or file…"))
         .type_text("Workspace: work");
     frames(&mut h);
     h.key_press(Key::Enter);

@@ -3,9 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use eframe::egui::{
-    self, Align2, FontId, Key, KeyboardShortcut, Modifiers, Rect, Sense, pos2, vec2,
-};
+use eframe::egui::{self, Align2, FontId, Key, Rect, Sense, pos2, vec2};
 use ferrum_core::{FileCommit, Oid, Repo, short};
 
 use crate::command::{Command, Commands};
@@ -188,8 +186,7 @@ pub fn claim_goto(ctx: &egui::Context) -> bool {
     let Some(view) = active_view(ctx) else {
         return false;
     };
-    let shortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::G);
-    if !ctx.input_mut(|i| i.consume_shortcut(&shortcut)) {
+    if !crate::keymap::pressed(ctx, crate::keymap::Action::GoTo) {
         return false;
     }
     ctx.data_mut(|d| d.insert_temp(goto_request_id(), view));
@@ -294,19 +291,16 @@ pub fn show(ui: &mut egui::Ui, tab: &RepoTab, view: &mut FileView, cmds: &mut Co
     // Keys go to the blame under the pointer (or with Go to line focused).
     let active = active_view(&ctx) == Some(view.id);
     if take_goto_request(&ctx, view.id)
-        || (active
-            && ctx.input_mut(|i| {
-                i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::G))
-            }))
+        || (active && crate::keymap::pressed(&ctx, crate::keymap::Action::GoTo))
     {
         st.goto = Some(String::new());
         st.goto_focus = true;
     }
     if active && st.goto.is_none() {
-        if ctx.input_mut(|i| i.consume_key(Modifiers::ALT, Key::ArrowLeft)) {
+        if crate::keymap::pressed(&ctx, crate::keymap::Action::BlameBack) {
             st.go_back();
         }
-        if ctx.input_mut(|i| i.consume_key(Modifiers::ALT, Key::ArrowRight)) {
+        if crate::keymap::pressed(&ctx, crate::keymap::Action::BlameForward) {
             st.go_forward();
         }
     }

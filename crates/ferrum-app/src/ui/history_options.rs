@@ -1,7 +1,7 @@
 //! Graph options: the View menu of the history, graph filters (also used by
 //! the sidebar), the filter shown in the status bar and history shortcuts.
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
+use eframe::egui::{self, Key};
 use ferrum_core::log::{LogOptions, ref_matches};
 
 use crate::command::{Command, Commands};
@@ -225,53 +225,30 @@ pub fn go_to(rev: String) -> Command {
 
 /// History shortcuts, checked by the app while the history is shown.
 pub fn shortcuts(ctx: &egui::Context, tab: &RepoTab, cmds: &mut Commands) {
-    let cs = Modifiers::COMMAND | Modifiers::SHIFT;
-    let pressed =
-        |m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)));
-    // Shift+. types `>` on many layouts; match the physical key too.
-    let reflog = ctx.input_mut(|i| {
-        let hit = i.events.iter().any(|e| {
-            matches!(e, egui::Event::Key { key, physical_key, pressed: true, modifiers, .. }
-                if modifiers.command && modifiers.shift
-                    && (*key == Key::Period || *physical_key == Some(Key::Period)))
-        });
-        if hit {
-            i.events.retain(|e| {
-                !matches!(
-                    e,
-                    egui::Event::Key {
-                        key: Key::Period,
-                        ..
-                    }
-                )
-            });
-        }
-        hit
-    });
-    if reflog {
+    use crate::keymap::{Action, pressed};
+    if pressed(ctx, Action::Reflog) {
         cmds.push(toggle_reflog());
     }
-    if pressed(cs, Key::A) {
+    if pressed(ctx, Action::ActiveBranch) {
         cmds.push(filter_active_branch());
     }
-    if pressed(Modifiers::COMMAND, Key::Num0) {
+    if pressed(ctx, Action::JumpToHead) {
         cmds.push(jump_to_head());
     }
     // Ctrl+1 while the history is already shown jumps to HEAD.
-    let again =
-        ctx.input(|i| i.modifiers.command && !i.modifiers.shift && i.key_pressed(Key::Num1));
+    let again = crate::keymap::peek(ctx, Action::ShowHistory);
     if again && tab.view == View::History {
         cmds.push(jump_to_head());
     }
-    if pressed(Modifiers::COMMAND, Key::G) {
+    if pressed(ctx, Action::GoTo) {
         cmds.push(cmd(|tab, _| tab.history.ext.goto = Some(String::new())));
     }
     if tab.view != View::History || ctx.memory(|m| m.focused().is_some()) {
         return;
     }
-    if pressed(Modifiers::SHIFT, Key::F3) {
+    if pressed(ctx, Action::PrevMatch) {
         cmds.push(cmd(|tab, _| history_model::step_match(tab, false)));
-    } else if pressed(Modifiers::NONE, Key::F3) {
+    } else if pressed(ctx, Action::NextMatch) {
         cmds.push(cmd(|tab, _| history_model::step_match(tab, true)));
     }
 }

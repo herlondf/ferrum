@@ -10,7 +10,9 @@ use crate::command::{Command, Commands};
 use crate::external::Launch;
 use crate::repos::{Library, RepoCmd, SourceFolder};
 use crate::settings::Settings;
+use crate::tab::RepoTab;
 use crate::ui::dialogs::Dialog;
+use crate::ui::palette::{Entry, Group};
 
 #[derive(Default)]
 pub struct Manager {
@@ -645,54 +647,75 @@ pub fn repository_menu(ui: &mut egui::Ui, has_tabs: bool, cmds: &mut Commands) {
     }
 }
 
-type Make = Box<dyn Fn() -> Command>;
-
 /// Command palette entries: Open Quickly, tabs and "Workspace: X".
-pub fn palette_entries(settings: &Settings, has_tab: bool) -> Vec<(String, &'static str, Make)> {
-    let repos = |c: fn() -> RepoCmd| -> Make { Box::new(move || Command::Repos(c())) };
-    let mut list: Vec<(String, &'static str, Make)> = vec![
-        (
+pub fn palette_entries(settings: &Settings, tab: Option<&RepoTab>, list: &mut Vec<Entry>) {
+    use crate::keymap::Action;
+    let repos = |c: fn() -> RepoCmd| move || Command::Repos(c());
+    list.push(
+        Entry::new(
+            Group::Commands,
             t!("Open Quickly…"),
-            "Ctrl+Shift+O",
+            "",
             repos(|| RepoCmd::OpenQuickly),
-        ),
-        (
+        )
+        .key(Action::OpenQuickly),
+    );
+    list.push(
+        Entry::new(
+            Group::Commands,
             t!("Repository Manager"),
-            "Ctrl+T",
+            "",
             repos(|| RepoCmd::NewTab),
-        ),
-        (
+        )
+        .key(Action::NewTab),
+    );
+    list.push(
+        Entry::new(
+            Group::Commands,
             t!("Reopen closed tab"),
-            "Ctrl+Shift+T",
+            "",
             repos(|| RepoCmd::ReopenClosed),
-        ),
-        (t!("Rescan source folders"), "", repos(|| RepoCmd::Scan)),
-    ];
-    if has_tab {
-        list.push((t!("Repository settings…"), "", repos(|| RepoCmd::Settings)));
-        list.push((
+        )
+        .key(Action::ReopenTab),
+    );
+    list.push(Entry::new(
+        Group::Commands,
+        t!("Rescan source folders"),
+        "",
+        repos(|| RepoCmd::Scan),
+    ));
+    if tab.is_some() {
+        list.push(Entry::new(
+            Group::Commands,
+            t!("Repository settings…"),
+            "",
+            repos(|| RepoCmd::Settings),
+        ));
+        list.push(Entry::new(
+            Group::Commands,
             t!("Show repository overview"),
             "",
-            Box::new(|| Command::SetView(crate::tab::View::Overview)),
+            || Command::SetView(crate::tab::View::Overview),
         ));
     }
     let lib = &settings.library;
     if !lib.workspace.is_empty() {
-        list.push((
+        list.push(Entry::new(
+            Group::Workspaces,
             t!("Workspace: {}", t!("Default workspace")),
             "",
-            Box::new(|| Command::Repos(RepoCmd::SwitchWorkspace(String::new()))),
+            || Command::Repos(RepoCmd::SwitchWorkspace(String::new())),
         ));
     }
     for name in lib.workspace_names() {
         if name != lib.workspace {
             let n = name.clone();
-            list.push((
+            list.push(Entry::new(
+                Group::Workspaces,
                 t!("Workspace: {}", name),
                 "",
-                Box::new(move || Command::Repos(RepoCmd::SwitchWorkspace(n.clone()))),
+                move || Command::Repos(RepoCmd::SwitchWorkspace(n.clone())),
             ));
         }
     }
-    list
 }

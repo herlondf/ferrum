@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, Id, Key};
+use eframe::egui::{self, Id};
 use ferrum_core::diff::{self, LfsPointer, SubmoduleCommits};
 use ferrum_core::{DiffSource, FileDiff, Oid, Repo, short};
 
@@ -41,7 +41,7 @@ pub fn show_file(
     // Space opens the large window when no text field takes the key.
     let typing = ctx.text_edit_focused();
     let open = diff_view::large_open(&ctx, id);
-    if !typing && !open && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space)) {
+    if !typing && !open && crate::keymap::pressed(&ctx, crate::keymap::Action::LargeView) {
         diff_view::set_large(&ctx, id, true);
     }
     if diff_view::large_open(&ctx, id) {
@@ -77,7 +77,7 @@ pub fn show_file(
             action = a;
         }
         let space = !ctx.text_edit_focused()
-            && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Space));
+            && crate::keymap::pressed(&ctx, crate::keymap::Action::LargeView);
         if close || space || resp.should_close() {
             diff_view::set_large(&ctx, id, false);
         }

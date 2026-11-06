@@ -23,11 +23,12 @@ enum Section {
     Ai,
     Accounts,
     Shortcuts,
+    Commands,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 10] = [
+    const ALL: [Section; 11] = [
         Section::General,
         Section::Appearance,
         Section::Git,
@@ -37,6 +38,7 @@ impl Section {
         Section::Ai,
         Section::Accounts,
         Section::Shortcuts,
+        Section::Commands,
         Section::About,
     ];
 
@@ -51,6 +53,7 @@ impl Section {
             Section::Ai => t!("💡 AI"),
             Section::Accounts => t!("☁ Accounts"),
             Section::Shortcuts => t!("⌘ Shortcuts"),
+            Section::Commands => t!("▶ Custom commands"),
             Section::About => t!("📝 About"),
         }
     }
@@ -79,6 +82,7 @@ impl SettingsWindow {
             "profiles" => Section::Profiles,
             "accounts" => Section::Accounts,
             "shortcuts" => Section::Shortcuts,
+            "commands" => Section::Commands,
             "about" => Section::About,
             _ => Section::General,
         };
@@ -142,7 +146,10 @@ pub fn show(
                             Section::Commit => super::commit_settings::commit(ui, settings),
                             Section::Ai => super::commit_settings::ai(ui, settings),
                             Section::Accounts => accounts(ui, settings, cmds),
-                            Section::Shortcuts => shortcuts(ui),
+                            Section::Shortcuts => crate::ui::shortcuts::section(ui, settings),
+                            Section::Commands => {
+                                crate::ui::custom_commands::settings_section(ui, settings, cmds)
+                            }
                             Section::About => about(ui, win, cmds),
                         });
                 });
@@ -410,32 +417,6 @@ fn accounts(ui: &mut egui::Ui, settings: &mut Settings, cmds: &mut Commands) {
 }
 
 /// Mirrors `FerrumApp::shortcuts` in app.rs.
-fn shortcut_list() -> [(&'static str, String); 21] {
-    [
-        ("Mod+P", t!("Command palette")),
-        ("Mod+O", t!("Open repository")),
-        ("Mod+,", t!("Settings")),
-        ("F5 / Mod+R", t!("Refresh")),
-        ("Mod+F", t!("Search commits")),
-        ("Mod+1", t!("History")),
-        ("Mod+2", t!("Local changes")),
-        ("Mod+B", t!("Check out branch")),
-        ("Mod+Shift+B", t!("New branch")),
-        ("F2", t!("Rename the selected branch")),
-        ("Mod+Shift+S", t!("Stash changes")),
-        ("Mod+Shift+F", t!("Fetch all remotes")),
-        ("Mod+Shift+D", "Pull".to_owned()),
-        ("Mod+Shift+U", "Push".to_owned()),
-        ("Mod+Z", t!("Undo the last operation")),
-        ("Mod+W", t!("Close tab")),
-        ("Mod+Tab", t!("Next tab")),
-        ("Mod+Shift+Tab", t!("Previous tab")),
-        ("Enter", t!("Stage or unstage the selected files")),
-        ("Mod+Enter", t!("Commit")),
-        ("Mod+Shift+Enter", t!("Commit and push")),
-    ]
-}
-
 /// The pull strategy as shown in the picker (Merge and Rebase are git terms).
 fn pull_label(p: PullChoice) -> String {
     match p {
@@ -443,26 +424,6 @@ fn pull_label(p: PullChoice) -> String {
         PullChoice::FastForwardOnly => t!("Fast-forward only"),
         PullChoice::Merge | PullChoice::Rebase => p.label().to_owned(),
     }
-}
-
-fn shortcuts(ui: &mut egui::Ui) {
-    heading(ui, &t!("Keyboard shortcuts"));
-    let m = if cfg!(target_os = "macos") {
-        "⌘"
-    } else {
-        "Ctrl"
-    };
-    egui::Grid::new("settings-shortcuts")
-        .num_columns(2)
-        .striped(true)
-        .spacing([24.0, 6.0])
-        .show(ui, |ui| {
-            for (keys, action) in shortcut_list() {
-                ui.label(RichText::new(keys.replace("Mod", m)).monospace());
-                ui.label(action);
-                ui.end_row();
-            }
-        });
 }
 
 fn about(ui: &mut egui::Ui, win: &mut SettingsWindow, cmds: &mut Commands) {

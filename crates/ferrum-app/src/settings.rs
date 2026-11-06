@@ -127,6 +127,12 @@ pub struct Settings {
     /// Repository Manager list, source folders, workspaces, tab looks.
     #[serde(default)]
     pub library: crate::repos::Library,
+    /// Keyboard shortcut overrides (Settings > Shortcuts), by action id.
+    #[serde(default)]
+    pub keymap: crate::keymap::Overrides,
+    /// Custom commands and approved shared ones.
+    #[serde(default)]
+    pub custom: crate::custom_commands::CustomSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -189,6 +195,8 @@ impl Default for Settings {
             sync: Default::default(),
             details: Default::default(),
             library: Default::default(),
+            keymap: Default::default(),
+            custom: Default::default(),
         }
     }
 }

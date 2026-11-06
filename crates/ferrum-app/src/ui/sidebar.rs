@@ -748,6 +748,7 @@ fn local_branch_menu(
         }
     }
     history_options::ref_menu(ui, tab, &format!("refs/heads/{name}"), cmds);
+    crate::ui::custom_commands::branch_menu(ui, tab, b, cmds);
     ui.separator();
     pin_button(ui, st, &format!("refs/heads/{name}"));
     if ui.button(t!("Copy name")).clicked() {
@@ -1109,6 +1110,7 @@ fn remote_branch_row(
             }
         });
         history_options::ref_menu(ui, tab, &format!("refs/remotes/{}", b.name), cmds);
+        crate::ui::custom_commands::branch_menu(ui, tab, b, cmds);
         ui.separator();
         pin_button(ui, st, &format!("refs/remotes/{}", b.name));
         if ui.button(t!("Copy name")).clicked() {

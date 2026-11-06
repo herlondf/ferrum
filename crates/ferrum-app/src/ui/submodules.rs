@@ -211,6 +211,7 @@ fn row(
             }));
             ui.close();
         }
+        crate::ui::custom_commands::submodule_menu(ui, tab, &s.path, cmds);
         if ui.button(t!("Copy path")).clicked() {
             cmds.push(Command::Copy(s.path.clone()));
             ui.close();

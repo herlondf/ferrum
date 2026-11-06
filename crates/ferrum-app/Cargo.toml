@@ -24,6 +24,7 @@ similar = "3.2.1"
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 sys-locale = "0.3.2"
 fontdb = "0.23.0"
+serde_json = "1.0.154"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 zbus = "5.19.0"
@@ -31,7 +32,6 @@ zbus = "5.19.0"
 [dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 tempfile = "3.27.0"
-serde_json = "1.0.154"
 
 # Linux packages, built by scripts/package-linux.sh.
 [package.metadata.deb]

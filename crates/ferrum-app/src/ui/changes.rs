@@ -888,6 +888,7 @@ fn file_menu(
         ignore_menu(ui, tab, cmds, &files, &tracked);
     });
     crate::ui::lfs::file_menu(ui, tab, cmds, &tracked);
+    crate::ui::custom_commands::files_menu(ui, tab.path(), &paths, None, cmds);
     ui.separator();
     if ui.button(t!("Copy relative path")).clicked() {
         cmds.push(Command::Copy(paths.join("\n")));
@@ -906,7 +907,8 @@ fn file_menu(
     if !many {
         ui.separator();
         file_actions::workdir_menu(ui, tab.path(), &f.path, cmds);
-        let button = egui::Button::new(t!("External diff")).shortcut_text("Ctrl+D");
+        let button = egui::Button::new(t!("External diff"))
+            .shortcut_text(crate::keymap::text(crate::keymap::Action::ExternalDiff));
         if ui.add(button).clicked() {
             cmds.push(external_diff_of(tab, source, &f.path));
             ui.close();

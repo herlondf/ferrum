@@ -28,6 +28,7 @@ pub mod patch;
 pub mod rebase;
 pub mod refs;
 mod repo;
+pub mod shell;
 pub mod stats;
 pub mod submodule;
 pub mod sync;

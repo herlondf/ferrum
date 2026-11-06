@@ -75,6 +75,8 @@ pub enum Command {
     Repos(crate::repos::RepoCmd),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
+    /// A custom command picked in a menu or the palette (see `custom_commands.rs`).
+    Custom(crate::custom_commands::Invocation),
 }
 
 pub enum DevStep {
@@ -82,6 +84,8 @@ pub enum DevStep {
     Select(ferrum_core::DiffSource, String),
     Diff(String),
     Theme(crate::settings::ThemeChoice),
+    /// Open the command palette with a query.
+    Palette(String),
     /// Open Settings at a section, e.g. "appearance".
     SettingsSection(String),
     /// `sidebar:open:KEY`, `sidebar:pin:REF`, `sidebar:filter:TEXT`, `sidebar:focus`.
@@ -276,6 +280,8 @@ pub enum Op {
     Repo(crate::repos::RepoOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
+    /// A custom command's script or program (see `custom_commands.rs`).
+    Custom(crate::custom_commands::Run),
 }
 
 impl Op {
@@ -377,6 +383,7 @@ impl Op {
             Op::Patch(p) => p.label(),
             Op::Repo(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
+            Op::Custom(r) => r.label.clone(),
         }
     }
 
@@ -401,6 +408,7 @@ impl Op {
             Op::Part(p) => p.refresh(),
             Op::Patch(p) => p.refresh(),
             Op::Repo(_) => Refresh::Status,
+            Op::Custom(r) => r.refresh(),
             _ => Refresh::All,
         }
     }
@@ -525,6 +533,7 @@ impl Op {
             Op::Patch(p) => p.run(git),
             Op::Repo(r) => r.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
+            Op::Custom(r) => r.run(git, progress),
         }
     }
 }

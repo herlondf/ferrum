@@ -1,0 +1,163 @@
+//! Strings of the command palette, custom commands and keyboard shortcuts.
+
+pub static T: &[(&str, &str)] = &[
+    // ----- Palette -----
+    (
+        "Type a command, branch or file…",
+        "Digite um comando, branch ou arquivo…",
+    ),
+    ("Commands", "Comandos"),
+    ("Custom commands", "Comandos personalizados"),
+    ("Pinned", "Fixados"),
+    ("Files", "Arquivos"),
+    ("Tabs", "Abas"),
+    ("Workspaces", "Espaços de trabalho"),
+    // ----- Shortcuts -----
+    (
+        "Search commits (or find in the diff under the pointer)",
+        "Pesquisar commits (ou localizar no diff sob o ponteiro)",
+    ),
+    ("Next match", "Próximo resultado"),
+    ("Previous match", "Resultado anterior"),
+    (
+        "History (again: jump to HEAD)",
+        "Histórico (de novo: ir para o HEAD)",
+    ),
+    ("Jump to HEAD", "Ir para o HEAD"),
+    (
+        "Go to commit (Go to line in the blame under the pointer)",
+        "Ir para o commit (Ir para a linha no blame sob o ponteiro)",
+    ),
+    (
+        "Only the current branch in the graph",
+        "Somente a branch atual no grafo",
+    ),
+    ("Show reflog", "Mostrar reflog"),
+    (
+        "Show / hide the commit details",
+        "Mostrar / ocultar os detalhes do commit",
+    ),
+    (
+        "Large diff window / large commit details",
+        "Janela grande do diff / detalhes grandes do commit",
+    ),
+    ("Copy commit info", "Copiar informações do commit"),
+    (
+        "External diff of the selected file",
+        "Diff externo do arquivo selecionado",
+    ),
+    ("Next hunk in the diff", "Próximo trecho no diff"),
+    ("Previous hunk in the diff", "Trecho anterior no diff"),
+    ("Blame: back", "Blame: voltar"),
+    ("Blame: forward", "Blame: avançar"),
+    (
+        "Commit (in the message box)",
+        "Fazer commit (na caixa de mensagem)",
+    ),
+    (
+        "Check out a branch (search)",
+        "Fazer checkout de uma branch (pesquisa)",
+    ),
+    (
+        "Rename the selected sidebar branch",
+        "Renomear a branch selecionada na barra lateral",
+    ),
+    (
+        "Delete the selected sidebar branch, tag or stash",
+        "Excluir a branch, tag ou stash selecionada na barra lateral",
+    ),
+    ("Push (dialog)", "Push (diálogo)"),
+    (
+        "Click a shortcut to record a new one (Esc cancels).",
+        "Clique em um atalho para gravar um novo (Esc cancela).",
+    ),
+    ("Press keys…", "Pressione as teclas…"),
+    ("Add a shortcut", "Adicionar um atalho"),
+    ("Remove this shortcut", "Remover este atalho"),
+    ("Reset all", "Restaurar todos"),
+    ("Default: {}", "Padrão: {}"),
+    ("none", "nenhum"),
+    ("⚠ Also used by: {}", "⚠ Também usado por: {}"),
+    ("⚠ {} is used by: {}", "⚠ {} é usado por: {}"),
+    (
+        "Fixed keys: arrows, Home/End, Enter and Escape in lists and dialogs, Tab / Shift+Tab between panes, Ctrl+C copy, P R E S F D in the interactive rebase.",
+        "Teclas fixas: setas, Home/End, Enter e Escape em listas e diálogos, Tab / Shift+Tab entre painéis, Ctrl+C copia, P R E S F D no rebase interativo.",
+    ),
+    // ----- Custom commands -----
+    ("▶ Custom commands", "▶ Comandos personalizados"),
+    ("Repository", "Repositório"),
+    ("File", "Arquivo"),
+    ("Submodule", "Submódulo"),
+    ("Shell command", "Comando do shell"),
+    ("Program and arguments", "Programa e argumentos"),
+    ("Open URL", "Abrir URL"),
+    ("Checkbox", "Caixa de seleção"),
+    ("Choice", "Escolha"),
+    ("The command {} is empty.", "O comando {} está vazio."),
+    ("Shared in {}", "Compartilhado em {}"),
+    (
+        "This command comes from {} in the repository. Run it only if you trust it:",
+        "Este comando vem de {} no repositório. Execute-o somente se confiar nele:",
+    ),
+    ("Opens:", "Abre:"),
+    ("Runs:", "Executa:"),
+    ("Run", "Executar"),
+    ("Output: {}", "Saída: {}"),
+    (
+        "Waiting for the command to start…",
+        "Aguardando o comando iniciar…",
+    ),
+    (
+        "Shown in the context menus of their scope and in the command palette. Use / in the name for submenus.",
+        "Aparecem nos menus de contexto do seu escopo e na paleta de comandos. Use / no nome para criar submenus.",
+    ),
+    (
+        "Variables: $SHA $SHORT_SHA $branch $file $path (repository) $remote $submodule $selected_shas, and the names of form fields.",
+        "Variáveis: $SHA $SHORT_SHA $branch $file $path (repositório) $remote $submodule $selected_shas e os nomes dos campos do formulário.",
+    ),
+    ("✚ Add", "✚ Adicionar"),
+    ("New command", "Novo comando"),
+    ("Duplicate", "Duplicar"),
+    ("Copy as JSON", "Copiar como JSON"),
+    ("For {} in a repository", "Para {} em um repositório"),
+    (
+        "No custom commands yet.",
+        "Nenhum comando personalizado ainda.",
+    ),
+    (
+        "To share commands with your team, put them in {} in the repository (the format of Copy as JSON). Each one asks for approval before its first run.",
+        "Para compartilhar comandos com a equipe, coloque-os em {} no repositório (no formato de Copiar como JSON). Cada um pede aprovação antes da primeira execução.",
+    ),
+    ("Shown for", "Mostrado para"),
+    ("Per-system command", "Comando por sistema"),
+    (
+        "Used instead of the command above on that system when not empty.",
+        "Usado no lugar do comando acima nesse sistema quando não estiver vazio.",
+    ),
+    ("Confirm before running", "Confirmar antes de executar"),
+    ("Show output", "Mostrar a saída"),
+    ("Refresh after", "Atualizar depois"),
+    ("Form ({} fields)", "Formulário ({} campos)"),
+    (
+        "Asked before running; each value becomes $name.",
+        "Perguntado antes de executar; cada valor vira $nome.",
+    ),
+    ("name", "nome"),
+    ("label", "rótulo"),
+    ("value when checked", "valor quando marcado"),
+    ("value when not", "valor quando desmarcado"),
+    (
+        "choices, separated by commas",
+        "opções, separadas por vírgulas",
+    ),
+    ("default value", "valor padrão"),
+    ("✚ Add field", "✚ Adicionar campo"),
+    (
+        "New tab (Repository Manager)",
+        "Nova aba (Gerenciador de repositórios)",
+    ),
+    (
+        "Open Quickly (search known repositories)",
+        "Abrir rapidamente (buscar repositórios conhecidos)",
+    ),
+];

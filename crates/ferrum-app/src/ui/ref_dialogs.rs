@@ -249,18 +249,27 @@ pub fn drop_stashes(tab: &RepoTab) -> Dialog {
 
 // ----- Shortcuts and menus -----
 
-/// Ctrl+B quick checkout, Ctrl+Shift+B new branch, F2 renames the branch
-/// under the sidebar cursor.
+/// Ctrl+B quick checkout, Ctrl+Shift+B new branch, Ctrl+Shift+G new tag,
+/// F2 renames and Delete deletes the ref under the sidebar cursor.
 pub fn shortcuts(ctx: &egui::Context, tab: &RepoTab, cmds: &mut Commands) {
-    let cs = Modifiers::COMMAND | Modifiers::SHIFT;
-    // Shift first: the plain shortcut would also match Ctrl+Shift+B.
-    if ctx.input_mut(|i| i.consume_key(cs, Key::B)) {
-        let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
+    use crate::keymap::{Action, pressed};
+    let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
+    if pressed(ctx, Action::NewBranch) {
         cmds.push(Command::Dialog(new_branch(&head, &head, "")));
-    } else if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::B)) {
+    }
+    if pressed(ctx, Action::QuickCheckout) {
         cmds.push(Command::Dialog(quick_checkout()));
     }
+    if pressed(ctx, Action::NewTag) {
+        cmds.push(Command::Dialog(crate::ui::shortcut_actions::new_tag(tab)));
+    }
     let typing = ctx.memory(|m| m.focused().is_some());
+    if !typing
+        && pressed(ctx, Action::DeleteRef)
+        && let Some(d) = crate::ui::shortcut_actions::delete_ref(tab)
+    {
+        cmds.push(Command::Dialog(d));
+    }
     if !typing
         && let Some(name) = tab
             .sidebar
@@ -271,7 +280,7 @@ pub fn shortcuts(ctx: &egui::Context, tab: &RepoTab, cmds: &mut Commands) {
             .branches
             .iter()
             .any(|b| b.kind == BranchKind::Local && b.name == name)
-        && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F2))
+        && crate::keymap::pressed(ctx, crate::keymap::Action::Rename)
     {
         cmds.push(Command::Dialog(rename_branch(tab, name)));
     }
