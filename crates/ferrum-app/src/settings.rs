@@ -112,6 +112,9 @@ pub struct Settings {
     pub ai: crate::commit_prefs::AiPrefs,
     #[serde(default)]
     pub diff: crate::ui::diff_prefs::DiffPrefs,
+    /// Submodule options (Settings > Git).
+    #[serde(default)]
+    pub submodules: crate::repo_parts::SubmodulePrefs,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -169,6 +172,7 @@ impl Default for Settings {
             commit: Default::default(),
             ai: Default::default(),
             diff: Default::default(),
+            submodules: Default::default(),
         }
     }
 }

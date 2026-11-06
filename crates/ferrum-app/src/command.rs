@@ -20,6 +20,8 @@ pub enum Command {
     Undo,
     Refresh,
     OpenRepo(PathBuf),
+    /// Open a repository (submodule, worktree) in a tab right after the active one.
+    OpenBeside(PathBuf),
     /// Ask for a folder and open it.
     OpenRepoDialog,
     CloseTab(usize),
@@ -241,6 +243,8 @@ pub enum Op {
         force: bool,
     },
     SetIdentity(Identity),
+    /// Git LFS and submodule operations (see `repo_parts.rs`).
+    Part(crate::repo_parts::PartOp),
     /// Opens a pull/merge request. An `Op` (not a plain job) so it can be
     /// queued behind the `Push` of its branch.
     CreatePullRequest {
@@ -319,6 +323,7 @@ impl Op {
             Op::WorktreeAdd { path, .. } => t!("Add worktree {}", path),
             Op::WorktreeRemove { path, .. } => t!("Remove worktree {}", path),
             Op::SetIdentity(_) => t!("Set repository identity"),
+            Op::Part(p) => p.label(),
             Op::CreatePullRequest { hosted, .. } => {
                 t!("Create {}", hosted.kind.request_name())
             }
@@ -341,6 +346,7 @@ impl Op {
             | Op::SaveResolution { .. } => Refresh::Status,
             Op::SetIdentity(_) => Refresh::Status,
             Op::CreatePullRequest { .. } => Refresh::None,
+            Op::Part(p) => p.refresh(),
             _ => Refresh::All,
         }
     }
@@ -351,6 +357,7 @@ impl Op {
             Op::CreatePullRequest { hosted, token, pr } => {
                 forge::create_pull_request(hosted, token, pr).map(JobOutput::PullRequestCreated)
             }
+            Op::Part(p) => return p.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -446,6 +453,7 @@ impl Op {
             } => ops::worktree_add(git, path, rev, new_branch.as_deref()),
             Op::WorktreeRemove { path, force } => ops::worktree_remove(git, path, *force),
             Op::SetIdentity(id) => ops::set_identity(git, id),
+            Op::Part(p) => p.run(git, progress),
             Op::CreatePullRequest { hosted, token, pr } => {
                 forge::create_pull_request(hosted, token, pr).map(|_| ())
             }

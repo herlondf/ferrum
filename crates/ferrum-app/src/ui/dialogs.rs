@@ -99,6 +99,9 @@ pub enum Dialog {
         ssh_key: String,
     },
     Forge(forge_ui::ForgeDialog),
+    Lfs(crate::ui::lfs::LfsDialog),
+    Submodule(crate::ui::submodules::SubmoduleDialog),
+    Worktree(crate::ui::worktrees::WorktreeDialog),
 }
 
 impl Dialog {
@@ -984,6 +987,9 @@ fn body(
             }
         }
         Dialog::Forge(d) => forge_ui::show_dialog(ui, d, tab, settings, cmds),
+        Dialog::Lfs(d) => crate::ui::lfs::show_dialog(ui, d, tab, cmds),
+        Dialog::Submodule(d) => crate::ui::submodules::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Worktree(d) => crate::ui::worktrees::show_dialog(ui, d, tab, cmds, enter),
     }
 }
 

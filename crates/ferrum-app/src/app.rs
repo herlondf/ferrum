@@ -8,6 +8,7 @@ use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
 mod background;
+mod parts;
 
 use crate::command::{Command, Commands, DevStep, Op};
 use crate::jobs::{Job, JobOutput, Refresh};
@@ -44,7 +45,8 @@ pub struct FerrumApp {
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`,
-/// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
+/// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login|
+/// submodule|submodule-update|lfs`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
 /// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
@@ -138,6 +140,11 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                     "login" => {
                         Dialog::Forge(forge_ui::login(forge::ForgeKind::GitHub, "github.com"))
                     }
+                    "submodule" => Dialog::Submodule(crate::ui::submodules::SubmoduleDialog::add()),
+                    "submodule-update" => {
+                        Dialog::Submodule(crate::ui::submodules::SubmoduleDialog::update(t, None))
+                    }
+                    "lfs" => Dialog::Lfs(crate::ui::lfs::LfsDialog::track(t)),
                     _ => continue,
                 };
                 out.push(Command::Dialog(d));
@@ -191,8 +198,7 @@ impl FerrumApp {
     fn open(&mut self, path: PathBuf) {
         match RepoTab::open_with(path, &self.settings.history) {
             Ok(mut tab) => {
-                let key = sidebar_model::repo_key(tab.path());
-                let prefs = self.settings.repos.get(&key).cloned().unwrap_or_default();
+                let prefs = crate::repo_settings::sidebar_prefs(&self.settings, &tab);
                 tab.sidebar = sidebar_model::SidebarState::with_prefs(prefs);
                 self.settings.add_recent(tab.path().to_path_buf());
                 if let Some(i) = self.tabs.iter().position(|t| t.path() == tab.path()) {
@@ -370,6 +376,11 @@ impl FerrumApp {
                 }
             }
             JobOutput::OpenRepo(path) => self.open(path),
+            JobOutput::SubmodulesOutOfDate(list) => {
+                if tab == Some(self.active) {
+                    self.ask_submodule_update(list);
+                }
+            }
         }
     }
 
@@ -417,7 +428,13 @@ impl FerrumApp {
     pub(crate) fn handle(&mut self, cmd: Command, ctx: &egui::Context) {
         match cmd {
             Command::Run(op) => match self.tabs.get_mut(self.active) {
-                Some(t) => t.run(op, ctx),
+                Some(t) => {
+                    let then = crate::repo_parts::after(&op, t, &self.settings.submodules);
+                    t.run(op, ctx);
+                    if let Some(next) = then {
+                        t.run(next, ctx);
+                    }
+                }
                 None => self.error(t!("Open a repository first.")),
             },
             Command::Undo => {
@@ -436,6 +453,7 @@ impl FerrumApp {
                 }
             }
             Command::OpenRepo(p) => self.open(p),
+            Command::OpenBeside(p) => self.open_beside(p),
             Command::OpenRepoDialog => {
                 if let Some(p) = rfd::FileDialog::new().pick_folder() {
                     self.open(p);
@@ -628,7 +646,8 @@ impl FerrumApp {
             Command::History(f) => {
                 if let Some(t) = self.tabs.get_mut(self.active) {
                     f(t, &mut self.settings.history);
-                    self.settings.history.store(t.path(), &t.history.ext.prefs);
+                    let history = &mut self.settings.history;
+                    crate::repo_settings::store_history(history, &mut self.tabs, self.active);
                 }
             }
             Command::FocusSearch => {
@@ -797,14 +816,12 @@ impl FerrumApp {
                         }));
                         ui.close();
                     }
-                    if tab.uses_lfs {
-                        ui.separator();
-                        for a in ["fetch", "pull", "prune"] {
-                            if ui.button(format!("Git LFS {a}")).clicked() {
-                                cmds.run(Op::Lfs(a));
-                                ui.close();
-                            }
-                        }
+                    ui.separator();
+                    crate::ui::lfs::menu(ui, tab, cmds);
+                    if ui.button(t!("Add submodule…")).clicked() {
+                        let d = crate::ui::submodules::SubmoduleDialog::add();
+                        cmds.push(Command::Dialog(Dialog::Submodule(d)));
+                        ui.close();
                     }
                     if !tab.submodules.is_empty() && ui.button(t!("Update submodules")).clicked() {
                         cmds.run(Op::SubmoduleUpdate);
@@ -1208,10 +1225,9 @@ impl eframe::App for FerrumApp {
         for c in cmds.take() {
             self.handle(c, &ctx);
         }
-        for t in &mut self.tabs {
-            if let Some(prefs) = t.sidebar.take_dirty() {
-                let key = sidebar_model::repo_key(t.path());
-                self.settings.repos.insert(key, prefs);
+        for i in 0..self.tabs.len() {
+            if let Some(prefs) = self.tabs[i].sidebar.take_dirty() {
+                crate::repo_settings::store_sidebar(&mut self.settings, &mut self.tabs, i, prefs);
             }
         }
         if self.tabs.iter().any(|t| t.job.is_some()) || self.global_job.is_some() {
@@ -1222,8 +1238,8 @@ impl eframe::App for FerrumApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         self.settings.open_repos = self.tabs.iter().map(|t| t.path().to_path_buf()).collect();
         self.settings.active_repo = self.active;
-        for t in &self.tabs {
-            self.settings.history.store(t.path(), &t.history.ext.prefs);
+        for i in 0..self.tabs.len() {
+            crate::repo_settings::store_history(&mut self.settings.history, &mut self.tabs, i);
         }
         eframe::set_value(storage, STORAGE_KEY, &self.settings);
     }

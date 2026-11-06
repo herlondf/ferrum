@@ -132,6 +132,7 @@ pub fn show(
                             Section::Git => {
                                 heading(ui, "Git");
                                 crate::ui::preferences::git(ui, &mut win.prefs, settings, cmds);
+                                crate::ui::submodules::settings_block(ui, settings);
                             }
                             Section::Tools => {
                                 heading(ui, &t!("External tools"));

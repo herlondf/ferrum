@@ -147,7 +147,7 @@ impl RepoTab {
         history: &history_model::HistorySettings,
     ) -> Result<Self, String> {
         let mut tab = Self::new(path)?;
-        tab.history.ext.prefs = history.prefs_for(tab.path());
+        tab.history.ext.prefs = crate::repo_settings::history_prefs(history, &tab);
         tab.refresh_all();
         Ok(tab)
     }
