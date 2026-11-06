@@ -98,6 +98,10 @@ pub struct Settings {
     pub accounts: Vec<ForgeAccount>,
     /// Folder suggested when cloning.
     pub clone_dir: String,
+    /// Appearance and behaviour (Settings > Appearance, Git).
+    pub prefs: crate::prefs::Prefs,
+    /// Editor, terminal, diff and merge tools (Settings > Tools).
+    pub external: crate::external::ExternalTools,
 }
 
 impl Default for Settings {
@@ -113,6 +117,8 @@ impl Default for Settings {
             profiles: Vec::new(),
             accounts: Vec::new(),
             clone_dir: String::new(),
+            prefs: Default::default(),
+            external: Default::default(),
         }
     }
 }

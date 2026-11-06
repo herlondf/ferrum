@@ -1,6 +1,6 @@
 //! Unified diff of one file, with optional line selection for staging.
 
-use eframe::egui::{self, Align, Align2, Color32, FontId, Layout, Rect, Sense, pos2, vec2};
+use eframe::egui::{self, Align, Align2, Color32, Layout, Rect, Sense, pos2, vec2};
 use ferrum_core::{FileDiff, LineKind};
 
 use crate::tab::LineSelection;
@@ -107,7 +107,8 @@ pub fn show(
         })
         .collect();
 
-    let font = FontId::monospace(12.0);
+    let font = crate::util::code_font(12.0);
+    let row_h = crate::util::code_row_height(ROW_HEIGHT);
     let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm'));
     let longest = file
         .hunks
@@ -135,7 +136,7 @@ pub fn show(
     egui::ScrollArea::both()
         .id_salt(id)
         .auto_shrink(false)
-        .show_rows(ui, ROW_HEIGHT, rows.len(), |ui, range| {
+        .show_rows(ui, row_h, rows.len(), |ui, range| {
             ui.spacing_mut().item_spacing.y = 0.0;
             let width = ui.available_width().max(content_w);
             for r in range {
@@ -143,7 +144,7 @@ pub fn show(
                     Row::Hunk(h) => {
                         let hunk = &file.hunks[h];
                         ui.allocate_ui_with_layout(
-                            vec2(width, ROW_HEIGHT),
+                            vec2(width, row_h),
                             Layout::left_to_right(Align::Center),
                             |ui| {
                                 let rect = ui.max_rect();
@@ -194,7 +195,7 @@ pub fn show(
                         } else {
                             Sense::hover()
                         };
-                        let (rect, resp) = ui.allocate_exact_size(vec2(width, ROW_HEIGHT), sense);
+                        let (rect, resp) = ui.allocate_exact_size(vec2(width, row_h), sense);
                         let is_sel = selection
                             .as_ref()
                             .is_some_and(|s| s.lines.contains(&(h, l)));
@@ -220,14 +221,14 @@ pub fn show(
                             pos2(rect.left() + NUMBER_WIDTH - 6.0, y),
                             Align2::RIGHT_CENTER,
                             num(line.old_no),
-                            FontId::monospace(11.0),
+                            crate::util::code_font(11.0),
                             weak,
                         );
                         painter.text(
                             pos2(rect.left() + NUMBER_WIDTH * 2.0 - 6.0, y),
                             Align2::RIGHT_CENTER,
                             num(line.new_no),
-                            FontId::monospace(11.0),
+                            crate::util::code_font(11.0),
                             weak,
                         );
                         let (prefix, color) = match line.kind {
@@ -237,7 +238,7 @@ pub fn show(
                         };
                         let x = rect.left() + NUMBER_WIDTH * 2.0 + 4.0;
                         painter.text(pos2(x, y), Align2::LEFT_CENTER, prefix, font.clone(), color);
-                        let mut text = line.text.replace('\t', "    ");
+                        let mut text = crate::util::expand_tabs(&line.text);
                         if line.no_newline {
                             text.push_str(&format!("  {}", t!("(no newline at end)")));
                         }

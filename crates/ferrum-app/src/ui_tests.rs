@@ -16,6 +16,9 @@ pub const SOURCES: &[&str] = &[
     include_str!("command.rs"),
     include_str!("tab.rs"),
     include_str!("util.rs"),
+    include_str!("prefs.rs"),
+    include_str!("external.rs"),
+    include_str!("accent.rs"),
     include_str!("settings.rs"),
     include_str!("ui/blame.rs"),
     include_str!("ui/changes.rs"),
@@ -27,15 +30,18 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/history.rs"),
     include_str!("ui/image_diff.rs"),
     include_str!("ui/palette.rs"),
+    include_str!("ui/preferences.rs"),
     include_str!("ui/rebase.rs"),
     include_str!("ui/settings.rs"),
     include_str!("ui/sidebar.rs"),
+    include_str!("ui/tools.rs"),
     include_str!("i18n/mod.rs"),
     include_str!("i18n/pt_br/mod.rs"),
     include_str!("i18n/pt_br/common.rs"),
     include_str!("i18n/pt_br/main.rs"),
     include_str!("i18n/pt_br/editing.rs"),
     include_str!("i18n/pt_br/extras.rs"),
+    include_str!("i18n/pt_br/preferences.rs"),
 ];
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -389,4 +395,92 @@ fn push_and_pull_through_the_toolbar() {
     settle(&mut h);
     assert_eq!(git(p, &["log", "-1", "--format=%s"]), "from someone else");
     assert!(p.join("b.txt").exists());
+}
+
+#[test]
+fn branch_names_get_spaces_replaced() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label("🌿 Branch").click();
+    frames(&mut h);
+    let field = h
+        .get_all_by_role(Role::TextInput)
+        .find(|n| n.is_focused())
+        .expect("focused field");
+    field.type_text("my new feature");
+    frames(&mut h);
+    h.get_by_label("Create branch").click();
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["branch", "--show-current"]),
+        "my-new-feature"
+    );
+}
+
+#[test]
+fn toolbar_buttons_can_be_hidden() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    assert!(h.query_by_label("🌿 Branch").is_some());
+    assert!(h.query_by_label(">_").is_some());
+    h.state_mut().settings.prefs.hidden_toolbar = vec![
+        crate::prefs::ToolbarButton::Branch,
+        crate::prefs::ToolbarButton::Terminal,
+    ];
+    frames(&mut h);
+    assert!(h.query_by_label("🌿 Branch").is_none());
+    assert!(h.query_by_label(">_").is_none());
+    assert!(h.query_by_label("📁").is_some());
+}
+
+#[cfg(unix)]
+#[test]
+fn opens_the_repository_in_a_custom_editor() {
+    let dir = repo();
+    let out = tempfile::tempdir().unwrap();
+    let marker = out.path().join("opened.txt");
+    let mut h = harness(dir.path());
+    h.state_mut().settings.external = crate::external::ExternalTools {
+        editor: crate::external::Editor::Custom,
+        editor_command: format!("sh -c 'echo \"$1\" > {}' sh $FILE", marker.display()),
+        ..Default::default()
+    };
+    frames(&mut h);
+    h.get_by_label("📂 Repository").click();
+    frames(&mut h);
+    h.get_by_label("Open in editor").click();
+    frames(&mut h);
+    for _ in 0..200 {
+        if let Ok(s) = std::fs::read_to_string(&marker)
+            && !s.is_empty()
+        {
+            assert_eq!(Path::new(s.trim()), dir.path());
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("the editor was not started");
+}
+
+#[test]
+fn settings_sections_show_preferences() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    let ctx = h.ctx.clone();
+    h.state_mut().handle(
+        crate::command::Command::DevStep(crate::command::DevStep::SettingsSection(
+            "appearance".into(),
+        )),
+        &ctx,
+    );
+    frames(&mut h);
+    assert!(h.query_by_label("Use the system accent color").is_some());
+    h.get_by_label_contains("🛠 Tools").click();
+    frames(&mut h);
+    assert!(h.query_by_label_contains("$MERGED").is_some());
+    h.get_by_label_contains("🔧 Git").click();
+    frames(&mut h);
+    assert!(h.query_by_label("Verbose git output").is_some());
 }

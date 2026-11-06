@@ -6,7 +6,7 @@
 //! queue behind an `Op::Push` queued just before it, so "push, then create"
 //! runs in order and a failed push cancels the creation.
 
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 use eframe::egui::{self, Align2, FontId, RichText, Sense, vec2};
 use ferrum_core::forge::{self, ForgeKind, HostedRepo, NewPullRequest, PullRequest};
@@ -17,7 +17,7 @@ use crate::command::{Command, Commands, Op};
 use crate::settings::Settings;
 use crate::tab::RepoTab;
 use crate::ui::dialogs::Dialog;
-use crate::util::format_time;
+use crate::util::{format_time, now_secs, relative_time};
 
 /// Label of the job that loads the list (set by the app).
 const LOAD_JOB: &str = "Load pull requests";
@@ -249,27 +249,6 @@ fn parse_timestamp(s: &str) -> Option<i64> {
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146_097 + doe - 719_468;
     Some(days * 86_400 + h * 3600 + mi * 60 + sec - offset)
-}
-
-/// "5 minutes ago", "yesterday", or a date for anything older than a month.
-fn relative_time(secs: i64, now: i64) -> String {
-    let ago = (now - secs).max(0);
-    match ago {
-        0..60 => t!("just now"),
-        60..120 => t!("1 minute ago"),
-        120..3600 => t!("{} minutes ago", ago / 60),
-        3600..7200 => t!("1 hour ago"),
-        7200..86_400 => t!("{} hours ago", ago / 3600),
-        86_400..172_800 => t!("yesterday"),
-        172_800..2_592_000 => t!("{} days ago", ago / 86_400),
-        _ => format_time(secs, 0)[..10].to_owned(),
-    }
-}
-
-fn now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64)
 }
 
 // ----- View -----

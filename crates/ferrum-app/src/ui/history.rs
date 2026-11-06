@@ -9,7 +9,7 @@ use ferrum_core::{BranchKind, CommitInfo, RefKind, RefLabel};
 use crate::command::{Command, Commands, Op};
 use crate::tab::RepoTab;
 use crate::ui::dialogs::Dialog;
-use crate::util::format_time;
+use crate::util::format_date;
 
 const ROW_HEIGHT: f32 = 24.0;
 const LANE_WIDTH: f32 = 14.0;
@@ -350,7 +350,7 @@ fn commit_row(
 
     for (col, value) in [
         (cols.author, commit.author.clone()),
-        (cols.date, format_time(commit.time, commit.offset_minutes)),
+        (cols.date, format_date(commit.time, commit.offset_minutes)),
     ] {
         painter.with_clip_rect(col.shrink2(vec2(4.0, 0.0))).text(
             col.left_center() + vec2(4.0, 0.0),

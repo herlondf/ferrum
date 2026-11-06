@@ -56,6 +56,10 @@ pub enum Command {
     ShowSettings,
     ShowPalette,
     FocusSearch,
+    /// Open something in another program (editor, terminal, diff tool...).
+    External(crate::external::Launch),
+    /// Write `user.name` / `user.email` to the global git config.
+    SetGlobalIdentity(ferrum_core::config::GlobalIdentity),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }
@@ -64,6 +68,8 @@ pub enum DevStep {
     Search(String),
     Select(ferrum_core::DiffSource, String),
     Theme(crate::settings::ThemeChoice),
+    /// Open Settings at a section, e.g. "appearance".
+    SettingsSection(String),
 }
 
 /// Collects commands while the UI is drawn.

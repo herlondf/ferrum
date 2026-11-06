@@ -1,10 +1,13 @@
 #[macro_use]
 mod i18n;
 
+mod accent;
 mod app;
 mod command;
+mod external;
 mod icon;
 mod jobs;
+mod prefs;
 mod settings;
 mod tab;
 mod ui;

@@ -23,12 +23,19 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **GitHub and GitLab**: list, check out and create pull/merge requests
   (uses your GitHub CLI login automatically, or a saved token).
 - **Profiles**: per-repository name, email, SSH key and commit signing.
+- **External tools**: open the repository in a terminal, the file manager or
+  your editor/IDE (VS Code, Zed, Sublime, JetBrains, Neovim, Cursor or a custom
+  command); external diff and merge tools (Meld, KDiff3, Beyond Compare,
+  P4Merge, VS Code, vimdiff, git's difftool/mergetool or a custom command).
+- **Preferences**: global git identity, git executable and verbose git output,
+  code font and size, tab width, relative/absolute/long dates, system accent
+  color, toolbar buttons, branch name space replacement, default merge type.
 - **Command palette** (Ctrl+P), keyboard shortcuts, light/dark theme, zoom,
   tabs that reopen with the app.
 
 Writes go through the `git` command line, so hooks, credential helpers, SSH
 config and Git LFS behave exactly as in the terminal. Reads use libgit2 for speed.
-Git must be installed and on the `PATH`.
+Git must be installed and on the `PATH` (or chosen in Settings > Git).
 
 ## Keyboard shortcuts
 

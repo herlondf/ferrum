@@ -40,7 +40,7 @@ pub struct FerrumApp {
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
-/// commits), `settings`, `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
+/// commits), `settings`, `settings:SECTION` (appearance, git, tools...), `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
@@ -65,7 +65,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 let base = tab.and_then(|t| t.repo.resolve(&format!("HEAD~{n}")).ok());
                 out.push(Command::PlanRebase(base));
             }
-            "settings" => out.push(Command::ShowSettings),
+            "settings" if arg.is_empty() => out.push(Command::ShowSettings),
+            // settings:appearance|git|tools|profiles|...
+            "settings" => out.push(Command::DevStep(DevStep::SettingsSection(arg.into()))),
             "theme" => out.push(Command::DevStep(DevStep::Theme(match arg {
                 "light" => ThemeChoice::Light,
                 "dark" => ThemeChoice::Dark,
@@ -208,6 +210,7 @@ impl FerrumApp {
     }
 
     fn apply_look(&mut self, ctx: &egui::Context) {
+        crate::prefs::apply(ctx, &self.settings.prefs);
         let want = (
             self.settings.theme,
             self.settings.zoom.clamp(0.6, 2.0),
@@ -534,7 +537,24 @@ impl FerrumApp {
                 Err(e) => self.error(e.to_string()),
             },
             Command::Error(e) => self.error(e),
+            Command::External(launch) => {
+                if let Err(e) = crate::external::launch(&self.settings.external, &launch) {
+                    self.error(e);
+                }
+            }
+            Command::SetGlobalIdentity(id) => {
+                self.spawn_global(&t!("Set global identity"), ctx, move |_| {
+                    let git = ferrum_core::cli::Git::new(std::env::temp_dir());
+                    ferrum_core::config::set_global_identity(&git, &id)
+                        .map(|()| JobOutput::Done)
+                        .map_err(|e| e.to_string())
+                });
+            }
             Command::DevStep(step) => match step {
+                DevStep::SettingsSection(name) => {
+                    self.settings_window.open = true;
+                    self.settings_window.select(&name);
+                }
                 DevStep::Theme(theme) => self.settings.theme = theme,
                 DevStep::Search(q) => {
                     if let Some(t) = self.tab() {
@@ -653,6 +673,10 @@ impl FerrumApp {
                     }));
                     ui.close();
                 }
+                if let Some(tab) = self.tabs.get(self.active) {
+                    ui.separator();
+                    crate::ui::tools::repository_menu(ui, tab.path(), cmds);
+                }
                 if !self.settings.recent.is_empty() {
                     ui.separator();
                     ui.weak(t!("Recent"));
@@ -670,30 +694,36 @@ impl FerrumApp {
             ui.separator();
             let busy = tab.busy();
             let has_remote = !tab.remotes.is_empty();
+            use crate::prefs::ToolbarButton as Tb;
+            let show = |b| self.settings.prefs.shows(b);
             ui.add_enabled_ui(!busy, |ui| {
-                if ui
-                    .add_enabled(has_remote, egui::Button::new("🔄 Fetch"))
-                    .on_hover_text(t!("Fetch all remotes (Ctrl+Shift+F)"))
-                    .clicked()
+                if show(Tb::Fetch)
+                    && ui
+                        .add_enabled(has_remote, egui::Button::new("🔄 Fetch"))
+                        .on_hover_text(t!("Fetch all remotes (Ctrl+Shift+F)"))
+                        .clicked()
                 {
                     cmds.run(Op::Fetch { remote: None });
                 }
-                let pull = ui.add_enabled(
-                    has_remote && tab.head.is_some(),
-                    egui::Button::new("⬇ Pull"),
-                );
-                let mode = self.settings.pull.label();
-                let tip = t!("Pull — {} (Ctrl+Shift+D)\nRight-click for options", mode);
-                if pull.on_hover_text(tip).clicked() {
-                    cmds.run(Op::Pull(self.settings.pull.mode()));
-                }
-                if ui
-                    .add_enabled(
+                if show(Tb::Pull) {
+                    let pull = ui.add_enabled(
                         has_remote && tab.head.is_some(),
-                        egui::Button::new("⬆ Push"),
-                    )
-                    .on_hover_text(t!("Push (Ctrl+Shift+U)"))
-                    .clicked()
+                        egui::Button::new("⬇ Pull"),
+                    );
+                    let mode = self.settings.pull.label();
+                    let tip = t!("Pull — {} (Ctrl+Shift+D)\nRight-click for options", mode);
+                    if pull.on_hover_text(tip).clicked() {
+                        cmds.run(Op::Pull(self.settings.pull.mode()));
+                    }
+                }
+                if show(Tb::Push)
+                    && ui
+                        .add_enabled(
+                            has_remote && tab.head.is_some(),
+                            egui::Button::new("⬆ Push"),
+                        )
+                        .on_hover_text(t!("Push (Ctrl+Shift+U)"))
+                        .clicked()
                     && let Some(b) = &tab.head
                 {
                     cmds.push(Command::Dialog(Dialog::push(tab, b)));
@@ -725,22 +755,24 @@ impl FerrumApp {
                     }
                 });
                 ui.separator();
-                if ui
-                    .button("🌿 Branch")
-                    .on_hover_text(t!("New branch (Ctrl+B)"))
-                    .clicked()
+                if show(Tb::Branch)
+                    && ui
+                        .button("🌿 Branch")
+                        .on_hover_text(t!("New branch (Ctrl+B)"))
+                        .clicked()
                 {
                     let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
                     cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
                 }
-                if ui
-                    .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
-                    .on_hover_text(t!("Stash changes (Ctrl+Shift+S)"))
-                    .clicked()
+                if show(Tb::Stash)
+                    && ui
+                        .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
+                        .on_hover_text(t!("Stash changes (Ctrl+Shift+S)"))
+                        .clicked()
                 {
                     cmds.push(Command::Dialog(Dialog::stash()));
                 }
-                if let Some(s) = tab.stashes.first()
+                if let Some(s) = tab.stashes.first().filter(|_| show(Tb::Pop))
                     && ui
                         .button(t!("📤 Pop"))
                         .on_hover_text(t!("Apply and delete the latest stash: {}", s.message))
@@ -751,14 +783,17 @@ impl FerrumApp {
                         pop: true,
                     });
                 }
-                let undo = tab.undo.last().map(|u| u.label.clone());
-                let resp = ui.add_enabled(undo.is_some(), egui::Button::new(t!("↩ Undo")));
-                if let Some(label) = undo
-                    && resp.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
-                {
-                    cmds.push(Command::Undo);
+                if show(Tb::Undo) {
+                    let undo = tab.undo.last().map(|u| u.label.clone());
+                    let resp = ui.add_enabled(undo.is_some(), egui::Button::new(t!("↩ Undo")));
+                    if let Some(label) = undo
+                        && resp.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
+                    {
+                        cmds.push(Command::Undo);
+                    }
                 }
             });
+            crate::ui::tools::toolbar_buttons(ui, &self.settings.prefs, tab.path(), cmds);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .button("⚙")

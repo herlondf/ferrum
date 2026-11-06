@@ -10,7 +10,7 @@ use ferrum_core::{DiffSource, FileCommit, FileDiff, Oid, Repo, short};
 use crate::command::{Command, Commands};
 use crate::tab::{RepoTab, View};
 use crate::ui::{diff_view, image_diff};
-use crate::util::{format_time, is_image_path};
+use crate::util::{format_date, format_day, is_image_path};
 
 const HISTORY_ROW: f32 = 42.0;
 const BLAME_ROW: f32 = 18.0;
@@ -394,7 +394,7 @@ fn history_row(
     let mut meta = format!(
         "{} · {}",
         e.commit.author,
-        format_time(e.commit.time, e.commit.offset_minutes)
+        format_date(e.commit.time, e.commit.offset_minutes)
     );
     if e.path != current_path {
         meta.push_str(&format!(" · {}", e.path));
@@ -419,7 +419,7 @@ fn load_blame(repo: &Repo, path: &str) -> Result<BlameData, String> {
                 .find_commit_info(l.commit)
                 .map(|c| c.summary)
                 .unwrap_or_default();
-            (summary, format_time(l.time, l.offset_minutes))
+            (summary, format_date(l.time, l.offset_minutes))
         });
     }
     let odd = odd_blocks(lines.iter().map(|l| l.block_start));
@@ -431,10 +431,10 @@ fn load_blame(repo: &Repo, path: &str) -> Result<BlameData, String> {
             block_start: l.block_start,
             odd_block,
             gutter: l.block_start.then(|| {
-                let date = format_time(l.time, l.offset_minutes);
-                (l.author, date.get(..10).unwrap_or(&date).to_owned())
+                let date = format_day(l.time, l.offset_minutes);
+                (l.author, date)
             }),
-            text: l.text.replace('\t', "    "),
+            text: crate::util::expand_tabs(&l.text),
         })
         .collect();
     let longest = rows
@@ -475,7 +475,8 @@ fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
         return;
     }
 
-    let font = FontId::monospace(12.0);
+    let font = crate::util::code_font(12.0);
+    let row_h = crate::util::code_row_height(BLAME_ROW);
     let char_w = ui.fonts_mut(|f| f.glyph_width(&font, 'm'));
     let content_w = GUTTER_W + NUMBER_W + 16.0 + data.longest as f32 * char_w;
     let visuals = ui.visuals().clone();
@@ -492,11 +493,11 @@ fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
     egui::ScrollArea::both()
         .id_salt("blame-rows")
         .auto_shrink(false)
-        .show_rows(ui, BLAME_ROW, data.rows.len(), |ui, range| {
+        .show_rows(ui, row_h, data.rows.len(), |ui, range| {
             let width = ui.available_width().max(content_w);
             for i in range {
                 let row = &data.rows[i];
-                let (rect, _) = ui.allocate_exact_size(vec2(width, BLAME_ROW), Sense::hover());
+                let (rect, _) = ui.allocate_exact_size(vec2(width, row_h), Sense::hover());
                 // The gutter stays put while the code scrolls sideways.
                 let left = ui.clip_rect().left();
                 let gutter = Rect::from_x_y_ranges(left..=left + GUTTER_W, rect.y_range());
@@ -545,19 +546,24 @@ fn blame_view(ui: &mut egui::Ui, view: &mut FileView, cmds: &mut Commands) {
                             FontId::proportional(12.0),
                             visuals.text_color(),
                         );
-                    painter.text(
-                        pos2(x + HASH_W + AUTHOR_W, y),
-                        Align2::LEFT_CENTER,
-                        date,
-                        FontId::proportional(12.0),
-                        weak,
-                    );
+                    painter
+                        .with_clip_rect(Rect::from_x_y_ranges(
+                            x + HASH_W + AUTHOR_W..=gutter.right() - 4.0,
+                            rect.y_range(),
+                        ))
+                        .text(
+                            pos2(x + HASH_W + AUTHOR_W, y),
+                            Align2::LEFT_CENTER,
+                            date,
+                            FontId::proportional(12.0),
+                            weak,
+                        );
                 }
                 painter.text(
                     pos2(gutter.right() + NUMBER_W - 8.0, y),
                     Align2::RIGHT_CENTER,
                     (i + 1).to_string(),
-                    FontId::monospace(11.0),
+                    crate::util::code_font(11.0),
                     weak,
                 );
                 let code_left = gutter.right() + NUMBER_W;

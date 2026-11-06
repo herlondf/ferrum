@@ -15,6 +15,9 @@ const REPO_URL: &str = "https://github.com/herlondf/ferrum";
 enum Section {
     #[default]
     General,
+    Appearance,
+    Git,
+    Tools,
     Profiles,
     Accounts,
     Shortcuts,
@@ -22,8 +25,11 @@ enum Section {
 }
 
 impl Section {
-    const ALL: [Section; 5] = [
+    const ALL: [Section; 8] = [
         Section::General,
+        Section::Appearance,
+        Section::Git,
+        Section::Tools,
         Section::Profiles,
         Section::Accounts,
         Section::Shortcuts,
@@ -33,6 +39,9 @@ impl Section {
     fn label(self) -> String {
         match self {
             Section::General => t!("⚙ General"),
+            Section::Appearance => t!("🎨 Appearance"),
+            Section::Git => t!("🔧 Git"),
+            Section::Tools => t!("🛠 Tools"),
             Section::Profiles => t!("👤 Profiles"),
             Section::Accounts => t!("☁ Accounts"),
             Section::Shortcuts => t!("⌘ Shortcuts"),
@@ -50,6 +59,24 @@ pub struct SettingsWindow {
     /// Output of `git --version`, looked up the first time About is shown
     /// (`None` inside when git is not found).
     git_version: Option<Option<String>>,
+    prefs: crate::ui::preferences::State,
+}
+
+impl SettingsWindow {
+    /// Shows a section by its English name, e.g. "appearance" (for `FERRUM_START`).
+    pub fn select(&mut self, name: &str) {
+        let name = name.to_lowercase();
+        self.section = match name.as_str() {
+            "appearance" => Section::Appearance,
+            "git" => Section::Git,
+            "tools" => Section::Tools,
+            "profiles" => Section::Profiles,
+            "accounts" => Section::Accounts,
+            "shortcuts" => Section::Shortcuts,
+            "about" => Section::About,
+            _ => Section::General,
+        };
+    }
 }
 
 pub fn show(
@@ -92,6 +119,18 @@ pub fn show(
                         .auto_shrink([false, false])
                         .show(ui, |ui| match win.section {
                             Section::General => general(ui, settings),
+                            Section::Appearance => {
+                                heading(ui, &t!("Appearance"));
+                                crate::ui::preferences::appearance(ui, settings);
+                            }
+                            Section::Git => {
+                                heading(ui, "Git");
+                                crate::ui::preferences::git(ui, &mut win.prefs, settings, cmds);
+                            }
+                            Section::Tools => {
+                                heading(ui, &t!("External tools"));
+                                crate::ui::preferences::tools(ui, settings);
+                            }
                             Section::Profiles => profiles(ui, win, settings, cmds),
                             Section::Accounts => accounts(ui, settings, cmds),
                             Section::Shortcuts => shortcuts(ui),
@@ -412,16 +451,9 @@ fn shortcuts(ui: &mut egui::Ui) {
 
 fn about(ui: &mut egui::Ui, win: &mut SettingsWindow, cmds: &mut Commands) {
     heading(ui, &t!("About Ferrum"));
-    let git = win.git_version.get_or_insert_with(|| {
-        std::process::Command::new("git")
-            .arg("--version")
-            .stdin(std::process::Stdio::null())
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().trim_start_matches("git version ").to_owned())
-    });
+    let git = win
+        .git_version
+        .get_or_insert_with(ferrum_core::cli::version);
     let git = git.clone().unwrap_or_else(|| t!("not found on PATH"));
     ui.label(t!("A fast, cross-platform Git client written in Rust."));
     ui.add_space(6.0);

@@ -134,7 +134,7 @@ impl Dialog {
         Dialog::Merge {
             rev: rev.into(),
             label: label.into(),
-            mode: MergeMode::Default,
+            mode: crate::prefs::default_merge(),
         }
     }
 
@@ -359,6 +359,10 @@ fn body(
             ui.heading(t!("New branch"));
             ui.label(t!("Starting at {}", start_label));
             field(ui, &t!("Name"), name, "feature/my-change").request_focus();
+            // Spaces become the replacement chosen in Settings > Git.
+            if name.contains(' ') {
+                *name = settings.prefs.branch_name(name);
+            }
             ref_name_warning(ui, name);
             ui.checkbox(checkout, t!("Check out after creating"));
             let ok = valid_ref_name(name);

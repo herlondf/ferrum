@@ -12,7 +12,12 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
 sys-locale = "0.3.2"
+fontdb = "0.23.0"
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+zbus = "5.19.0"
 
 [dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 tempfile = "3.27.0"
+serde_json = "1.0.154"

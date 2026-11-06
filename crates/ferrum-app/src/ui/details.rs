@@ -6,7 +6,7 @@ use ferrum_core::{DiffSource, short};
 use crate::command::{Command, Commands, Op};
 use crate::tab::RepoTab;
 use crate::ui::{diff_view, image_diff};
-use crate::util::{change_label, format_time, is_image_path};
+use crate::util::{change_label, format_date, is_image_path};
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(view) = &tab.commit_view else {
@@ -75,14 +75,14 @@ fn info(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
             ui.label(format!("{} <{}>", c.author, c.email));
             ui.end_row();
             ui.weak(t!("Date"));
-            ui.label(format_time(c.time, c.offset_minutes));
+            ui.label(format_date(c.time, c.offset_minutes));
             ui.end_row();
             if d.committer != c.author || d.commit_time != c.time {
                 ui.weak(t!("Committer"));
                 ui.label(format!(
                     "{} — {}",
                     d.committer,
-                    format_time(d.commit_time, d.commit_offset_minutes)
+                    format_date(d.commit_time, d.commit_offset_minutes)
                 ));
                 ui.end_row();
             }

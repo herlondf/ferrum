@@ -277,6 +277,7 @@ fn top_bar(
                 {
                     resolve_with(cmds, path, Side::Ours);
                 }
+                crate::ui::tools::merge_tool_button(ui, tab.path(), path, cmds);
             });
         });
     });

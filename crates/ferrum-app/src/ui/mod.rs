@@ -8,6 +8,8 @@ pub mod forge;
 pub mod history;
 pub mod image_diff;
 pub mod palette;
+pub mod preferences;
 pub mod rebase;
 pub mod settings;
 pub mod sidebar;
+pub mod tools;

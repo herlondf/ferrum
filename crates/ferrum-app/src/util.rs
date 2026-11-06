@@ -3,8 +3,80 @@
 use eframe::egui::{self, Color32};
 use ferrum_core::{ChangeKind, RepoState};
 
+use crate::prefs::DateFormat;
+
 /// Formats Unix seconds as `YYYY-MM-DD HH:MM` in the given time zone, like `git log`.
 pub fn format_time(secs: i64, offset_minutes: i32) -> String {
+    let (y, m, d, h, min) = civil(secs, offset_minutes);
+    format!("{y:04}-{m:02}-{d:02} {h:02}:{min:02}")
+}
+
+/// Formats a date in the format chosen in Settings > Appearance.
+/// Use this for every date shown to the user.
+pub fn format_date(secs: i64, offset_minutes: i32) -> String {
+    match crate::prefs::date_format() {
+        DateFormat::Absolute => format_time(secs, offset_minutes),
+        DateFormat::Relative => relative_time(secs, now_secs()),
+        DateFormat::Long => long_date(secs, offset_minutes, true),
+    }
+}
+
+/// Like `format_date`, without the time of day (for narrow columns).
+pub fn format_day(secs: i64, offset_minutes: i32) -> String {
+    match crate::prefs::date_format() {
+        DateFormat::Absolute => format_time(secs, offset_minutes)[..10].to_owned(),
+        DateFormat::Relative => relative_time(secs, now_secs()),
+        DateFormat::Long => long_date(secs, offset_minutes, false),
+    }
+}
+
+/// `5 March 2024, 14:30`, with the month name translated.
+pub fn long_date(secs: i64, offset_minutes: i32, with_time: bool) -> String {
+    let (y, m, d, h, min) = civil(secs, offset_minutes);
+    let month = match m {
+        1 => t!("January"),
+        2 => t!("February"),
+        3 => t!("March"),
+        4 => t!("April"),
+        5 => t!("May"),
+        6 => t!("June"),
+        7 => t!("July"),
+        8 => t!("August"),
+        9 => t!("September"),
+        10 => t!("October"),
+        11 => t!("November"),
+        _ => t!("December"),
+    };
+    if with_time {
+        t!("{} {} {}, {}", d, month, y, format!("{h:02}:{min:02}"))
+    } else {
+        t!("{} {} {}", d, month, y)
+    }
+}
+
+/// "5 minutes ago", "yesterday", or a date for anything older than a month.
+pub fn relative_time(secs: i64, now: i64) -> String {
+    let ago = (now - secs).max(0);
+    match ago {
+        0..60 => t!("just now"),
+        60..120 => t!("1 minute ago"),
+        120..3600 => t!("{} minutes ago", ago / 60),
+        3600..7200 => t!("1 hour ago"),
+        7200..86_400 => t!("{} hours ago", ago / 3600),
+        86_400..172_800 => t!("yesterday"),
+        172_800..2_592_000 => t!("{} days ago", ago / 86_400),
+        _ => format_time(secs, 0)[..10].to_owned(),
+    }
+}
+
+pub fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+/// Year, month, day, hour and minute of Unix seconds in a time zone.
+fn civil(secs: i64, offset_minutes: i32) -> (i64, i64, i64, i64, i64) {
     let secs = secs + i64::from(offset_minutes) * 60;
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
@@ -18,11 +90,27 @@ pub fn format_time(secs: i64, offset_minutes: i32) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
-    format!(
-        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
-        rem / 3600,
-        rem % 3600 / 60
-    )
+    (y, m, d, rem / 3600, rem % 3600 / 60)
+}
+
+/// Monospace font for code at `size` points, scaled by the code font size
+/// chosen in Settings > Appearance (the family is set there too).
+pub fn code_font(size: f32) -> egui::FontId {
+    egui::FontId::monospace(size * crate::prefs::code_scale())
+}
+
+/// Height of a code row designed for the default size, grown for larger fonts.
+pub fn code_row_height(base: f32) -> f32 {
+    base * crate::prefs::code_scale().max(1.0)
+}
+
+/// Replaces tabs with spaces, as many as the tab width in Settings.
+pub fn expand_tabs(text: &str) -> String {
+    if text.contains('\t') {
+        text.replace('\t', &" ".repeat(crate::prefs::tab_width()))
+    } else {
+        text.to_owned()
+    }
 }
 
 /// What the repository is in the middle of, e.g. "Merge in progress".
@@ -171,6 +259,20 @@ mod tests {
         assert_eq!(format_time(0, 0), "1970-01-01 00:00");
         assert_eq!(format_time(1_700_000_000, 0), "2023-11-14 22:13");
         assert_eq!(format_time(1_700_000_000, -180), "2023-11-14 19:13");
+        assert_eq!(long_date(1_700_000_000, 0, true), "14 November 2023, 22:13");
+        assert_eq!(long_date(0, 0, false), "1 January 1970");
+    }
+
+    #[test]
+    fn formats_relative_time() {
+        let now = 1_700_000_000;
+        assert_eq!(relative_time(now - 5, now), "just now");
+        assert_eq!(relative_time(now - 60, now), "1 minute ago");
+        assert_eq!(relative_time(now - 3 * 3600, now), "3 hours ago");
+        assert_eq!(relative_time(now - 90_000, now), "yesterday");
+        assert_eq!(relative_time(now - 5 * 86_400, now), "5 days ago");
+        assert_eq!(relative_time(now - 60 * 86_400, now), "2023-09-15");
+        assert_eq!(relative_time(now + 30, now), "just now");
     }
 
     #[test]
