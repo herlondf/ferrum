@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ferrum
+GenericName=Git Client
+Comment=A fast, cross-platform Git client
+Exec=ferrum %F
+Icon=ferrum
+Terminal=false
+Categories=Development;RevisionControl;
+Keywords=git;version control;
+StartupWMClass=ferrum

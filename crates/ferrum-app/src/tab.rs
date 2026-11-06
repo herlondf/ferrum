@@ -257,7 +257,12 @@ impl RepoTab {
             self.error(e);
         }
         if std::env::var_os("FERRUM_TIMING").is_some() {
-            eprintln!("refresh_all {}: {:?} ({} commits)", self.name, started.elapsed(), self.commits.len());
+            eprintln!(
+                "refresh_all {}: {:?} ({} commits)",
+                self.name,
+                started.elapsed(),
+                self.commits.len()
+            );
         }
     }
 
