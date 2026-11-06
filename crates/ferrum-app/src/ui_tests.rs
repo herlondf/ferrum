@@ -32,6 +32,7 @@ fn repo() -> tempfile::TempDir {
     git(p, &["config", "user.name", "Test"]);
     git(p, &["config", "user.email", "test@example.com"]);
     git(p, &["config", "commit.gpgsign", "false"]);
+    git(p, &["config", "core.autocrlf", "false"]);
     std::fs::write(p.join("a.txt"), "one\n").unwrap();
     git(p, &["add", "-A"]);
     git(p, &["commit", "-q", "-m", "first"]);
@@ -231,6 +232,7 @@ fn conflicted_repo() -> tempfile::TempDir {
     git(p, &["config", "user.name", "Test"]);
     git(p, &["config", "user.email", "test@example.com"]);
     git(p, &["config", "commit.gpgsign", "false"]);
+    git(p, &["config", "core.autocrlf", "false"]);
     std::fs::write(p.join("a.txt"), "top\nbase\nbottom\n").unwrap();
     git(p, &["add", "-A"]);
     git(p, &["commit", "-q", "-m", "base"]);

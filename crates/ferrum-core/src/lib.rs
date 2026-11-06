@@ -57,6 +57,7 @@ pub(crate) mod testutil {
             git.run(&["config", "user.email", "test@example.com"])
                 .unwrap();
             git.run(&["config", "commit.gpgsign", "false"]).unwrap();
+            git.run(&["config", "core.autocrlf", "false"]).unwrap();
             Self { dir, git }
         }
 
