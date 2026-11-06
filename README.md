@@ -52,10 +52,27 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
   per section. Open folders, pins and sort order are kept per repository.
 - **Fetch, pull and push** with live progress, force-with-lease and upstream setup.
-- **Interactive rebase** planner: reorder by drag and drop, reword, squash,
-  fixup, edit, drop.
-- **Three-way conflict resolver** with per-conflict choices and an editable result.
-- **Cherry-pick, revert, reset (soft/mixed/hard), move branch** from the commit menu.
+- **Merge, rebase, cherry-pick and revert dialogs** that check for conflicts
+  before running ("Will conflict in: …", via `git merge-tree`, git 2.38+), with
+  `--no-commit`, `--allow-unrelated-histories`, `--autostash`, `--update-refs`,
+  rebase onto any branch, remote branch or tag, cherry-pick `-x`, and the parent
+  of a merge commit. Cherry-pick, squash or drop several commits selected with
+  Ctrl/Shift+click in the history.
+- **Interactive rebase** planner: reorder by drag and drop or Alt+Up/Down,
+  reword, squash, fixup, edit, drop (keys P R E S F D on the selected rows),
+  avatars, an optional backup branch and moving dependent branches along; asks
+  before throwing away a changed plan. Quick actions in the commit menu (reword,
+  edit, squash or fixup into parent, drop) run without the planner.
+- **Three-way conflict resolver** with per-conflict choices and an editable
+  result, sides named after the branches, markers next to the scroll bar,
+  resolving several files with one side, images, LFS files and submodules (pick
+  a side), and a diff of files resolved by hand or in a merge tool. A banner
+  shows what is being merged or rebased (with links to the commits and rebase
+  progress), Continue / Skip / Abort, and undoes a resolution.
+- **Local changes on checkout**: when a checkout would overwrite them (or
+  always, in Settings), choose to stash and reapply, discard or keep them.
+- **Cherry-pick, revert, reset (soft/mixed/hard), move branch** from the commit
+  menu; double-click a branch or tag label in the graph to check it out.
 - **Undo** for commits, checkouts, branch/tag changes, merges, rebases and more.
 - **File history and blame** (follows renames).
 - **GitHub and GitLab**: list, check out and create pull/merge requests
@@ -116,6 +133,9 @@ Git must be installed and on the `PATH` (or chosen in Settings > Git).
 | Settings | Ctrl+, |
 | Move between sidebar, commit list and details | Tab / Shift+Tab |
 | Sidebar: move, open/close, check out, select | Arrows, Home/End, Enter, Space |
+| Select several commits | Ctrl+click / Shift+click |
+| Interactive rebase: pick, reword, edit, squash, fixup, drop | P, R, E, S, F, D |
+| Interactive rebase: move the selected commits | Alt+Up / Alt+Down |
 
 On macOS, Cmd replaces Ctrl.
 
@@ -155,7 +175,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   and quits (`FERRUM_SCREENSHOT_FRAMES=N` waits longer).
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
   the steps are listed in `startup_commands` in `app.rs` (diff options:
-  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`).
+  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`; merge,
+  rebase and cherry-pick dialogs: `flow:merge=REV`, `flow:rebase=REV`,
+  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
