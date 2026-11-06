@@ -503,7 +503,11 @@ fn decode_to_texture(ctx: &egui::Context, key: Key, path: &str, bytes: &[u8]) ->
 /// Decodes an image, shrinking it to fit `max_side` for the GPU. Returns the
 /// image and its original dimensions. `path` tells formats without a
 /// signature (TGA, SVG) apart.
-fn decode(bytes: &[u8], max_side: u32, path: &str) -> Result<(ColorImage, u32, u32), String> {
+pub(crate) fn decode(
+    bytes: &[u8],
+    max_side: u32,
+    path: &str,
+) -> Result<(ColorImage, u32, u32), String> {
     let lower = path.to_ascii_lowercase();
     if lower.ends_with(".svg") || lower.ends_with(".svgz") {
         return render_svg(bytes, max_side);

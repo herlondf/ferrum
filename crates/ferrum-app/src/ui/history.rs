@@ -412,6 +412,9 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
                     toggle = Some(id);
                 } else if let Some(url) = on_link {
                     open_url = Some(url);
+                } else if ui.input(|i| i.modifiers.command) {
+                    // Ctrl+click: pick two commits to compare them.
+                    crate::ui::compare::pick_commit(tab, id);
                 } else {
                     tab.history.selected = Some(id);
                     tab.load_commit(id, false);
@@ -501,7 +504,8 @@ fn paint_row(
     let visuals = ui.visuals();
     let ext = &tab.history.ext;
     let commit = &tab.commits[i];
-    let selected = tab.history.selected == Some(commit.id);
+    let selected =
+        tab.history.selected == Some(commit.id) || tab.details.picked.contains(&commit.id);
     let is_head = tab.head_oid == Some(commit.id);
     let row = &tab.graph.rows[i];
     let unreachable = ext.unreachable.contains(&commit.id);
@@ -1291,6 +1295,17 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             cmds.push(Command::OpenUrl(l.url.clone()));
             ui.close();
         }
+    }
+    ui.separator();
+    if ui.button(t!("Compare with working copy")).clicked() {
+        cmds.push(crate::ui::details::compare_with_workdir(id, None));
+        ui.close();
+    }
+    if ui.button(t!("Open in new window")).clicked() {
+        cmds.push(cmd(move |tab, _| {
+            crate::ui::details::open_window(tab, id, &Default::default())
+        }));
+        ui.close();
     }
     ui.separator();
     if ui.button(t!("Copy commit hash")).clicked() {

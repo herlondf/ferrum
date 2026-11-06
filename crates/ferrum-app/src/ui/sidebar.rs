@@ -450,10 +450,26 @@ fn selection_bar(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: 
         {
             cmds.push(Command::Dialog(delete_many(&names)));
         }
+        if let [a, b] = names_of(st).as_slice() {
+            let (a, b) = (a.clone(), b.clone());
+            if ui
+                .small_button(t!("Compare"))
+                .on_hover_text(t!("Show the changes between {} and {}", a, b))
+                .clicked()
+            {
+                cmds.push(history_options::cmd(move |t, _| {
+                    crate::ui::compare::open_refs(t, &a, &b)
+                }));
+            }
+        }
         if ui.small_button(t!("Clear")).clicked() {
             st.selection.clear();
         }
     });
+}
+
+fn names_of(st: &SidebarState) -> Vec<String> {
+    st.selection.iter().cloned().collect()
 }
 
 fn delete_many(names: &[String]) -> Dialog {
@@ -1294,6 +1310,11 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
                             stash: s.clone(),
                             pop: true,
                         });
+                        ui.close();
+                    }
+                    if ui.button(t!("Compare with working copy")).clicked() {
+                        let cmd = crate::ui::details::compare_with_workdir(s.id, Some(s.refname()));
+                        cmds.push(cmd);
                         ui.close();
                     }
                     if ui.button(t!("Drop…")).clicked() {

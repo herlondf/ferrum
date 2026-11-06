@@ -112,6 +112,9 @@ pub struct Settings {
     pub ai: crate::commit_prefs::AiPrefs,
     #[serde(default)]
     pub diff: crate::ui::diff_prefs::DiffPrefs,
+    /// Commit details: active tab, file list mode, collapsed pane.
+    #[serde(default)]
+    pub details: crate::ui::details_model::DetailsSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -169,6 +172,7 @@ impl Default for Settings {
             commit: Default::default(),
             ai: Default::default(),
             diff: Default::default(),
+            details: Default::default(),
         }
     }
 }

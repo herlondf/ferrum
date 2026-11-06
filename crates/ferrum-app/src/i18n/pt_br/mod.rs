@@ -4,6 +4,7 @@
 
 mod activity;
 mod common;
+mod details;
 mod diff;
 mod editing;
 mod extras;
@@ -16,6 +17,7 @@ mod sidebar;
 pub static TABLES: &[&[(&str, &str)]] = &[
     activity::T,
     common::T,
+    details::T,
     diff::T,
     main::T,
     editing::T,

@@ -129,6 +129,8 @@ pub struct RepoTab {
     pub sidebar: crate::ui::sidebar_model::SidebarState,
     pub pane: crate::ui::focus::PaneFocus,
     pub diff_options: crate::ui::diff_prefs::TabDiffOptions,
+    /// Details tabs, file tree, compare view and commit windows.
+    pub details: crate::ui::details_model::DetailsState,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -189,6 +191,7 @@ impl RepoTab {
             sidebar: Default::default(),
             pane: Default::default(),
             diff_options: Default::default(),
+            details: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,
@@ -315,6 +318,8 @@ impl RepoTab {
 
     /// Loads a commit into the details panel.
     pub fn load_commit(&mut self, id: Oid, is_stash: bool) {
+        self.details.compare = None;
+        self.details.picked.clear();
         // Only the file list here: diffs load per file, so huge commits stay fast.
         let result = self
             .repo

@@ -38,7 +38,6 @@ pub enum Launch {
     /// Show a file or folder in the file manager (selecting the file where possible).
     Reveal { path: PathBuf },
     /// Compare two files in the diff tool. `cwd` is where the tool starts (the repository).
-    #[allow(dead_code)] // for the diff views (external diff)
     Diff {
         left: PathBuf,
         right: PathBuf,
@@ -825,7 +824,6 @@ fn scratch_dir(kind: &str) -> Result<PathBuf, String> {
 
 /// Writes `data` to a new temporary file named `name` (e.g. "main.rs" or
 /// "main.abc1234.rs"), for handing a version of a file to a diff tool.
-#[allow(dead_code)] // for the diff views (external diff of a commit)
 pub fn temp_file(name: &str, data: &[u8]) -> Result<PathBuf, String> {
     let name = Path::new(name)
         .file_name()

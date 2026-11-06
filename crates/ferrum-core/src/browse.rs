@@ -462,7 +462,10 @@ mod tests {
     #[test]
     fn finds_commit_ids_in_text() {
         let text = "Reverts 1a2b3c4d, see abcdef0 and deadbeef; not g1a2b3c4 or 12345.";
-        let found: Vec<&str> = find_commit_ids(text).into_iter().map(|r| &text[r]).collect();
+        let found: Vec<&str> = find_commit_ids(text)
+            .into_iter()
+            .map(|r| &text[r])
+            .collect();
         assert_eq!(found, ["1a2b3c4d", "abcdef0"]);
     }
 }
