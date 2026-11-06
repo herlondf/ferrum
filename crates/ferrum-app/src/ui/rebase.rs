@@ -50,6 +50,18 @@ impl Kind {
         }
     }
 
+    /// Keyboard shortcut (the first letter).
+    fn key(self) -> egui::Key {
+        match self {
+            Kind::Pick => egui::Key::P,
+            Kind::Reword => egui::Key::R,
+            Kind::Edit => egui::Key::E,
+            Kind::Squash => egui::Key::S,
+            Kind::Fixup => egui::Key::F,
+            Kind::Drop => egui::Key::D,
+        }
+    }
+
     /// Melds into the previous commit.
     fn attached(self) -> bool {
         matches!(self, Kind::Squash | Kind::Fixup)
@@ -75,6 +87,20 @@ pub struct RebasePlan {
     pushed: Option<(usize, String)>,
     /// Merge commits in the range, which the rebase leaves out.
     merges: usize,
+    /// Selected rows (by commit), for keyboard actions and moving.
+    selected: Vec<Oid>,
+    /// Where a Shift+click range starts.
+    anchor: Option<Oid>,
+    /// Create a backup branch before starting.
+    backup: bool,
+    /// Move the branches in `dependents` along.
+    update_refs: bool,
+    /// Other local branches pointing at commits of the plan.
+    dependents: Vec<(Oid, String)>,
+    /// Closing was asked while the plan has changes.
+    confirm_close: bool,
+    /// Show avatars, and download them.
+    pub avatars: (bool, bool),
 }
 
 /// Builds a plan for the commits after `base` (`None` = from the root).
@@ -125,6 +151,24 @@ pub fn plan(tab: &RepoTab, base: Option<Oid>) -> Result<RebasePlan, String> {
         },
         None => t!("the root commit"),
     };
+    // Branches checked out in other worktrees cannot be moved.
+    let elsewhere: Vec<&str> = tab
+        .worktrees
+        .iter()
+        .filter_map(|w| w.branch.as_deref())
+        .collect();
+    let dependents = tab
+        .branches
+        .iter()
+        .filter(|b| b.kind == BranchKind::Local && !b.is_head)
+        .filter(|b| !elsewhere.contains(&b.name.as_str()))
+        .filter_map(|b| {
+            let t = b.target?;
+            rows.iter()
+                .any(|r| r.commit.id == t)
+                .then(|| (t, b.name.clone()))
+        })
+        .collect();
     Ok(RebasePlan {
         base,
         base_label,
@@ -133,7 +177,109 @@ pub fn plan(tab: &RepoTab, base: Option<Oid>) -> Result<RebasePlan, String> {
         rows,
         pushed,
         merges,
+        selected: Vec::new(),
+        anchor: None,
+        backup: false,
+        update_refs: false,
+        dependents,
+        confirm_close: false,
+        avatars: (true, false),
     })
+}
+
+/// Sets the action of the selected rows. A message is loaded for `reword`.
+fn set_kind(plan: &mut RebasePlan, kind: Kind, repo: &ferrum_core::Repo) {
+    for row in plan
+        .rows
+        .iter_mut()
+        .filter(|r| plan.selected.contains(&r.commit.id))
+    {
+        row.kind = kind;
+        if kind == Kind::Reword && row.message.is_none() {
+            row.message = Some(load_message(repo, &row.commit));
+        }
+    }
+}
+
+fn load_message(repo: &ferrum_core::Repo, c: &CommitInfo) -> String {
+    repo.commit_details(c.id)
+        .map(|d| d.message.trim_end().to_owned())
+        .unwrap_or_else(|_| c.summary.clone())
+}
+
+/// Moves the selected rows one place up (or down), keeping their order.
+fn move_selected<T>(rows: &mut [T], selected: impl Fn(&T) -> bool, up: bool) {
+    let picked: Vec<usize> = (0..rows.len()).filter(|&i| selected(&rows[i])).collect();
+    let blocked = if up {
+        picked.first() == Some(&0)
+    } else {
+        picked.last() == Some(&(rows.len().wrapping_sub(1)))
+    };
+    if picked.is_empty() || blocked {
+        return;
+    }
+    if up {
+        for i in picked {
+            rows.swap(i, i - 1);
+        }
+    } else {
+        for i in picked.into_iter().rev() {
+            rows.swap(i, i + 1);
+        }
+    }
+}
+
+/// Click, Ctrl+click (toggle) and Shift+click (range) on a row.
+fn select(plan: &mut RebasePlan, id: Oid, mods: egui::Modifiers) {
+    if mods.shift
+        && let Some(anchor) = plan.anchor
+    {
+        let pos = |x: Oid| plan.rows.iter().position(|r| r.commit.id == x);
+        if let (Some(a), Some(b)) = (pos(anchor), pos(id)) {
+            let (lo, hi) = (a.min(b), a.max(b));
+            plan.selected = plan.rows[lo..=hi].iter().map(|r| r.commit.id).collect();
+            return;
+        }
+    }
+    if mods.command {
+        match plan.selected.iter().position(|x| *x == id) {
+            Some(p) => {
+                plan.selected.remove(p);
+            }
+            None => plan.selected.push(id),
+        }
+    } else {
+        plan.selected = vec![id];
+    }
+    plan.anchor = Some(id);
+}
+
+/// Keyboard shortcuts: P R E S F D set the action of the selected commits,
+/// Alt+Up / Alt+Down (or Ctrl) move them, Esc closes. Not while typing.
+fn keys(ctx: &egui::Context, plan: &mut RebasePlan, repo: &ferrum_core::Repo) -> bool {
+    if ctx.egui_wants_keyboard_input() {
+        return false;
+    }
+    let mut close = false;
+    ctx.input_mut(|i| {
+        if !plan.selected.is_empty() {
+            for k in KINDS {
+                if i.consume_key(egui::Modifiers::NONE, k.key()) {
+                    set_kind(plan, k, repo);
+                }
+            }
+            for m in [egui::Modifiers::ALT, egui::Modifiers::COMMAND] {
+                for (key, up) in [(egui::Key::ArrowUp, true), (egui::Key::ArrowDown, false)] {
+                    if i.consume_key(m, key) {
+                        let sel = plan.selected.clone();
+                        move_selected(&mut plan.rows, |r| sel.contains(&r.commit.id), up);
+                    }
+                }
+            }
+        }
+        close = i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
+    });
+    close
 }
 
 fn steps(rows: &[Row]) -> Vec<Step> {
@@ -242,6 +388,8 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
     };
     let mut open = true;
     let mut close = false;
+    // Esc (or the window's ✕) asks first when the plan has changes.
+    let mut ask_close = keys(ctx, plan, repo);
     egui::Window::new(t!("Interactive rebase"))
         .open(&mut open)
         .collapsible(false)
@@ -262,6 +410,7 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
                 .strong(),
             );
             ui.weak(t!("Commits are applied from top to bottom (oldest first). Drag ☰ or use ⬆ ⬇ to reorder."));
+            ui.weak(t!("Click to select (Ctrl/Shift for several), then press P R E S F D to pick, reword, edit, squash, fix up or drop, and Alt+⬆ ⬇ to move."));
             if let Some((n, upstream)) = &plan.pushed {
                 ui.colored_label(
                     ui.visuals().warn_fg_color,
@@ -302,40 +451,96 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
                 Ok(()) => {}
             }
             ui.weak(t!("Local changes are stashed automatically and restored afterwards."));
+            ui.checkbox(&mut plan.backup, t!("Back up the current state in a branch first"))
+                .on_hover_text(t!("Creates a backup/… branch at the current commit, to get back to it later"));
+            if !plan.dependents.is_empty() {
+                let names: Vec<&str> = plan.dependents.iter().map(|(_, n)| n.as_str()).collect();
+                ui.checkbox(&mut plan.update_refs, t!("Update dependent branches: {}", names.join(", ")))
+                    .on_hover_text(t!("Move other branches that point at the rebased commits along with them"));
+            }
             ui.add_space(4.0);
+            if plan.confirm_close {
+                ui.horizontal(|ui| {
+                    ui.colored_label(ui.visuals().warn_fg_color, t!("Discard the changes to this plan?"));
+                    if ui.button(t!("Discard")).clicked() {
+                        close = true;
+                    }
+                    if ui.button(t!("Keep editing")).clicked() {
+                        plan.confirm_close = false;
+                    }
+                });
+                return;
+            }
             ui.horizontal(|ui| {
                 let can_start = result.is_ok() && !same && !busy;
                 if ui
                     .add_enabled(can_start, egui::Button::new(t!("Start rebase")))
                     .clicked()
                 {
-                    cmds.run(Op::InteractiveRebase {
-                        base: plan.base,
-                        steps: steps(&plan.rows),
-                    });
+                    cmds.run(start_op(plan));
                     close = true;
                 }
                 if ui.button(t!("Cancel")).clicked() {
-                    close = true;
+                    ask_close = true;
                 }
             });
         });
-    if !open || close {
+    if !open {
+        ask_close = true;
+    }
+    if ask_close {
+        if unchanged(&plan.rows, &plan.original) || plan.confirm_close {
+            close = true;
+        } else {
+            plan.confirm_close = true;
+        }
+    }
+    if close {
         tab.rebase = None;
     }
+}
+
+/// The operation that runs the plan, with its options.
+fn start_op(plan: &RebasePlan) -> Op {
+    let opts = rebase::Options {
+        update_refs: if plan.update_refs {
+            plan.dependents.clone()
+        } else {
+            Vec::new()
+        },
+        backup: plan.backup.then(|| rebase::backup_name(&plan.branch)),
+    };
+    let op = Op::InteractiveRebase {
+        base: plan.base,
+        steps: steps(&plan.rows),
+    };
+    if opts == rebase::Options::default() {
+        return op;
+    }
+    Op::Flow(crate::flow::FlowOp::Plan {
+        label: op.label(),
+        base: plan.base,
+        steps: steps(&plan.rows),
+        opts,
+    })
 }
 
 fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo) {
     let len = plan.rows.len();
     let dragged = egui::DragAndDrop::payload::<usize>(ui.ctx()).map(|p| *p);
     let mut moved = None;
+    let mut clicked = None;
     let weak = ui.visuals().weak_text_color();
+    let (show_avatars, network) = plan.avatars;
     for i in 0..len {
+        let is_selected = plan.selected.contains(&plan.rows[i].commit.id);
         let row = &mut plan.rows[i];
         let attached = row.kind.attached();
         let dropped = row.kind == Kind::Drop;
         let fill = if dragged == Some(i) {
             ui.visuals().selection.bg_fill.gamma_multiply(0.4)
+        } else if is_selected {
+            ui.visuals().selection.bg_fill.gamma_multiply(0.7)
         } else if dropped {
             egui::Color32::TRANSPARENT
         } else {
@@ -396,10 +601,19 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
                         .response
                         .on_hover_text(row.kind.hint());
                     if row.kind == Kind::Reword && before != Kind::Reword && row.message.is_none() {
-                        row.message = Some(
-                            repo.commit_details(row.commit.id)
-                                .map(|d| d.message.trim_end().to_owned())
-                                .unwrap_or_else(|_| row.commit.summary.clone()),
+                        row.message = Some(load_message(repo, &row.commit));
+                    }
+                    if show_avatars {
+                        let (r, _) =
+                            ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                        let painter = ui.painter().clone();
+                        crate::ui::avatars::paint(
+                            ui,
+                            &painter,
+                            r,
+                            &row.commit.author,
+                            &row.commit.email,
+                            network,
                         );
                     }
                     let mut hash = RichText::new(row.commit.short_id()).monospace().color(weak);
@@ -408,10 +622,22 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
                         hash = hash.strikethrough();
                         text = text.strikethrough().color(weak);
                     }
-                    ui.label(hash);
+                    if ui
+                        .add(egui::Label::new(hash).sense(egui::Sense::click()))
+                        .clicked()
+                    {
+                        clicked = Some(row.commit.id);
+                    }
                     let summary = ui
-                        .add(egui::Label::new(text).truncate().sense(egui::Sense::drag()))
+                        .add(
+                            egui::Label::new(text)
+                                .truncate()
+                                .sense(egui::Sense::click_and_drag()),
+                        )
                         .on_hover_text(format!("{}\n{}", row.commit.author, row.commit.summary));
+                    if summary.clicked() {
+                        clicked = Some(row.commit.id);
+                    }
                     summary.dnd_set_drag_payload(i);
                 });
                 if row.kind == Kind::Reword
@@ -452,6 +678,10 @@ fn rows_view(ui: &mut egui::Ui, plan: &mut RebasePlan, repo: &ferrum_core::Repo)
     }
     if let Some((from, to)) = moved {
         move_row(&mut plan.rows, from, to);
+    }
+    if let Some(id) = clicked {
+        let mods = ui.input(|i| i.modifiers);
+        select(plan, id, mods);
     }
 }
 

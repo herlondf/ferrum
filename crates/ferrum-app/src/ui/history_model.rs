@@ -143,6 +143,9 @@ pub struct HistoryExt {
     pub goto: Option<String>,
     pub issue_window: bool,
     pub stats: crate::ui::stats::StatsState,
+    /// Commits picked with Ctrl/Shift+click, for actions on several commits
+    /// (cherry-pick, squash, drop). Empty when only `selected` is used.
+    pub selected_many: Vec<Oid>,
 }
 
 impl HistoryExt {

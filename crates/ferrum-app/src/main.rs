@@ -10,6 +10,9 @@ mod desktop_notify;
 #[cfg(test)]
 mod diff_tests;
 mod external;
+mod flow;
+#[cfg(test)]
+mod flow_tests;
 #[cfg(test)]
 mod history_tests;
 mod icon;

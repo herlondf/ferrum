@@ -36,6 +36,11 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/ai_message.rs"),
     include_str!("commit_prefs.rs"),
     include_str!("ui/conflicts.rs"),
+    include_str!("flow.rs"),
+    include_str!("ui/flow_dialogs.rs"),
+    include_str!("ui/banner.rs"),
+    include_str!("ui/history_flow.rs"),
+    include_str!("i18n/pt_br/flow.rs"),
     include_str!("ui/details.rs"),
     include_str!("ui/dialogs.rs"),
     include_str!("ui/diff_extra.rs"),
@@ -434,9 +439,10 @@ fn resolve_conflict_and_continue_merge() {
     frames(&mut h);
     h.get_by_label("Resolve conflicts").click();
     frames(&mut h);
-    h.get_all_by_label("Theirs")
-        .next()
-        .expect("Theirs button")
+    // Sides are named after the branches: "other" is theirs.
+    h.get_all_by_role_and_label(Role::Button, "other")
+        .last()
+        .expect("theirs button")
         .click();
     frames(&mut h);
     h.get_by_label("Mark as resolved").click();

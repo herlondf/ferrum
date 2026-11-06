@@ -695,14 +695,7 @@ fn local_branch_menu(
                 ui.close();
             }
             if ui.button(t!("Rebase {} onto {}…", cur, name)).clicked() {
-                #[rustfmt::skip]
-                let text = t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, name, cur);
-                cmds.push(Command::Dialog(Dialog::confirm(
-                    &t!("Rebase"),
-                    &text,
-                    Op::Rebase { onto: name.clone() },
-                    false,
-                )));
+                cmds.push(Command::Dialog(crate::ui::flow_dialogs::rebase(tab, &name)));
                 ui.close();
             }
         }
@@ -1108,16 +1101,7 @@ fn remote_branch_row(
                     ui.close();
                 }
                 if ui.button(t!("Rebase {} onto {}…", cur, b.name)).clicked() {
-                    #[rustfmt::skip]
-                    let text = t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, b.name, cur);
-                    cmds.push(Command::Dialog(Dialog::confirm(
-                        &t!("Rebase"),
-                        &text,
-                        Op::Rebase {
-                            onto: b.name.clone(),
-                        },
-                        false,
-                    )));
+                    cmds.push(Command::Dialog(crate::ui::flow_dialogs::rebase(tab, &b.name)));
                     ui.close();
                 }
             }

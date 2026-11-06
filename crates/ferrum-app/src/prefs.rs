@@ -127,6 +127,8 @@ pub struct Prefs {
     /// Typed spaces in new branch names become this ("" keeps them, which git refuses).
     pub branch_space: String,
     pub merge: MergeChoice,
+    /// Ask what to do with local changes before every checkout, not only when they would be overwritten.
+    pub ask_local_changes: bool,
     /// Git executable; empty = `git` on the PATH.
     pub git_path: String,
     pub verbose_git: bool,
@@ -143,6 +145,7 @@ impl Default for Prefs {
             hidden_toolbar: Vec::new(),
             branch_space: "-".into(),
             merge: MergeChoice::Default,
+            ask_local_changes: false,
             git_path: String::new(),
             verbose_git: false,
         }

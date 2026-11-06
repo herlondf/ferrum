@@ -1,15 +1,19 @@
 //! Three-way conflict resolver: pick a side (or both) for each conflict, then
-//! fine-tune the result by hand before marking the file as resolved.
+//! fine-tune the result by hand before marking the file as resolved. Binary
+//! files, images, LFS files and submodules are resolved by picking a side.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::time::SystemTime;
 
 use eframe::egui::{self, Color32, RichText};
-use ferrum_core::RepoState;
 use ferrum_core::conflict::{self, Choice, Chunk};
+use ferrum_core::diff::{LfsPointer, parse_lfs_pointer};
+use ferrum_core::integrate::{self, GITLINK, InProgress};
 use ferrum_core::ops::Side;
+use ferrum_core::{Oid, RepoState};
 
 use crate::command::{Command, Commands, Op};
+use crate::flow::FlowOp;
 use crate::tab::{RepoTab, View};
 use crate::ui::dialogs::Dialog;
 
@@ -22,6 +26,22 @@ pub struct ConflictState {
     file: Option<FileState>,
     /// Position of the file in the conflicted list, to pick the next one once it is resolved.
     index: usize,
+    /// Files resolved during the current operation, whose conflict can be brought back.
+    pub resolved: Vec<String>,
+    progress: Option<Progress>,
+    /// Files ticked in the list of all conflicted files.
+    multi: BTreeSet<String>,
+    /// Conflict to scroll to.
+    scroll_to: Option<usize>,
+    /// Compare a file without markers left with theirs instead of ours.
+    compare_theirs: bool,
+}
+
+/// What the stopped operation is doing, re-read when the repository changes.
+struct Progress {
+    key: (RepoState, Option<Oid>, usize),
+    info: InProgress,
+    conflicted: Vec<String>,
 }
 
 /// What kind of conflict the file has, which decides how it can be resolved.
@@ -34,6 +54,10 @@ enum Situation {
     /// Changed on our side, deleted on theirs.
     DeletedByThem,
     Binary,
+    Image,
+    /// Git LFS pointers.
+    Lfs,
+    Submodule,
     /// Not in the working copy.
     Missing,
 }
@@ -46,6 +70,11 @@ struct FileState {
     changed_on_disk: bool,
     /// Base, ours and theirs from the index.
     versions: [Option<String>; 3],
+    /// Ours and theirs as bytes (images), with their blob ids.
+    blobs: [Option<(String, Vec<u8>)>; 2],
+    /// Ours and theirs commits of a submodule, with a description.
+    gitlinks: [Option<(Oid, String)>; 2],
+    lfs: [Option<LfsPointer>; 2],
     chunks: Vec<Chunk>,
     choices: Vec<Option<Choice>>,
     result: String,
@@ -53,6 +82,8 @@ struct FileState {
     edited: bool,
     /// Common chunks shown in full.
     expanded: HashSet<usize>,
+    /// Diff of the result with one side, for files without markers: (theirs?, result, lines).
+    review: Option<(bool, String, Vec<Option<conflict::DiffLine>>)>,
     error: Option<String>,
 }
 
@@ -73,6 +104,15 @@ fn situation(versions: &[Option<String>; 3], disk: Option<&[u8]>) -> Situation {
     }
 }
 
+/// Refines the situation for LFS pointers and images.
+fn refine(s: Situation, path: &str, lfs: &[Option<LfsPointer>; 2]) -> Situation {
+    match s {
+        Situation::Text | Situation::Binary if lfs.iter().all(Option::is_some) => Situation::Lfs,
+        Situation::Binary if crate::ui::image_diff::is_image(path) => Situation::Image,
+        s => s,
+    }
+}
+
 /// The file to show once `current` is no longer conflicted: the one that took its place.
 fn next_file(conflicted: &[String], current: &str, index: usize) -> Option<String> {
     let rest: Vec<&String> = conflicted.iter().filter(|p| *p != current).collect();
@@ -85,14 +125,53 @@ fn stamp(tab: &RepoTab, path: &str) -> Option<(Option<SystemTime>, u64)> {
     Some((meta.modified().ok(), meta.len()))
 }
 
+fn submodule_text(tab: &RepoTab, path: &str, id: Oid) -> String {
+    let summary = ferrum_core::Repo::open(tab.path().join(path))
+        .ok()
+        .and_then(|r| r.find_commit_info(id).ok())
+        .map(|c| c.summary);
+    match summary {
+        Some(s) => format!("{} {}", ferrum_core::short(id), s),
+        None => ferrum_core::short(id),
+    }
+}
+
 fn load(tab: &RepoTab, path: &str) -> FileState {
     let mut error = None;
-    let versions = tab.repo.conflict_versions(path).unwrap_or_else(|e| {
-        error = Some(e.to_string());
+    let stages = integrate::stages(&tab.git, path).unwrap_or_default();
+    let stage = |n: u8| stages.iter().find(|s| s.stage == n);
+    let gitlink = stages.iter().any(|s| s.mode == GITLINK);
+    let versions = if gitlink {
         Default::default()
-    });
+    } else {
+        tab.repo.conflict_versions(path).unwrap_or_else(|e| {
+            error = Some(e.to_string());
+            Default::default()
+        })
+    };
     let disk = tab.repo.read_workdir_file(path).ok();
-    let situation = situation(&versions, disk.as_deref());
+    let lfs = [
+        versions[1].as_deref().and_then(parse_lfs_pointer),
+        versions[2].as_deref().and_then(parse_lfs_pointer),
+    ];
+    let situation = if gitlink {
+        Situation::Submodule
+    } else {
+        refine(situation(&versions, disk.as_deref()), path, &lfs)
+    };
+    let blobs = if situation == Situation::Image {
+        [2, 3].map(|n| {
+            let s = stage(n)?;
+            Some((s.id.to_string(), tab.repo.blob(s.id).ok()?))
+        })
+    } else {
+        Default::default()
+    };
+    let gitlinks = if gitlink {
+        [2, 3].map(|n| stage(n).map(|s| (s.id, submodule_text(tab, path, s.id))))
+    } else {
+        Default::default()
+    };
     let text = match (&disk, situation) {
         (Some(bytes), Situation::Text) => String::from_utf8_lossy(bytes).into_owned(),
         _ => String::new(),
@@ -105,11 +184,15 @@ fn load(tab: &RepoTab, path: &str) -> FileState {
         stamp: stamp(tab, path),
         changed_on_disk: false,
         versions,
+        blobs,
+        gitlinks,
+        lfs,
         result: conflict::render(&chunks, &choices),
         chunks,
         choices,
         edited: false,
         expanded: HashSet::new(),
+        review: None,
         error,
     }
 }
@@ -120,6 +203,70 @@ pub fn open(tab: &mut RepoTab, path: String) {
         tab.conflicts.index = i;
     }
     tab.conflicts.path = Some(path);
+}
+
+/// What the stopped operation is doing. Also keeps the list of files
+/// resolved since it stopped (cleared when another operation or step starts).
+pub fn in_progress(tab: &mut RepoTab) -> InProgress {
+    let key = (tab.state, tab.head_oid, tab.status.conflicted.len());
+    if let Some(p) = &tab.conflicts.progress
+        && p.key == key
+    {
+        return p.info.clone();
+    }
+    let info = integrate::in_progress(tab.repo.git_dir(), tab.state);
+    let now: Vec<String> = tab
+        .status
+        .conflicted
+        .iter()
+        .map(|f| f.path.clone())
+        .collect();
+    let st = &mut tab.conflicts;
+    match st.progress.take() {
+        Some(prev) if prev.key.0 == key.0 && prev.info == info => {
+            for p in prev.conflicted.iter().filter(|p| !now.contains(p)) {
+                if !st.resolved.contains(p) {
+                    st.resolved.push(p.clone());
+                }
+            }
+            st.resolved.retain(|p| !now.contains(p));
+        }
+        _ => st.resolved.clear(),
+    }
+    st.progress = Some(Progress {
+        key,
+        info: info.clone(),
+        conflicted: now,
+    });
+    info
+}
+
+/// Names of both sides: branch names or commits instead of "ours" and "theirs".
+pub fn side_names(tab: &mut RepoTab) -> (String, String) {
+    let info = in_progress(tab);
+    let name = |id: Oid| crate::ui::banner::name_of(tab, id);
+    let head = tab.head.clone();
+    let (ours, theirs) = match tab.state {
+        RepoState::Merge => (
+            head,
+            info.merge_name
+                .clone()
+                .or_else(|| info.merge_heads.first().map(|id| name(*id))),
+        ),
+        RepoState::Rebase => (
+            info.onto.map(name),
+            info.current.map(|id| match &info.head_name {
+                Some(b) => format!("{b} {}", ferrum_core::short(id)),
+                None => ferrum_core::short(id),
+            }),
+        ),
+        RepoState::CherryPick | RepoState::Revert => (head, info.current.map(ferrum_core::short)),
+        _ => (None, None),
+    };
+    (
+        ours.unwrap_or_else(|| t!("ours")),
+        theirs.unwrap_or_else(|| t!("theirs")),
+    )
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
@@ -168,11 +315,19 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         _ => tab.conflicts.file = Some(load(tab, &path)),
     }
 
-    top_bar(ui, tab, cmds, &conflicted, &path);
+    let names = side_names(tab);
+    top_bar(ui, tab, cmds, &conflicted, &path, &names);
+    several_files(ui, tab, cmds, &conflicted, &names);
     ui.separator();
 
     let in_rebase = tab.state == RepoState::Rebase;
-    let Some(file) = tab.conflicts.file.as_mut() else {
+    let ConflictState {
+        file,
+        scroll_to,
+        compare_theirs,
+        ..
+    } = &mut tab.conflicts;
+    let Some(file) = file.as_mut() else {
         return;
     };
     if !conflicted.contains(&path) {
@@ -182,15 +337,40 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     if let Some(e) = &file.error {
         ui.colored_label(ui.visuals().error_fg_color, e);
     }
-    let (ours_label, theirs_label) = side_labels(file);
+    let (ours_name, theirs_name) = (&names.0, &names.1);
     if in_rebase {
-        ui.weak(t!("During a rebase, {} is the branch being rebased onto and {} is your commit being replayed.", ours_label, theirs_label));
+        ui.weak(t!("During a rebase, {} is the branch being rebased onto and {} is your commit being replayed.", ours_name, theirs_name));
     }
 
     match file.situation {
         Situation::Text => {}
         Situation::DeletedByUs | Situation::DeletedByThem => {
-            deleted_view(ui, file, &path, busy, cmds, &ours_label, &theirs_label);
+            deleted_view(ui, file, &path, busy, cmds, &names);
+            return;
+        }
+        Situation::Submodule => {
+            submodule_view(ui, file, &path, busy, cmds, &names);
+            return;
+        }
+        Situation::Image => {
+            ui.add_space(8.0);
+            ui.label(t!("Both sides changed this image. Keep one of them:"));
+            ui.add_enabled_ui(!busy, |ui| whole_file_buttons(ui, &path, cmds, &names));
+            ui.add_space(4.0);
+            ui.weak(t!("Left: {} · Right: {}", ours_name, theirs_name));
+            let side =
+                |b: &Option<(String, Vec<u8>)>| b.as_ref().map(|(id, v)| (id.clone(), v.clone()));
+            let (ours, theirs) = (side(&file.blobs[0]), side(&file.blobs[1]));
+            crate::ui::image_diff::show_bytes(
+                ui,
+                &path,
+                ours.as_ref().map(|(i, b)| (i.as_str(), b.as_slice())),
+                theirs.as_ref().map(|(i, b)| (i.as_str(), b.as_slice())),
+            );
+            return;
+        }
+        Situation::Lfs => {
+            lfs_view(ui, file, &path, busy, cmds, &names);
             return;
         }
         Situation::Binary | Situation::Missing => {
@@ -201,7 +381,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 t!("This file is not in the working copy.")
             });
             ui.label(t!("Resolve it by keeping one version of the whole file:"));
-            ui.add_enabled_ui(!busy, |ui| whole_file_buttons(ui, &path, cmds));
+            ui.add_enabled_ui(!busy, |ui| whole_file_buttons(ui, &path, cmds, &names));
             return;
         }
     }
@@ -215,15 +395,21 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         });
     egui::CentralPanel::default_margins().show(ui, |ui| {
         if file.choices.is_empty() {
-            ui.add_space(12.0);
-            ui.label(t!("No conflict markers are left in this file."));
-            ui.weak(t!("Check the result below and mark the file as resolved."));
+            review_view(ui, file, &names, compare_theirs);
             return;
         }
-        egui::ScrollArea::vertical()
+        let out = egui::ScrollArea::vertical()
             .id_salt(("conflicts", &path))
             .auto_shrink([false, false])
-            .show(ui, |ui| chunks_view(ui, file));
+            .show(ui, |ui| chunks_view(ui, file, &names, scroll_to));
+        markers(
+            ui,
+            out.inner_rect,
+            out.content_size.y,
+            &out.inner,
+            &file.choices,
+            scroll_to,
+        );
     });
 }
 
@@ -233,6 +419,7 @@ fn top_bar(
     cmds: &mut Commands,
     conflicted: &[String],
     path: &str,
+    names: &(String, String),
 ) {
     ui.horizontal(|ui| {
         if ui
@@ -264,14 +451,14 @@ fn top_bar(
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add_enabled_ui(!tab.busy() && pos.is_some(), |ui| {
                 if ui
-                    .button(t!("Use theirs for whole file"))
+                    .button(t!("Use {} for whole file", names.1))
                     .on_hover_text(t!("Take their version of the file and mark it resolved"))
                     .clicked()
                 {
                     resolve_with(cmds, path, Side::Theirs);
                 }
                 if ui
-                    .button(t!("Use ours for whole file"))
+                    .button(t!("Use {} for whole file", names.0))
                     .on_hover_text(t!("Take our version of the file and mark it resolved"))
                     .clicked()
                 {
@@ -283,6 +470,63 @@ fn top_bar(
     });
 }
 
+/// Every conflicted file with a checkbox, to resolve several with one side.
+fn several_files(
+    ui: &mut egui::Ui,
+    tab: &mut RepoTab,
+    cmds: &mut Commands,
+    conflicted: &[String],
+    names: &(String, String),
+) {
+    if conflicted.len() < 2 {
+        return;
+    }
+    let busy = tab.busy();
+    let multi = &mut tab.conflicts.multi;
+    multi.retain(|p| conflicted.contains(p));
+    egui::CollapsingHeader::new(t!("All conflicted files ({})", conflicted.len()))
+        .id_salt("conflict-many")
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui.small_button(t!("Select all")).clicked() {
+                    multi.extend(conflicted.iter().cloned());
+                }
+                if ui.small_button(t!("Select none")).clicked() {
+                    multi.clear();
+                }
+            });
+            egui::ScrollArea::vertical()
+                .id_salt("conflict-many-list")
+                .max_height(160.0)
+                .show(ui, |ui| {
+                    for p in conflicted {
+                        let mut on = multi.contains(p);
+                        if ui.checkbox(&mut on, p.as_str()).changed() {
+                            if on {
+                                multi.insert(p.clone());
+                            } else {
+                                multi.remove(p);
+                            }
+                        }
+                    }
+                });
+            let n = multi.len();
+            ui.add_enabled_ui(n > 0 && !busy, |ui| {
+                ui.horizontal(|ui| {
+                    for (side, name) in [(Side::Ours, &names.0), (Side::Theirs, &names.1)] {
+                        if ui.button(t!("Use {} for {} selected", name, n)).clicked() {
+                            cmds.run(Op::Flow(FlowOp::ResolveMany {
+                                paths: multi.iter().cloned().collect(),
+                                side,
+                            }));
+                            multi.clear();
+                        }
+                    }
+                });
+            });
+        });
+}
+
 fn resolve_with(cmds: &mut Commands, path: &str, side: Side) {
     cmds.run(Op::ResolveWith {
         path: path.to_owned(),
@@ -290,31 +534,20 @@ fn resolve_with(cmds: &mut Commands, path: &str, side: Side) {
     });
 }
 
-fn whole_file_buttons(ui: &mut egui::Ui, path: &str, cmds: &mut Commands) {
+fn whole_file_buttons(
+    ui: &mut egui::Ui,
+    path: &str,
+    cmds: &mut Commands,
+    names: &(String, String),
+) {
     ui.horizontal(|ui| {
-        if ui.button(t!("Use ours")).clicked() {
+        if ui.button(t!("Use {}", names.0)).clicked() {
             resolve_with(cmds, path, Side::Ours);
         }
-        if ui.button(t!("Use theirs")).clicked() {
+        if ui.button(t!("Use {}", names.1)).clicked() {
             resolve_with(cmds, path, Side::Theirs);
         }
     });
-}
-
-/// Names of both sides, with the labels of the first conflict's markers: "ours (HEAD)".
-fn side_labels(file: &FileState) -> (String, String) {
-    let first = file.chunks.iter().find_map(|c| match c {
-        Chunk::Conflict(c) => Some(c),
-        _ => None,
-    });
-    let pick = |s: Option<&String>, side: String| match s.filter(|s| !s.is_empty()) {
-        Some(label) => format!("{side} ({label})"),
-        None => side,
-    };
-    (
-        pick(first.map(|c| &c.ours_label), t!("ours")),
-        pick(first.map(|c| &c.theirs_label), t!("theirs")),
-    )
 }
 
 fn deleted_view(
@@ -323,14 +556,13 @@ fn deleted_view(
     path: &str,
     busy: bool,
     cmds: &mut Commands,
-    ours_label: &str,
-    theirs_label: &str,
+    names: &(String, String),
 ) {
     let by_us = file.situation == Situation::DeletedByUs;
     let (deleter, changer) = if by_us {
-        (ours_label, theirs_label)
+        (&names.0, &names.1)
     } else {
-        (theirs_label, ours_label)
+        (&names.1, &names.0)
     };
     ui.add_space(12.0);
     ui.label(t!(
@@ -370,6 +602,145 @@ fn deleted_view(
     }
 }
 
+/// Both commits of a conflicted submodule; resolving records one of them.
+fn submodule_view(
+    ui: &mut egui::Ui,
+    file: &FileState,
+    path: &str,
+    busy: bool,
+    cmds: &mut Commands,
+    names: &(String, String),
+) {
+    ui.add_space(12.0);
+    ui.label(t!(
+        "Both sides moved the submodule {} to different commits.",
+        path
+    ));
+    ui.label(t!("Pick the commit to keep:"));
+    ui.add_space(4.0);
+    for (i, (stage, name)) in [(2u8, &names.0), (3u8, &names.1)].into_iter().enumerate() {
+        ui.horizontal(|ui| {
+            let text = match &file.gitlinks[i] {
+                Some((_, t)) => t.clone(),
+                None => t!("(deleted)"),
+            };
+            ui.add_enabled_ui(!busy, |ui| {
+                if ui.button(t!("Use {}", name)).clicked() {
+                    cmds.run(Op::Flow(FlowOp::ResolveGitlink {
+                        path: path.to_owned(),
+                        stage,
+                    }));
+                }
+            });
+            ui.label(RichText::new(text).monospace());
+        });
+    }
+    ui.add_space(4.0);
+    ui.weak(t!(
+        "Only the recorded commit changes: update the submodule afterwards to check it out."
+    ));
+}
+
+fn lfs_view(
+    ui: &mut egui::Ui,
+    file: &FileState,
+    path: &str,
+    busy: bool,
+    cmds: &mut Commands,
+    names: &(String, String),
+) {
+    ui.add_space(12.0);
+    ui.label(t!(
+        "This file is stored with Git LFS, so it cannot be merged line by line."
+    ));
+    ui.label(t!("Resolve it by keeping one version of the whole file:"));
+    ui.add_space(4.0);
+    egui::Grid::new("lfs-conflict")
+        .num_columns(3)
+        .spacing([12.0, 4.0])
+        .show(ui, |ui| {
+            for (i, name) in [&names.0, &names.1].into_iter().enumerate() {
+                ui.strong(name.as_str());
+                match &file.lfs[i] {
+                    Some(p) => {
+                        let oid = p.oid.strip_prefix("sha256:").unwrap_or(&p.oid);
+                        ui.label(
+                            RichText::new(oid.chars().take(12).collect::<String>()).monospace(),
+                        );
+                        ui.label(crate::ui::diff_extra::format_size(p.size));
+                    }
+                    None => {
+                        ui.weak(t!("(deleted)"));
+                        ui.label("");
+                    }
+                }
+                ui.end_row();
+            }
+        });
+    ui.add_space(4.0);
+    ui.add_enabled_ui(!busy, |ui| whole_file_buttons(ui, path, cmds, names));
+}
+
+/// A file without markers left (resolved by hand or in a merge tool): its
+/// difference with one side, to check before marking it resolved.
+fn review_view(
+    ui: &mut egui::Ui,
+    file: &mut FileState,
+    names: &(String, String),
+    theirs: &mut bool,
+) {
+    ui.add_space(4.0);
+    ui.label(t!("No conflict markers are left in this file."));
+    ui.weak(t!("Check the result below and mark the file as resolved."));
+    ui.horizontal(|ui| {
+        ui.label(t!("Changes compared with"));
+        ui.selectable_value(theirs, false, names.0.as_str());
+        ui.selectable_value(theirs, true, names.1.as_str());
+    });
+    let fresh = file
+        .review
+        .as_ref()
+        .is_some_and(|(t, r, _)| *t == *theirs && *r == file.result);
+    if !fresh {
+        let side = file.versions[if *theirs { 2 } else { 1 }]
+            .clone()
+            .unwrap_or_default();
+        let lines = conflict::diff_lines(&side, &file.result, 3);
+        file.review = Some((*theirs, file.result.clone(), lines));
+    }
+    let Some((_, _, lines)) = &file.review else {
+        return;
+    };
+    if lines.is_empty() {
+        ui.weak(t!(
+            "The result is the same as {}.",
+            if *theirs { &names.1 } else { &names.0 }
+        ));
+        return;
+    }
+    let (add, del) = (crate::util::added_color(ui), ui.visuals().error_fg_color);
+    let weak = ui.visuals().weak_text_color();
+    egui::ScrollArea::both()
+        .id_salt("conflict-review")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for line in lines {
+                let (text, color) = match line {
+                    None => ("…".to_owned(), weak),
+                    Some((o, t)) => (
+                        format!("{o} {t}"),
+                        match o {
+                            '+' => add,
+                            '-' => del,
+                            _ => weak,
+                        },
+                    ),
+                };
+                ui.add(egui::Label::new(RichText::new(text).monospace().color(color)).extend());
+            }
+        });
+}
+
 fn ours_color(ui: &egui::Ui) -> Color32 {
     if ui.visuals().dark_mode {
         Color32::from_rgb(0x5a, 0xa9, 0xe6)
@@ -386,11 +757,20 @@ fn theirs_color(ui: &egui::Ui) -> Color32 {
     }
 }
 
-fn chunks_view(ui: &mut egui::Ui, file: &mut FileState) {
+/// Shows the chunks; returns the top of each conflict, relative to the content.
+fn chunks_view(
+    ui: &mut egui::Ui,
+    file: &mut FileState,
+    names: &(String, String),
+    scroll_to: &mut Option<usize>,
+) -> Vec<f32> {
+    let origin = ui.min_rect().top();
     let last = file.chunks.len().saturating_sub(1);
     let total = file.choices.len();
     let mut n = 0;
     let mut changed = false;
+    let mut tops = Vec::with_capacity(total);
+    let mut nav = None;
     for (i, chunk) in file.chunks.iter().enumerate() {
         match chunk {
             Chunk::Common(text) => {
@@ -405,13 +785,60 @@ fn chunks_view(ui: &mut egui::Ui, file: &mut FileState) {
             }
             Chunk::Conflict(c) => {
                 let choice = &mut file.choices[n];
-                changed |= conflict_view(ui, c, n, total, choice);
+                let (ch, rect, go) = conflict_view(ui, c, n, total, choice, names);
+                changed |= ch;
+                nav = nav.or(go);
+                tops.push(rect.top() - origin);
+                if *scroll_to == Some(n) {
+                    ui.scroll_to_rect(rect, Some(egui::Align::TOP));
+                    *scroll_to = None;
+                }
                 n += 1;
             }
         }
     }
+    if nav.is_some() {
+        *scroll_to = nav;
+    }
     if changed && !file.edited {
         file.result = conflict::render(&file.chunks, &file.choices);
+    }
+    tops
+}
+
+/// Marks each conflict next to the scroll bar (amber unresolved, green
+/// resolved); clicking one scrolls to it.
+fn markers(
+    ui: &mut egui::Ui,
+    area: egui::Rect,
+    content_height: f32,
+    tops: &[f32],
+    choices: &[Option<Choice>],
+    scroll_to: &mut Option<usize>,
+) {
+    if content_height <= 0.0 || tops.is_empty() {
+        return;
+    }
+    let (warn, done) = (ui.visuals().warn_fg_color, crate::util::added_color(ui));
+    for (n, top) in tops.iter().enumerate() {
+        let y = area.top() + (top / content_height).clamp(0.0, 1.0) * area.height();
+        let r = egui::Rect::from_min_size(
+            egui::pos2(area.right() - 16.0, (y - 2.0).min(area.bottom() - 4.0)),
+            egui::vec2(6.0, 4.0),
+        );
+        let resolved = choices.get(n).copied().flatten().is_some();
+        let resp = ui
+            .interact(
+                r.expand(2.0),
+                ui.make_persistent_id(("conflict-marker", n)),
+                egui::Sense::click(),
+            )
+            .on_hover_text(t!("Conflict {} of {}", n + 1, tops.len()));
+        ui.painter()
+            .rect_filled(r, 1.0, if resolved { done } else { warn });
+        if resp.clicked() {
+            *scroll_to = Some(n);
+        }
     }
 }
 
@@ -453,32 +880,49 @@ fn common_text(ui: &mut egui::Ui, text: &str, first: bool, last: bool, expanded:
 }
 
 /// One conflict: both sides next to each other and the choice buttons.
-/// Returns true when the choice changed.
+/// Returns whether the choice changed, the conflict's rectangle and a
+/// conflict to jump to.
 fn conflict_view(
     ui: &mut egui::Ui,
     c: &conflict::Conflict,
     n: usize,
     total: usize,
     choice: &mut Option<Choice>,
-) -> bool {
+    names: &(String, String),
+) -> (bool, egui::Rect, Option<usize>) {
     let before = *choice;
+    let mut nav = None;
     let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
-    egui::Frame::group(ui.style())
+    let resp = egui::Frame::group(ui.style())
         .stroke(stroke)
         .inner_margin(8.0)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.strong(t!("Conflict {} of {}", n + 1, total));
+                if ui
+                    .add_enabled(n > 0, egui::Button::new("⬆").small())
+                    .on_hover_text(t!("Previous conflict"))
+                    .clicked()
+                {
+                    nav = Some(n - 1);
+                }
+                if ui
+                    .add_enabled(n + 1 < total, egui::Button::new("⬇").small())
+                    .on_hover_text(t!("Next conflict"))
+                    .clicked()
+                {
+                    nav = Some(n + 1);
+                }
                 if choice.is_none() {
                     ui.colored_label(ui.visuals().warn_fg_color, t!("unresolved"));
                 }
                 ui.add_space(12.0);
                 for (label, value) in [
-                    (t!("Ours"), Choice::Ours),
-                    (t!("Theirs"), Choice::Theirs),
-                    (t!("Both (ours first)"), Choice::OursThenTheirs),
-                    (t!("Both (theirs first)"), Choice::TheirsThenOurs),
+                    (names.0.clone(), Choice::Ours),
+                    (names.1.clone(), Choice::Theirs),
+                    (t!("Both ({} first)", names.0), Choice::OursThenTheirs),
+                    (t!("Both ({} first)", names.1), Choice::TheirsThenOurs),
                 ] {
                     let selected = *choice == Some(value);
                     if ui.add(egui::Button::selectable(selected, label)).clicked() {
@@ -505,7 +949,7 @@ fn conflict_view(
                 let theirs = theirs_color(&cols[1]);
                 side_view(
                     &mut cols[0],
-                    &t!("Ours"),
+                    &names.0,
                     &c.ours_label,
                     &c.ours,
                     ours,
@@ -513,16 +957,17 @@ fn conflict_view(
                 );
                 side_view(
                     &mut cols[1],
-                    &t!("Theirs"),
+                    &names.1,
                     &c.theirs_label,
                     &c.theirs,
                     theirs,
                     uses(Choice::Theirs),
                 );
             });
-        });
+        })
+        .response;
     ui.add_space(4.0);
-    *choice != before
+    (*choice != before, resp.rect, nav)
 }
 
 /// One side of a conflict. `used` is `None` while undecided.
@@ -555,7 +1000,7 @@ fn side_view(
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             ui.colored_label(color, RichText::new(name).strong());
-            if !label.is_empty() {
+            if !label.is_empty() && label != name {
                 ui.add(egui::Label::new(RichText::new(label).weak()).truncate());
             }
             if chosen {
@@ -695,6 +1140,15 @@ mod tests {
         assert_eq!(situation(&ours_gone, Some(b"t")), Situation::DeletedByUs);
         let theirs_gone = [v(Some("b")), v(Some("o")), None];
         assert_eq!(situation(&theirs_gone, None), Situation::DeletedByThem);
+
+        let none = [None, None];
+        assert_eq!(refine(Situation::Binary, "a.png", &none), Situation::Image);
+        assert_eq!(refine(Situation::Binary, "a.bin", &none), Situation::Binary);
+        let ptr = parse_lfs_pointer(
+            "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 12\n",
+        );
+        let both = [ptr.clone(), ptr];
+        assert_eq!(refine(Situation::Text, "a.psd", &both), Situation::Lfs);
     }
 
     #[test]

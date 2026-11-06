@@ -71,8 +71,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("detached", "desanexado"),
     // app.rs: banner of an operation in progress
-    (" — 1 file with conflicts", " — 1 arquivo com conflitos"),
-    (" — {} files with conflicts", " — {} arquivos com conflitos"),
     ("Resolve conflicts", "Resolver conflitos"),
     ("Continue", "Continuar"),
     ("Skip", "Pular"),

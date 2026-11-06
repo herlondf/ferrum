@@ -7,6 +7,7 @@ mod common;
 mod diff;
 mod editing;
 mod extras;
+mod flow;
 mod history;
 mod local;
 mod main;
@@ -20,6 +21,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     main::T,
     editing::T,
     extras::T,
+    flow::T,
     history::T,
     local::T,
     preferences::T,

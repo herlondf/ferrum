@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
-use ferrum_core::ops::{MergeMode, PushOptions, ResetMode};
+use ferrum_core::ops::{PushOptions, ResetMode};
 use ferrum_core::{BranchInfo, BranchKind, Identity};
 
 use crate::command::{Command, Commands, Op};
@@ -50,11 +50,6 @@ pub enum Dialog {
         name: String,
         remote: Option<String>,
     },
-    Merge {
-        rev: String,
-        label: String,
-        mode: MergeMode,
-    },
     Reset {
         rev: String,
         label: String,
@@ -99,6 +94,8 @@ pub enum Dialog {
         ssh_key: String,
     },
     Forge(forge_ui::ForgeDialog),
+    /// Merge, rebase, cherry-pick, revert, reword and local-changes prompts.
+    Flow(crate::ui::flow_dialogs::FlowDialog),
 }
 
 impl Dialog {
@@ -131,11 +128,7 @@ impl Dialog {
     }
 
     pub fn merge(rev: &str, label: &str) -> Self {
-        Dialog::Merge {
-            rev: rev.into(),
-            label: label.into(),
-            mode: crate::prefs::default_merge(),
-        }
+        crate::ui::flow_dialogs::merge(rev, label)
     }
 
     pub fn reset(rev: &str, label: &str, branch: &str, mode: ResetMode) -> Self {
@@ -283,7 +276,13 @@ pub fn show(
 }
 
 /// Draws OK/Cancel buttons. Returns Some(true) for OK, Some(false) for Cancel.
-fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, danger: bool, enter: bool) -> Option<bool> {
+pub(crate) fn buttons(
+    ui: &mut egui::Ui,
+    ok: &str,
+    enabled: bool,
+    danger: bool,
+    enter: bool,
+) -> Option<bool> {
     ui.add_space(8.0);
     let mut result = None;
     ui.horizontal(|ui| {
@@ -566,39 +565,6 @@ fn body(
                             name: format!("refs/tags/{name}"),
                         });
                     }
-                    false
-                }
-                Some(false) => false,
-                None => true,
-            }
-        }
-        Dialog::Merge { rev, label, mode } => {
-            let current = tab
-                .and_then(|t| t.head.clone())
-                .unwrap_or_else(|| "HEAD".into());
-            ui.heading(t!("Merge {} into {}", label, current));
-            ui.radio_value(
-                mode,
-                MergeMode::Default,
-                t!("Default (fast-forward when possible)"),
-            );
-            ui.radio_value(
-                mode,
-                MergeMode::NoFastForward,
-                t!("Always create a merge commit (--no-ff)"),
-            );
-            ui.radio_value(mode, MergeMode::FastForwardOnly, t!("Fast-forward only"));
-            ui.radio_value(
-                mode,
-                MergeMode::Squash,
-                t!("Squash into staged changes (commit afterwards)"),
-            );
-            match buttons(ui, &t!("Merge"), true, false, enter) {
-                Some(true) => {
-                    run(Op::Merge {
-                        rev: rev.clone(),
-                        mode: *mode,
-                    });
                     false
                 }
                 Some(false) => false,
@@ -984,6 +950,7 @@ fn body(
             }
         }
         Dialog::Forge(d) => forge_ui::show_dialog(ui, d, tab, settings, cmds),
+        Dialog::Flow(d) => crate::ui::flow_dialogs::show(ui, d, tab, cmds, enter),
     }
 }
 

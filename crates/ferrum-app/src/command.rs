@@ -185,14 +185,6 @@ pub enum Op {
         base: Option<Oid>,
         steps: Vec<Step>,
     },
-    CherryPick {
-        id: Oid,
-        is_merge: bool,
-    },
-    Revert {
-        id: Oid,
-        is_merge: bool,
-    },
     Reset {
         rev: String,
         mode: ResetMode,
@@ -248,6 +240,8 @@ pub enum Op {
         token: String,
         pr: NewPullRequest,
     },
+    /// Merge, rebase, cherry-pick and conflict operations with options (see `flow.rs`).
+    Flow(crate::flow::FlowOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -292,8 +286,6 @@ impl Op {
             Op::InteractiveRebase { steps, .. } => {
                 t!("Interactive rebase of {}", commits(steps.len()))
             }
-            Op::CherryPick { id, .. } => t!("Cherry-pick {}", ferrum_core::short(*id)),
-            Op::Revert { id, .. } => t!("Revert {}", ferrum_core::short(*id)),
             Op::Reset { rev, .. } => t!("Reset to {}", short(rev)),
             Op::CreateTag { name, .. } => t!("Create tag {}", name),
             Op::DeleteTag(n) => t!("Delete tag {}", n),
@@ -322,6 +314,7 @@ impl Op {
             Op::CreatePullRequest { hosted, .. } => {
                 t!("Create {}", hosted.kind.request_name())
             }
+            Op::Flow(f) => f.label(),
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -340,6 +333,7 @@ impl Op {
             | Op::ResolveWith { .. }
             | Op::SaveResolution { .. } => Refresh::Status,
             Op::SetIdentity(_) => Refresh::Status,
+            Op::Flow(f) if f.status_only() => Refresh::Status,
             Op::CreatePullRequest { .. } => Refresh::None,
             _ => Refresh::All,
         }
@@ -416,8 +410,6 @@ impl Op {
             Op::Merge { rev, mode } => ops::merge(git, rev, *mode),
             Op::Rebase { onto } => ops::rebase(git, onto),
             Op::InteractiveRebase { base, steps } => ferrum_core::rebase::run(git, *base, steps),
-            Op::CherryPick { id, is_merge } => ops::cherry_pick(git, *id, *is_merge),
-            Op::Revert { id, is_merge } => ops::revert(git, *id, *is_merge),
             Op::Reset { rev, mode } => ops::reset(git, rev, *mode),
             Op::CreateTag { name, rev, message } => {
                 ops::create_tag(git, name, rev, message.as_deref())
@@ -449,6 +441,7 @@ impl Op {
             Op::CreatePullRequest { hosted, token, pr } => {
                 forge::create_pull_request(hosted, token, pr).map(|_| ())
             }
+            Op::Flow(f) => f.run(git, progress),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }

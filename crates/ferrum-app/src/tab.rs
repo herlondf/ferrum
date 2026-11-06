@@ -586,12 +586,15 @@ impl RepoTab {
             | Op::Pull(_)
             | Op::Rebase { .. }
             | Op::InteractiveRebase { .. }
-            | Op::CherryPick { .. }
-            | Op::Revert { .. }
             | Op::Reset { .. } => vec![Op::Reset {
                 rev: head?,
                 mode: ResetMode::Keep,
             }],
+            Op::Flow(f) if f.rewrites_head() => vec![Op::Reset {
+                rev: head?,
+                mode: ResetMode::Keep,
+            }],
+            Op::Flow(crate::flow::FlowOp::WithLocalChanges { op, .. }) => return self.undo_for(op),
             Op::Checkout(_) | Op::CheckoutDetached(_) => vec![self.back_to_current()?],
             Op::CheckoutRemote { local, .. } => {
                 vec![
