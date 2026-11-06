@@ -66,28 +66,22 @@ pub fn list_toolbar(ui: &mut egui::Ui, files: &[FileDiff], as_tree: &mut bool, s
             t!("{} files changed", files.len())
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if *as_tree {
-                if ui
-                    .small_button("⏵")
-                    .on_hover_text(t!("Collapse all"))
-                    .clicked()
-                {
-                    let mut dirs = Vec::new();
-                    Node::build(files).all_dirs("", &mut dirs);
-                    st.collapsed = dirs.into_iter().collect();
-                }
-                if ui
-                    .small_button("⏷")
-                    .on_hover_text(t!("Expand all"))
-                    .clicked()
-                {
-                    st.collapsed.clear();
-                }
-            }
             ui.selectable_value(as_tree, true, t!("Tree"));
             ui.selectable_value(as_tree, false, t!("List"));
         });
     });
+    if *as_tree {
+        ui.horizontal(|ui| {
+            if ui.small_button(t!("Expand all")).clicked() {
+                st.collapsed.clear();
+            }
+            if ui.small_button(t!("Collapse all")).clicked() {
+                let mut dirs = Vec::new();
+                Node::build(files).all_dirs("", &mut dirs);
+                st.collapsed = dirs.into_iter().collect();
+            }
+        });
+    }
 }
 
 /// The changed files; returns the one clicked. `menu` fills a file's context menu.
@@ -208,7 +202,7 @@ struct Viewer {
 enum Content {
     Text {
         lines: Vec<String>,
-        highlight: Option<(bool, SideHighlighter)>,
+        highlight: Option<(bool, Box<SideHighlighter>)>,
     },
     Image(Result<(egui::TextureHandle, [u32; 2]), String>),
     /// A Git LFS pointer, shown through the diff view's LFS preview.
@@ -255,11 +249,7 @@ pub fn show_tree(
             ui.horizontal(|ui| {
                 ui.weak(t!("Files at {}", short(commit)));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .small_button("⏵")
-                        .on_hover_text(t!("Collapse all"))
-                        .clicked()
-                    {
+                    if ui.small_button(t!("Collapse all")).clicked() {
                         st.open.clear();
                     }
                 });
@@ -509,7 +499,7 @@ fn viewer(
                 .show(ui, |ui| {
                     let avail = ui.available_size();
                     let s = tex.size_vec2();
-                    let scale = (avail.x / s.x).min(avail.y / s.y).min(1.0).max(0.05);
+                    let scale = (avail.x / s.x).min(avail.y / s.y).clamp(0.05, 1.0);
                     ui.image((tex.id(), s * scale));
                 });
         }
@@ -549,14 +539,15 @@ fn text_view(
     salt: &str,
     path: &str,
     lines: &[String],
-    highlight: &mut Option<(bool, SideHighlighter)>,
+    highlight: &mut Option<(bool, Box<SideHighlighter>)>,
 ) {
     let dark = ui.visuals().dark_mode;
     let syntax = crate::ui::diff_prefs::get(ui.ctx()).syntax;
     if !syntax {
         *highlight = None;
     } else if highlight.as_ref().is_none_or(|(d, _)| *d != dark) {
-        *highlight = diff_text::syntax_for(path).map(|s| (dark, SideHighlighter::new(s, dark)));
+        *highlight =
+            diff_text::syntax_for(path).map(|s| (dark, Box::new(SideHighlighter::new(s, dark))));
     }
     let font = code_font(12.0);
     let row_h = code_row_height(16.0);
