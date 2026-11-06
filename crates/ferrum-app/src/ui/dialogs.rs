@@ -72,6 +72,8 @@ pub enum Dialog {
     Bisect(crate::ui::bisect::BisectDialog),
     /// Preview and options before applying a patch.
     Patch(crate::ui::patches::PatchDialog),
+    /// Repository settings and fixes (`ui::repo_dialogs`).
+    Repo(crate::ui::repo_dialogs::RepoDialog),
 }
 
 impl Dialog {
@@ -619,6 +621,7 @@ fn body(
         Dialog::GitFlow(d) => crate::ui::gitflow::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Bisect(d) => crate::ui::bisect::show_dialog(ui, d, tab, cmds, enter),
         Dialog::Patch(d) => crate::ui::patches::show_dialog(ui, d, tab, cmds, enter),
+        Dialog::Repo(d) => crate::ui::repo_dialogs::show(ui, d, tab, settings, cmds, enter),
     }
 }
 

@@ -3,18 +3,19 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
+use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
 mod background;
 mod parts;
+mod repos;
 
 use crate::command::{Command, Commands, DevStep, Op};
 use crate::jobs::{Job, JobOutput, Refresh};
 use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
 use crate::tab::{Message, RepoTab, View};
-use crate::ui::dialogs::{self, Dialog};
+use crate::ui::dialogs::Dialog;
 use crate::ui::{
     blame, changes, conflicts, details, forge as forge_ui, history, history_model, history_options,
     palette, rebase, settings as settings_ui, sidebar,
@@ -39,6 +40,8 @@ pub struct FerrumApp {
     screenshot: Option<(PathBuf, u32)>,
     /// Dev aid: commands from `FERRUM_START`, run on the first frame.
     startup: Vec<Command>,
+    /// Repository Manager tab, closed tabs, workspaces, tab windows.
+    repos: repos::State,
 }
 
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
@@ -56,7 +59,8 @@ pub struct FerrumApp {
 /// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
 /// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`),
 /// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
-/// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`.
+/// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
+/// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -125,6 +129,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "gitflow" => out.extend(crate::ui::gitflow::dev_step(arg, tab)),
             "bisect" => out.extend(crate::ui::bisect::dev_step(arg, tab)),
             "patch" => out.extend(crate::ui::patches::dev_step(arg, tab)),
+            "manager" | "quick" | "overview" | "repo-settings" | "workspace" | "vertical-tabs" => {
+                out.push(Command::Repos(crate::repos::RepoCmd::Dev(step.into())))
+            }
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -214,6 +221,7 @@ impl FerrumApp {
             bg: Default::default(),
             screenshot,
             startup: Vec::new(),
+            repos: Default::default(),
         };
         // Repositories given on the command line replace the saved session.
         let (to_open, active) = if paths.is_empty() {
@@ -233,12 +241,25 @@ impl FerrumApp {
         app
     }
 
+    /// Requests from the command line besides repositories to open, and the
+    /// listener for other Ferrum processes.
+    pub fn with_launch(
+        mut self,
+        requests: Vec<crate::repos::Request>,
+        listener: Option<crate::single_instance::Listener>,
+    ) -> Self {
+        self.repos.pending = requests;
+        self.repos.listener = listener;
+        self
+    }
+
     fn open(&mut self, path: PathBuf) {
-        match RepoTab::open_with(path, &self.settings.history) {
+        match RepoTab::open_with(path.clone(), &self.settings.history) {
             Ok(mut tab) => {
                 let prefs = crate::repo_settings::sidebar_prefs(&self.settings, &tab);
                 tab.sidebar = sidebar_model::SidebarState::with_prefs(prefs);
                 self.settings.add_recent(tab.path().to_path_buf());
+                self.opened(tab.path());
                 if let Some(i) = self.tabs.iter().position(|t| t.path() == tab.path()) {
                     self.active = i;
                 } else {
@@ -246,7 +267,11 @@ impl FerrumApp {
                     self.active = self.tabs.len() - 1;
                 }
             }
-            Err(e) => self.error(e),
+            Err(e) => {
+                if !self.open_failed(&path, &e) {
+                    self.error(e)
+                }
+            }
         }
     }
 
@@ -509,19 +534,14 @@ impl FerrumApp {
                     self.open(p);
                 }
             }
-            Command::CloseTab(i) => {
-                if i < self.tabs.len() {
-                    self.tabs.remove(i);
-                    if self.active >= i && self.active > 0 {
-                        self.active -= 1;
-                    }
-                }
-            }
+            Command::CloseTab(i) => self.close_tab(i),
             Command::SelectTab(i) => {
                 if i < self.tabs.len() {
                     self.active = i;
+                    self.repos.home_active = false;
                 }
             }
+            Command::Repos(c) => self.handle_repos(c, ctx),
             Command::Dialog(d) => self.dialog = Some(d),
             Command::SetView(v) => {
                 let load_prs = if let Some(t) = self.tab() {
@@ -725,6 +745,8 @@ impl FerrumApp {
         let pressed = |m: Modifiers, k: Key| {
             ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
         };
+        // Before Ctrl+O, which would also match Ctrl+Shift+O.
+        self.repo_shortcuts(ctx, cmds);
         if pressed(cmd, Key::P) || pressed(cs, Key::P) {
             cmds.push(Command::ShowPalette);
         }
@@ -734,7 +756,7 @@ impl FerrumApp {
         if pressed(cmd, Key::Comma) {
             cmds.push(Command::ShowSettings);
         }
-        if self.tabs.is_empty() || self.dialog.is_some() {
+        if self.showing_home() || self.dialog.is_some() {
             return;
         }
         if pressed(Modifiers::NONE, Key::F5) || pressed(cmd, Key::R) {
@@ -805,6 +827,7 @@ impl FerrumApp {
                     }));
                     ui.close();
                 }
+                crate::ui::repo_manager::repository_menu(ui, !self.tabs.is_empty(), cmds);
                 if let Some(tab) = self.tabs.get(self.active) {
                     ui.separator();
                     crate::ui::tools::repository_menu(ui, tab.path(), cmds);
@@ -820,7 +843,7 @@ impl FerrumApp {
                     }
                 }
             });
-            let Some(tab) = self.tabs.get(self.active) else {
+            let Some(tab) = self.tabs.get(self.active).filter(|_| !self.repos.home_active) else {
                 return;
             };
             ui.separator();
@@ -929,35 +952,6 @@ impl FerrumApp {
         });
     }
 
-    fn tab_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
-        ui.horizontal_wrapped(|ui| {
-            for (i, tab) in self.tabs.iter().enumerate() {
-                let mut label = tab.name.clone();
-                if let Some(b) = &tab.head {
-                    label.push_str(&format!("  🌿 {b}"));
-                }
-                if tab.busy() {
-                    label.push_str(" ⏳");
-                }
-                let resp = ui
-                    .selectable_label(i == self.active, label)
-                    .on_hover_text(tab.path().display().to_string());
-                if resp.clicked() {
-                    cmds.push(Command::SelectTab(i));
-                }
-                if resp.middle_clicked()
-                    || ui
-                        .small_button("×")
-                        .on_hover_text(t!("Close (Ctrl+W)"))
-                        .clicked()
-                {
-                    cmds.push(Command::CloseTab(i));
-                }
-                ui.separator();
-            }
-        });
-    }
-
     fn status_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
         ui.horizontal(|ui| {
             let tab = self.tabs.get(self.active);
@@ -993,6 +987,7 @@ impl FerrumApp {
                         if ui.small_button(t!("Copy")).clicked() {
                             cmds.push(Command::Copy(m.text.clone()));
                         }
+                        crate::ui::repo_dialogs::error_actions(ui, &m.text, cmds);
                     } else if fresh {
                         ui.label(&m.text);
                     }
@@ -1031,47 +1026,6 @@ impl FerrumApp {
             crate::ui::banner::show(ui, tab, cmds);
         }
     }
-
-    fn welcome(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
-        ui.vertical_centered(|ui| {
-            ui.add_space(ui.available_height() / 5.0);
-            ui.heading(RichText::new("Ferrum").size(32.0));
-            ui.weak(t!("A fast Git client"));
-            ui.add_space(20.0);
-            ui.horizontal(|ui| {
-                ui.add_space((ui.available_width() - 360.0).max(0.0) / 2.0);
-                if ui
-                    .add(egui::Button::new(t!("📂 Open…")).min_size(egui::vec2(110.0, 32.0)))
-                    .clicked()
-                {
-                    cmds.push(Command::OpenRepoDialog);
-                }
-                if ui
-                    .add(egui::Button::new(t!("⬇ Clone…")).min_size(egui::vec2(110.0, 32.0)))
-                    .clicked()
-                {
-                    cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
-                }
-                if ui
-                    .add(egui::Button::new(t!("✚ New…")).min_size(egui::vec2(110.0, 32.0)))
-                    .clicked()
-                {
-                    cmds.push(Command::Dialog(Dialog::Init {
-                        path: String::new(),
-                    }));
-                }
-            });
-            if !self.settings.recent.is_empty() {
-                ui.add_space(24.0);
-                ui.strong(t!("Recent repositories"));
-                for p in self.settings.recent.clone() {
-                    if ui.link(p.display().to_string()).clicked() {
-                        cmds.push(Command::OpenRepo(p));
-                    }
-                }
-            }
-        });
-    }
 }
 
 thread_local! {
@@ -1087,6 +1041,7 @@ impl eframe::App for FerrumApp {
         self.apply_look(&ctx);
         self.poll_jobs(&ctx);
         self.background_tick(&ctx);
+        self.repos_tick(&ctx);
 
         let mut cmds = Commands::default();
         for c in std::mem::take(&mut self.startup) {
@@ -1106,20 +1061,13 @@ impl eframe::App for FerrumApp {
         );
         crate::ui::diff_prefs::sync(&ctx, &mut self.settings.diff, &mut self.tabs);
 
-        let title = match self.tabs.get(self.active) {
-            Some(t) => format!(
-                "{} — {} — Ferrum",
-                t.name,
-                t.head.clone().unwrap_or_else(|| t!("detached"))
-            ),
-            None => "Ferrum".into(),
-        };
+        let title = self.window_title();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.add_space(2.0);
             self.toolbar(ui, &mut cmds);
-            if !self.tabs.is_empty() {
+            if !self.tabs.is_empty() && !self.settings.library.vertical_tabs {
                 ui.separator();
                 self.tab_bar(ui, &mut cmds);
             }
@@ -1127,8 +1075,9 @@ impl eframe::App for FerrumApp {
         });
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui, &mut cmds));
 
-        if self.tabs.is_empty() {
-            egui::CentralPanel::default_margins().show(ui, |ui| self.welcome(ui, &mut cmds));
+        self.tab_list(ui, &mut cmds);
+        if self.showing_home() {
+            self.home(ui, &mut cmds);
         } else {
             let state_banner = self.tabs[self.active].state != RepoState::Clean;
             if state_banner {
@@ -1182,6 +1131,10 @@ impl eframe::App for FerrumApp {
                     egui::CentralPanel::default_margins()
                         .show(ui, |ui| forge_ui::show_view(ui, tab, settings, &mut cmds));
                 }
+                View::Overview => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| crate::ui::overview::show(ui, tab, &mut cmds));
+                }
             }
             if tab.rebase.is_some() {
                 rebase::show(&ctx, tab, &mut cmds);
@@ -1190,18 +1143,7 @@ impl eframe::App for FerrumApp {
             focus::paint(&ctx, tab);
         }
 
-        if let Some(mut d) = self.dialog.take() {
-            let keep = dialogs::show(
-                &ctx,
-                &mut d,
-                self.tabs.get(self.active),
-                &mut self.settings,
-                &mut cmds,
-            );
-            if keep && self.dialog.is_none() {
-                self.dialog = Some(d);
-            }
-        }
+        self.main_dialog(&ctx, &mut cmds);
         settings_ui::show(
             &ctx,
             &mut self.settings_window,
@@ -1218,6 +1160,7 @@ impl eframe::App for FerrumApp {
             &mut cmds,
         );
 
+        self.repo_windows(&ctx, &mut cmds);
         self.show_activity(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
 

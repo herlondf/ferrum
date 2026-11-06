@@ -258,6 +258,16 @@ fn views(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Com
     if r.clicked() || a.is_some() {
         cmds.push(Command::SetView(View::History));
     }
+    let overview = tab.view == View::Overview;
+    let (r, a) = leaf(
+        ui,
+        st,
+        "view:overview",
+        egui::Button::selectable(overview, t!("📊 Overview")),
+    );
+    if r.clicked() || a.is_some() {
+        cmds.push(Command::SetView(View::Overview));
+    }
     if let Some(h) = &tab.hosted {
         let label = format!("🔀 {}s", capitalize(h.kind.request_name()));
         let prs = tab.view == View::PullRequests;

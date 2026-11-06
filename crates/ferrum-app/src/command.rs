@@ -71,6 +71,8 @@ pub enum Command {
     History(crate::ui::history_options::HistoryFn),
     /// Change remembered fetch/pull/push options (see `sync.rs`).
     Sync(crate::sync::SyncFn),
+    /// Tabs, workspaces, the Repository Manager (see `repos.rs`).
+    Repos(crate::repos::RepoCmd),
     /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
     DevStep(DevStep),
 }
@@ -270,6 +272,8 @@ pub enum Op {
     Bisect(crate::ui::bisect::BisectOp),
     /// Creating and applying patches (see `ui::patches`).
     Patch(crate::ui::patches::PatchOp),
+    /// Repository settings and fixes (see `repos.rs`).
+    Repo(crate::repos::RepoOp),
     /// Several operations in a row (used by undo).
     Sequence(String, Vec<Op>),
 }
@@ -371,6 +375,7 @@ impl Op {
             Op::GitFlow(f) => f.label(),
             Op::Bisect(b) => b.label(),
             Op::Patch(p) => p.label(),
+            Op::Repo(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
         }
     }
@@ -395,6 +400,7 @@ impl Op {
             Op::CreatePullRequest { .. } => Refresh::None,
             Op::Part(p) => p.refresh(),
             Op::Patch(p) => p.refresh(),
+            Op::Repo(_) => Refresh::Status,
             _ => Refresh::All,
         }
     }
@@ -517,6 +523,7 @@ impl Op {
             Op::GitFlow(f) => f.run(git),
             Op::Bisect(b) => b.run(git),
             Op::Patch(p) => p.run(git),
+            Op::Repo(r) => r.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
         }
     }
