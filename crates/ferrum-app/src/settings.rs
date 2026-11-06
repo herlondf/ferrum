@@ -121,6 +121,9 @@ pub struct Settings {
     /// Fetch, pull and push options and the automatic fetch.
     #[serde(default)]
     pub sync: crate::sync::SyncSettings,
+    /// Commit details: active tab, file list mode, collapsed pane.
+    #[serde(default)]
+    pub details: crate::ui::details_model::DetailsSettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -181,6 +184,7 @@ impl Default for Settings {
             refs: Default::default(),
             submodules: Default::default(),
             sync: Default::default(),
+            details: Default::default(),
         }
     }
 }

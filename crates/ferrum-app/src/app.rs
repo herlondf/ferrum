@@ -54,7 +54,7 @@ pub struct FerrumApp {
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
 /// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
 /// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
-/// `diff:OPTS` (see `diff_prefs::dev_step`).
+/// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -118,6 +118,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "sidebar" => out.push(Command::DevStep(DevStep::Sidebar(arg.into()))),
             "local" => out.push(Command::DevStep(DevStep::Changes(arg.into()))),
             "diff" => out.push(Command::DevStep(DevStep::Diff(arg.into()))),
+            "details" => out.push(details::dev_step(arg)),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -1158,6 +1159,7 @@ impl eframe::App for FerrumApp {
             let tab = &mut self.tabs[self.active];
             if self.dialog.is_none() {
                 focus::handle(&ctx, tab);
+                details::shortcuts(&ctx, tab, &mut settings.details, &mut cmds);
             }
             egui::Panel::left("sidebar")
                 .resizable(true)
@@ -1172,10 +1174,13 @@ impl eframe::App for FerrumApp {
                     } else {
                         egui::Panel::bottom("details").default_size(300.0)
                     };
-                    let r = panel.resizable(true).show(ui, |ui| {
-                        details::show(ui, tab, &mut cmds);
-                    });
-                    tab.pane.details_rect = Some(r.response.rect);
+                    tab.pane.details_rect = None;
+                    if !settings.details.collapsed {
+                        let r = panel.resizable(true).show(ui, |ui| {
+                            details::show(ui, tab, &mut settings.details, &mut cmds);
+                        });
+                        tab.pane.details_rect = Some(r.response.rect);
+                    }
                     egui::CentralPanel::default_margins().show(ui, |ui| {
                         history::search_bar(ui, tab, settings, &mut cmds);
                         history::commit_list(ui, tab, settings, &mut cmds);
@@ -1202,6 +1207,7 @@ impl eframe::App for FerrumApp {
             if tab.rebase.is_some() {
                 rebase::show(&ctx, tab, &mut cmds);
             }
+            details::windows(&ctx, tab, &mut settings.details, &mut cmds);
             focus::paint(&ctx, tab);
         }
 

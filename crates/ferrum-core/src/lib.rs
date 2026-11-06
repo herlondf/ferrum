@@ -5,6 +5,7 @@
 //! and LFS behave exactly as in the terminal.
 
 pub mod avatar;
+pub mod browse;
 pub mod cli;
 pub mod config;
 pub mod conflict;

@@ -298,6 +298,13 @@ pub fn stash_menu(ui: &mut egui::Ui, tab: &RepoTab, s: &StashInfo, cmds: &mut Co
             cmds.push(Command::Dialog(apply_stash(s, false)));
             ui.close();
         }
+        if ui.button(t!("Compare with working copy")).clicked() {
+            cmds.push(crate::ui::details::compare_with_workdir(
+                s.id,
+                Some(s.refname()),
+            ));
+            ui.close();
+        }
         ui.separator();
         if ui.button(t!("Rename…")).clicked() {
             cmds.push(Command::Dialog(rename_stash(s)));

@@ -17,6 +17,7 @@ use crate::ui::changes_tools::{self, Tool};
 use crate::ui::commit_box;
 use crate::ui::dialogs::Dialog;
 use crate::ui::diff_view::{Action, DiffAction, DiffMode};
+use crate::ui::file_actions::{self, DiffSide};
 use crate::util::change_label;
 
 /// What the lists remember between frames.
@@ -59,6 +60,36 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds:
     keys(ui, tab, settings, cmds);
     tab.changes.ui.typing = ui.ctx().memory(|m| m.focused().is_some());
     drag_preview(ui.ctx());
+    if file_actions::external_diff_pressed(ui.ctx())
+        && let Some(cmd) = external_diff(tab)
+    {
+        cmds.push(cmd);
+    }
+}
+
+/// External diff of the selected change.
+fn external_diff(tab: &RepoTab) -> Option<Command> {
+    let (source, path) = tab.changes.selected.as_ref()?;
+    Some(external_diff_of(tab, *source, path))
+}
+
+/// External diff of a change: the index (or HEAD, when staged) against the file.
+fn external_diff_of(tab: &RepoTab, source: DiffSource, path: &str) -> Command {
+    let cfg = ferrum_core::diff::DiffConfig {
+        max_untracked_bytes: None,
+        ..Default::default()
+    };
+    let file = match tab.repo.file_diff_with(source, path, &cfg) {
+        Ok(Some(f)) => f,
+        Ok(None) => return Command::Error(t!("No changes to show.")),
+        Err(e) => return Command::Error(e.to_string()),
+    };
+    let right = if source == DiffSource::Staged {
+        DiffSide::Blob
+    } else {
+        DiffSide::WorkDir
+    };
+    file_actions::external_diff(&tab.repo, &file, DiffSide::Blob, right)
 }
 
 /// Enter toggles staging of the selected files.
@@ -872,6 +903,16 @@ fn file_menu(
     } else {
         DiffSource::Unstaged
     };
+    if !many {
+        ui.separator();
+        file_actions::workdir_menu(ui, tab.path(), &f.path, cmds);
+        let button = egui::Button::new(t!("External diff")).shortcut_text("Ctrl+D");
+        if ui.add(button).clicked() {
+            cmds.push(external_diff_of(tab, source, &f.path));
+            ui.close();
+        }
+        ui.separator();
+    }
     if ui.button(t!("Copy as patch")).clicked() {
         changes_tools::copy_patch(tab, cmds, patch_source, &paths);
         ui.close();
@@ -976,6 +1017,7 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     // Lines of the last commit cannot be unstaged one by one while amending.
     let line_staging =
         supports_line_staging(&file) && !(tab.changes.amend && source == DiffSource::Staged);
+    crate::ui::diff_view::offer_reveal(ui.ctx(), "changes-diff");
     let action = crate::ui::diff_extra::show_file(
         ui,
         "changes-diff",
@@ -987,6 +1029,10 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         Some(&mut tab.changes.selection),
     );
     let Some(action) = action else { return };
+    if let DiffAction::Reveal(line) = action {
+        cmds.push(file_actions::reveal_line(tab.path(), &file, line));
+        return;
+    }
     if action == DiffAction::LoadFull {
         crate::ui::diff_prefs::load_large(tab, &file.path);
         return;
@@ -1009,7 +1055,7 @@ fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 .then(|| partial_patch(&file, |hh, _| hh == h, a != Action::Stage))
                 .flatten(),
         ),
-        DiffAction::LoadFull => return,
+        DiffAction::LoadFull | DiffAction::Reveal(_) => return,
         DiffAction::Lines(a) => (
             a,
             partial_patch(

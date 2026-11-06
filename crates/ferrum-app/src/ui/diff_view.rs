@@ -53,6 +53,8 @@ pub enum DiffAction {
     Lines(Action),
     /// Load the diff of a large untracked file anyway.
     LoadFull,
+    /// Open the file in the editor at this line (see `offer_reveal`).
+    Reveal(u32),
 }
 
 // ----- State kept between frames -----
@@ -132,6 +134,18 @@ pub fn dev_open(ctx: &egui::Context, id: &str, find: Option<&str>) {
 
 pub fn large_open(ctx: &egui::Context, id: &str) -> bool {
     load_state(ctx, id).large
+}
+
+/// Lets the next `show` of diff `id` offer "Open in editor at line" in the
+/// context menu of a line; the caller handles `DiffAction::Reveal`.
+pub fn offer_reveal(ctx: &egui::Context, id: &str) {
+    ctx.data_mut(|d| d.insert_temp(Id::unique(("diff-offer-reveal", id)), true));
+}
+
+fn reveal_offered(ctx: &egui::Context, id: &str) -> bool {
+    let base = id.strip_suffix(LARGE_SUFFIX).unwrap_or(id);
+    ctx.data(|d| d.get_temp::<bool>(Id::unique(("diff-offer-reveal", base))))
+        .unwrap_or(false)
 }
 
 pub fn set_large(ctx: &egui::Context, id: &str, open: bool) {
@@ -841,6 +855,7 @@ fn body(
         .unwrap_or(1);
     let p = Paint::new(ui, prefs, max_no);
     let mut action = None;
+    let reveal = reveal_offered(ui.ctx(), inp.id);
 
     let avail = ui.available_rect_before_wrap();
     let map_w = if prefs.minimap { MINIMAP_W + 2.0 } else { 0.0 };
@@ -1150,13 +1165,33 @@ fn body(
                     },
                     prefs,
                 );
-                crate::ui::file_lines::diff_line_menu(
-                    &resp,
-                    inp.id,
-                    file,
-                    selection.as_deref(),
-                    (h_idx, l_idx),
-                );
+                // One menu for every line: open in the editor, copy, line history.
+                resp.context_menu(|ui| {
+                    if reveal {
+                        let no = if line.kind == LineKind::Removed {
+                            line.old_no
+                        } else {
+                            line.new_no
+                        };
+                        if let Some(no) = no
+                            && ui.button(t!("Open in editor at line {}", no)).clicked()
+                        {
+                            action = Some(DiffAction::Reveal(no));
+                            ui.close();
+                        }
+                    }
+                    if ui.button(t!("Copy line")).clicked() {
+                        ui.ctx().copy_text(line.text.clone());
+                        ui.close();
+                    }
+                    crate::ui::file_lines::diff_line_menu(
+                        ui,
+                        inp.id,
+                        file,
+                        selection.as_deref(),
+                        (h_idx, l_idx),
+                    );
+                });
                 if resp.clicked()
                     && selectable
                     && let Some(sel) = selection.as_deref_mut()

@@ -453,6 +453,18 @@ fn selection_bar(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: 
         }
         let all: Vec<String> = st.selection.iter().cloned().collect();
         crate::ui::sync_ui::selection_buttons(ui, tab, &all, cmds);
+        if let [a, b] = all.as_slice() {
+            let (a, b) = (a.clone(), b.clone());
+            if ui
+                .small_button(t!("Compare"))
+                .on_hover_text(t!("Show the changes between {} and {}", a, b))
+                .clicked()
+            {
+                cmds.push(history_options::cmd(move |t, _| {
+                    crate::ui::compare::open_refs(t, &a, &b)
+                }));
+            }
+        }
         if ui.small_button(t!("Clear")).clicked() {
             st.selection.clear();
         }

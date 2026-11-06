@@ -8,6 +8,8 @@ mod command;
 mod commit_prefs;
 mod desktop_notify;
 #[cfg(test)]
+mod details_tests;
+#[cfg(test)]
 mod diff_tests;
 mod external;
 #[cfg(test)]

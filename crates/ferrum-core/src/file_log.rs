@@ -104,7 +104,7 @@ impl Repo {
     }
 
     /// Content of `path` at commit `rev`, or `None` if it is not there.
-    pub fn file_at(&self, rev: Oid, path: &str) -> Result<Option<Vec<u8>>> {
+    pub fn file_in_commit(&self, rev: Oid, path: &str) -> Result<Option<Vec<u8>>> {
         let tree = self.raw().find_commit(rev)?.tree()?;
         let Ok(entry) = tree.get_path(Path::new(path)) else {
             return Ok(None);
@@ -474,10 +474,10 @@ mod tests {
         assert_eq!(d.old_path.as_deref(), Some("a.txt"));
         assert_eq!(d.additions, 1);
         assert_eq!(
-            repo.file_at(v1, "a.txt").unwrap().unwrap(),
+            repo.file_in_commit(v1, "a.txt").unwrap().unwrap(),
             b"1\n2\n3\n4\n5\n6\n"
         );
-        assert!(repo.file_at(v1, "b.txt").unwrap().is_none());
+        assert!(repo.file_in_commit(v1, "b.txt").unwrap().is_none());
         let tracked = repo.tracked_files().unwrap();
         assert_eq!(tracked, ["b.txt"]);
     }

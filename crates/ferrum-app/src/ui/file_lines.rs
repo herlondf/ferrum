@@ -227,8 +227,9 @@ fn diff_range(
 }
 
 /// Adds "History of this line" to the context menu of a diff line.
+/// Adds "History of this line" to a diff line's context menu.
 pub fn diff_line_menu(
-    resp: &egui::Response,
+    ui: &mut egui::Ui,
     view: &str,
     file: &FileDiff,
     selection: Option<&LineSelection>,
@@ -238,24 +239,22 @@ pub fn diff_line_menu(
     if view.starts_with("line-history-diff") {
         return;
     }
-    resp.context_menu(|ui| {
-        // Working copy lines are counted in the committed version (the old side).
-        let working = view.starts_with("changes-diff");
-        let range = diff_range(file, selection, at, working);
-        let text = match range {
-            Some((a, b, _)) if a != b => t!("History of lines {}–{}", a, b),
-            _ => t!("History of this line"),
-        };
-        let resp = ui
-            .add_enabled(range.is_some(), egui::Button::new(text))
-            .on_disabled_hover_text(t!("These lines are not committed yet."));
-        if resp.clicked()
-            && let Some((start, end, old_side)) = range
-        {
-            request(ui.ctx(), view, &file.path, (start, end), old_side);
-            ui.close();
-        }
-    });
+    // Working copy lines are counted in the committed version (the old side).
+    let working = view.starts_with("changes-diff");
+    let range = diff_range(file, selection, at, working);
+    let text = match range {
+        Some((a, b, _)) if a != b => t!("History of lines {}–{}", a, b),
+        _ => t!("History of this line"),
+    };
+    let resp = ui
+        .add_enabled(range.is_some(), egui::Button::new(text))
+        .on_disabled_hover_text(t!("These lines are not committed yet."));
+    if resp.clicked()
+        && let Some((start, end, old_side)) = range
+    {
+        request(ui.ctx(), view, &file.path, (start, end), old_side);
+        ui.close();
+    }
 }
 
 /// Asks for the history of lines `start..=end` of `path` shown in the diff

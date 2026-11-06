@@ -717,7 +717,7 @@ fn external_diff(repo: &Repo, key: &DiffKey) -> Result<Launch, String> {
     let write = |id: Option<Oid>, path: &str| -> Result<std::path::PathBuf, String> {
         let data = match id {
             Some(id) => repo
-                .file_at(id, path)
+                .file_in_commit(id, path)
                 .map_err(|e| e.to_string())?
                 .unwrap_or_default(),
             None => Vec::new(),
