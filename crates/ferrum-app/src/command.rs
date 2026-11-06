@@ -50,12 +50,19 @@ pub enum Command {
     },
     Init(PathBuf),
     Error(String),
-    Info(String),
     Copy(String),
     OpenUrl(String),
     ShowSettings,
     ShowPalette,
     FocusSearch,
+    /// Development aid from `FERRUM_START` (see `startup_commands` in app.rs).
+    DevStep(DevStep),
+}
+
+pub enum DevStep {
+    Search(String),
+    Select(ferrum_core::DiffSource, String),
+    Theme(crate::settings::ThemeChoice),
 }
 
 /// Collects commands while the UI is drawn.

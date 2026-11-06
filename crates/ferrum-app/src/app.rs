@@ -7,7 +7,7 @@ use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
 use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
-use crate::command::{Command, Commands, Op};
+use crate::command::{Command, Commands, DevStep, Op};
 use crate::jobs::{Job, JobOutput, Refresh};
 use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
 use crate::tab::{Message, RepoTab, View};
@@ -66,9 +66,13 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 out.push(Command::PlanRebase(base));
             }
             "settings" => out.push(Command::ShowSettings),
-            "theme" => out.push(Command::Info(format!("theme:{arg}"))),
+            "theme" => out.push(Command::DevStep(DevStep::Theme(match arg {
+                "light" => ThemeChoice::Light,
+                "dark" => ThemeChoice::Dark,
+                _ => ThemeChoice::System,
+            }))),
             "palette" => out.push(Command::ShowPalette),
-            "search" => out.push(Command::Info(format!("search:{arg}"))),
+            "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -76,14 +80,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                     } else {
                         ferrum_core::DiffSource::Unstaged
                     };
-                    out.push(Command::Info(format!(
-                        "select:{}:{path}",
-                        if source == ferrum_core::DiffSource::Staged {
-                            "s"
-                        } else {
-                            "u"
-                        }
-                    )));
+                    out.push(Command::DevStep(DevStep::Select(source, path.into())));
                 }
             }
             "dialog" => {
@@ -531,31 +528,21 @@ impl FerrumApp {
                 Err(e) => self.error(e.to_string()),
             },
             Command::Error(e) => self.error(e),
-            Command::Info(i) if i.starts_with("search:") || i.starts_with("select:") => {
-                if let Some(t) = self.tab() {
-                    if let Some(q) = i.strip_prefix("search:") {
-                        t.history.search = q.to_owned();
+            Command::DevStep(step) => match step {
+                DevStep::Theme(theme) => self.settings.theme = theme,
+                DevStep::Search(q) => {
+                    if let Some(t) = self.tab() {
+                        t.history.search = q;
                         t.apply_search();
-                    } else if let Some(rest) = i.strip_prefix("select:") {
-                        let (list, path) = rest.split_once(':').unwrap_or(("u", rest));
-                        let source = if list == "s" {
-                            ferrum_core::DiffSource::Staged
-                        } else {
-                            ferrum_core::DiffSource::Unstaged
-                        };
-                        t.view = View::Changes;
-                        t.select_change(source, path.to_owned());
                     }
                 }
-            }
-            Command::Info(i) if i.starts_with("theme:") => {
-                self.settings.theme = match &i["theme:".len()..] {
-                    "light" => ThemeChoice::Light,
-                    "dark" => ThemeChoice::Dark,
-                    _ => ThemeChoice::System,
-                };
-            }
-            Command::Info(i) => self.info(i),
+                DevStep::Select(source, path) => {
+                    if let Some(t) = self.tab() {
+                        t.view = View::Changes;
+                        t.select_change(source, path);
+                    }
+                }
+            },
             Command::Copy(text) => {
                 ctx.copy_text(text);
                 self.info("Copied to the clipboard");
