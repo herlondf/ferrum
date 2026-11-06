@@ -1,74 +1,147 @@
-use std::collections::HashMap;
+//! The main window: toolbar, tabs, sidebar, the current view and dialogs.
+
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, pos2, vec2};
-use eframe::epaint::CubicBezierShape;
-use ferrum_core::graph::{self, Graph, GraphRow, Half};
-use ferrum_core::{BranchInfo, BranchKind, CommitInfo, Oid, RefKind, RefLabel, Repo};
+use eframe::egui::{self, Key, KeyboardShortcut, Modifiers, RichText};
+use ferrum_core::forge;
+use ferrum_core::{RepoState, ops};
 
-const COMMIT_LIMIT: usize = 5_000;
-
-/// One open repository (one tab).
-struct RepoTab {
-    repo: Repo,
-    head: Option<String>,
-    branches: Vec<BranchInfo>,
-    tags: Vec<String>,
-    commits: Vec<CommitInfo>,
-    graph: Graph,
-    labels: HashMap<Oid, Vec<RefLabel>>,
-    selected: Option<usize>,
-}
-
-impl RepoTab {
-    fn open(path: PathBuf) -> Result<Self, String> {
-        let repo = Repo::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut tab = Self {
-            repo,
-            head: None,
-            branches: Vec::new(),
-            tags: Vec::new(),
-            commits: Vec::new(),
-            graph: Graph::default(),
-            labels: HashMap::new(),
-            selected: None,
-        };
-        tab.refresh()?;
-        Ok(tab)
-    }
-
-    fn refresh(&mut self) -> Result<(), String> {
-        let err = |e: ferrum_core::Error| e.to_string();
-        self.head = self.repo.head_branch();
-        self.branches = self.repo.branches().map_err(err)?;
-        self.tags = self.repo.tags().map_err(err)?;
-        self.commits = self.repo.commits(COMMIT_LIMIT).map_err(err)?;
-        self.graph = graph::layout(&self.commits);
-        self.labels = self.repo.ref_labels().map_err(err)?;
-        self.selected = self.selected.filter(|&i| i < self.commits.len());
-        Ok(())
-    }
-}
+use crate::command::{Command, Commands, Op};
+use crate::jobs::{Job, JobOutput, Refresh};
+use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
+use crate::tab::{Message, RepoTab, View};
+use crate::ui::dialogs::{self, Dialog};
+use crate::ui::{
+    blame, changes, conflicts, details, forge as forge_ui, history, palette, rebase,
+    settings as settings_ui, sidebar,
+};
 
 pub struct FerrumApp {
     tabs: Vec<RepoTab>,
     active: usize,
-    error: Option<String>,
+    settings: Settings,
+    dialog: Option<Dialog>,
+    settings_window: settings_ui::SettingsWindow,
+    palette: palette::Palette,
+    /// Jobs that do not belong to a tab (clone, init, account checks).
+    global_job: Option<Job>,
+    message: Option<Message>,
+    applied: Option<(ThemeChoice, f32)>,
+    was_focused: bool,
     /// Dev aid: with `FERRUM_SCREENSHOT=out.ppm`, save the window after a few frames and quit.
     screenshot: Option<(PathBuf, u32)>,
+    /// Dev aid: commands from `FERRUM_START`, run on the first frame.
+    startup: Vec<Command>,
+}
+
+/// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
+/// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
+/// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
+/// commits), `settings`, `palette`, `dialog:branch|push|stash|clone`,
+/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
+fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
+    let tab = tabs.first();
+    let mut out = Vec::new();
+    for step in spec.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+        let (cmd, arg) = step.split_once(':').unwrap_or((step, ""));
+        match cmd {
+            "changes" => out.push(Command::SetView(View::Changes)),
+            "history" => out.push(Command::SetView(View::History)),
+            "prs" => out.push(Command::SetView(View::PullRequests)),
+            "commit" => {
+                if let Some(c) = tab.and_then(|t| t.commits.get(arg.parse::<usize>().unwrap_or(0)))
+                {
+                    out.push(Command::SelectCommit(c.id));
+                }
+            }
+            "file" => out.push(Command::FileHistory(arg.into())),
+            "blame" => out.push(Command::Blame(arg.into())),
+            "conflict" => out.push(Command::ResolveConflict(arg.into())),
+            "rebase" => {
+                let n = arg.parse::<usize>().unwrap_or(3);
+                let base = tab.and_then(|t| t.repo.resolve(&format!("HEAD~{n}")).ok());
+                out.push(Command::PlanRebase(base));
+            }
+            "settings" => out.push(Command::ShowSettings),
+            "palette" => out.push(Command::ShowPalette),
+            "search" => out.push(Command::Info(format!("search:{arg}"))),
+            "select" => {
+                if let Some((list, path)) = arg.split_once(':') {
+                    let source = if list == "staged" {
+                        ferrum_core::DiffSource::Staged
+                    } else {
+                        ferrum_core::DiffSource::Unstaged
+                    };
+                    out.push(Command::Info(format!(
+                        "select:{}:{path}",
+                        if source == ferrum_core::DiffSource::Staged {
+                            "s"
+                        } else {
+                            "u"
+                        }
+                    )));
+                }
+            }
+            "dialog" => {
+                let Some(t) = tab else { continue };
+                let head = t.head.clone().unwrap_or_else(|| "HEAD".into());
+                let d = match arg {
+                    "branch" => Dialog::create_branch(&head, &head),
+                    "push" => Dialog::push(t, &head),
+                    "stash" => Dialog::stash(),
+                    "clone" => Dialog::Clone {
+                        url: String::new(),
+                        parent: String::new(),
+                        name: String::new(),
+                    },
+                    "identity" => Dialog::identity(&t.identity),
+                    "pr" => Dialog::Forge(forge_ui::new_pull_request(t, &head)),
+                    _ => continue,
+                };
+                out.push(Command::Dialog(d));
+            }
+            _ => eprintln!("FERRUM_START: unknown step {step}"),
+        }
+    }
+    out
 }
 
 impl FerrumApp {
-    pub fn new(paths: Vec<PathBuf>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, paths: Vec<PathBuf>) -> Self {
+        let settings: Settings = cc
+            .storage
+            .and_then(|s| eframe::get_value(s, STORAGE_KEY))
+            .unwrap_or_default();
         let screenshot = std::env::var_os("FERRUM_SCREENSHOT").map(|p| (PathBuf::from(p), 0));
         let mut app = Self {
             tabs: Vec::new(),
             active: 0,
-            error: None,
+            settings,
+            dialog: None,
+            settings_window: Default::default(),
+            palette: Default::default(),
+            global_job: None,
+            message: None,
+            applied: None,
+            was_focused: true,
             screenshot,
+            startup: Vec::new(),
         };
-        for path in paths {
-            app.open(path);
+        // Repositories given on the command line replace the saved session.
+        let (to_open, active) = if paths.is_empty() {
+            (app.settings.open_repos.clone(), app.settings.active_repo)
+        } else {
+            (paths, usize::MAX)
+        };
+        for p in to_open {
+            if p.exists() {
+                app.open(p);
+            }
+        }
+        app.active = active.min(app.tabs.len().saturating_sub(1));
+        if let Ok(spec) = std::env::var("FERRUM_START") {
+            app.startup = startup_commands(&spec, &app.tabs);
         }
         app
     }
@@ -76,20 +149,62 @@ impl FerrumApp {
     fn open(&mut self, path: PathBuf) {
         match RepoTab::open(path) {
             Ok(tab) => {
-                // Reuse the tab if this repository is already open.
-                if let Some(i) = self
-                    .tabs
-                    .iter()
-                    .position(|t| t.repo.path() == tab.repo.path())
-                {
+                self.settings.add_recent(tab.path().to_path_buf());
+                if let Some(i) = self.tabs.iter().position(|t| t.path() == tab.path()) {
                     self.active = i;
                 } else {
                     self.tabs.push(tab);
                     self.active = self.tabs.len() - 1;
                 }
             }
-            Err(e) => self.error = Some(e),
+            Err(e) => self.error(e),
         }
+    }
+
+    fn tab(&mut self) -> Option<&mut RepoTab> {
+        self.tabs.get_mut(self.active)
+    }
+
+    fn error(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        match self.tabs.get_mut(self.active) {
+            Some(t) => t.error(text),
+            None => {
+                self.message = Some(Message {
+                    text,
+                    error: true,
+                    at: Instant::now(),
+                })
+            }
+        }
+    }
+
+    fn info(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        match self.tabs.get_mut(self.active) {
+            Some(t) => t.info(text),
+            None => {
+                self.message = Some(Message {
+                    text,
+                    error: false,
+                    at: Instant::now(),
+                })
+            }
+        }
+    }
+
+    fn apply_look(&mut self, ctx: &egui::Context) {
+        let want = (self.settings.theme, self.settings.zoom.clamp(0.6, 2.0));
+        if self.applied == Some(want) {
+            return;
+        }
+        ctx.set_theme(match want.0 {
+            ThemeChoice::System => egui::ThemePreference::System,
+            ThemeChoice::Light => egui::ThemePreference::Light,
+            ThemeChoice::Dark => egui::ThemePreference::Dark,
+        });
+        ctx.set_zoom_factor(want.1);
+        self.applied = Some(want);
     }
 
     fn maybe_screenshot(&mut self, ctx: &egui::Context) {
@@ -111,438 +226,851 @@ impl FerrumApp {
         }
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("📂 Open").clicked()
-                && let Some(path) = rfd::FileDialog::new().pick_folder()
-            {
-                self.open(path);
+    // ----- Jobs -----
+
+    fn poll_jobs(&mut self, ctx: &egui::Context) {
+        let mut outputs = Vec::new();
+        for (i, tab) in self.tabs.iter_mut().enumerate() {
+            if let Some(out) = tab.poll_job(ctx) {
+                outputs.push((Some(i), out));
             }
-            let has_tab = !self.tabs.is_empty();
-            if ui
-                .add_enabled(has_tab, egui::Button::new("⟳ Refresh"))
-                .clicked()
-                && let Err(e) = self.tabs[self.active].refresh()
-            {
-                self.error = Some(e);
+        }
+        if let Some(job) = &self.global_job
+            && let Some(result) = job.poll()
+        {
+            let label = job.label.clone();
+            self.global_job = None;
+            match result {
+                Ok(out) => outputs.push((None, out)),
+                Err(e) => self.error(format!("{label} failed: {e}")),
             }
-            // Planned actions, disabled until implemented.
-            for label in ["⬇ Fetch", "⤓ Pull", "⤒ Push", "⑂ Branch", "▤ Stash"] {
-                ui.add_enabled(false, egui::Button::new(label));
+        }
+        for (tab, out) in outputs {
+            self.handle_output(tab, out);
+        }
+    }
+
+    fn handle_output(&mut self, tab: Option<usize>, out: JobOutput) {
+        let t = tab.and_then(|i| self.tabs.get_mut(i));
+        match out {
+            JobOutput::Done => {}
+            JobOutput::SearchHits(hits) => {
+                if let Some(t) = t {
+                    let n = hits.len();
+                    t.history.content_hits = Some(hits);
+                    t.apply_search();
+                    t.info(format!("{n} commit{} found", if n == 1 { "" } else { "s" }));
+                }
             }
+            JobOutput::PullRequests(list) => {
+                if let Some(t) = t {
+                    t.prs.list = Some(list);
+                    t.prs.error = None;
+                }
+            }
+            JobOutput::PullRequestCreated(pr) => {
+                if let Some(t) = t {
+                    t.info(format!("Created #{} {}", pr.number, pr.title));
+                    t.prs.list = None;
+                }
+                self.load_pull_requests();
+            }
+            JobOutput::Account(acc) => {
+                let msg = format!("Logged in to {} as {}", acc.host, acc.username);
+                self.settings
+                    .accounts
+                    .retain(|a| !(a.kind == acc.kind && a.host.eq_ignore_ascii_case(&acc.host)));
+                self.settings.accounts.push(acc);
+                self.info(msg);
+                if self.tab().is_some_and(|t| t.view == View::PullRequests) {
+                    self.load_pull_requests();
+                }
+            }
+            JobOutput::OpenRepo(path) => self.open(path),
+        }
+    }
+
+    fn spawn_global(
+        &mut self,
+        label: &str,
+        ctx: &egui::Context,
+        work: impl FnOnce(&dyn Fn(&str)) -> crate::jobs::JobResult + Send + 'static,
+    ) {
+        if self.global_job.is_some() {
+            self.error("Another operation is still running.");
+            return;
+        }
+        self.global_job = Some(Job::spawn(label, Refresh::None, ctx, work));
+    }
+
+    fn load_pull_requests(&mut self) {
+        let ctx = self.ctx_handle();
+        let Some(tab) = self.tabs.get_mut(self.active) else {
+            return;
+        };
+        let Some(hosted) = tab.hosted.clone() else {
+            return;
+        };
+        let Some(token) = self.settings.token_for(hosted.kind, &hosted.host) else {
+            tab.prs.error = Some(format!(
+                "Log in to {} to see {}s.",
+                hosted.host,
+                hosted.kind.request_name()
+            ));
+            return;
+        };
+        tab.prs.error = None;
+        tab.spawn_job("Load pull requests", &ctx, move |_| {
+            forge::list_pull_requests(&hosted, &token)
+                .map(JobOutput::PullRequests)
+                .map_err(|e| e.to_string())
         });
     }
 
-    fn tab_bar(&mut self, ui: &mut egui::Ui) {
-        let mut close = None;
-        ui.horizontal(|ui| {
-            for (i, tab) in self.tabs.iter().enumerate() {
-                if ui
-                    .selectable_label(i == self.active, tab.repo.name())
-                    .clicked()
-                {
+    fn ctx_handle(&self) -> egui::Context {
+        CTX.with(|c| c.borrow().clone())
+            .expect("context is set every frame")
+    }
+
+    // ----- Commands -----
+
+    fn handle(&mut self, cmd: Command, ctx: &egui::Context) {
+        match cmd {
+            Command::Run(op) => match self.tabs.get_mut(self.active) {
+                Some(t) => t.run(op, ctx),
+                None => self.error("Open a repository first."),
+            },
+            Command::Undo => {
+                if let Some(t) = self.tab() {
+                    if t.undo.is_empty() {
+                        t.info("Nothing to undo.");
+                    } else {
+                        t.run_undo(ctx);
+                    }
+                }
+            }
+            Command::Refresh => {
+                if let Some(t) = self.tab() {
+                    t.refresh_all();
+                    t.info("Refreshed");
+                }
+            }
+            Command::OpenRepo(p) => self.open(p),
+            Command::OpenRepoDialog => {
+                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                    self.open(p);
+                }
+            }
+            Command::CloseTab(i) => {
+                if i < self.tabs.len() {
+                    self.tabs.remove(i);
+                    if self.active >= i && self.active > 0 {
+                        self.active -= 1;
+                    }
+                }
+            }
+            Command::SelectTab(i) => {
+                if i < self.tabs.len() {
                     self.active = i;
                 }
-                if ui.small_button("✕").clicked() {
-                    close = Some(i);
+            }
+            Command::Dialog(d) => self.dialog = Some(d),
+            Command::SetView(v) => {
+                let load_prs = if let Some(t) = self.tab() {
+                    t.view = v;
+                    if v == View::Changes && t.changes.selected.is_none() {
+                        let first = t
+                            .status
+                            .unstaged
+                            .first()
+                            .map(|f| (ferrum_core::DiffSource::Unstaged, f.path.clone()))
+                            .or_else(|| {
+                                t.status
+                                    .staged
+                                    .first()
+                                    .map(|f| (ferrum_core::DiffSource::Staged, f.path.clone()))
+                            });
+                        if let Some((s, p)) = first {
+                            t.select_change(s, p);
+                        }
+                    }
+                    v == View::PullRequests && t.prs.list.is_none()
+                } else {
+                    false
+                };
+                if load_prs {
+                    self.load_pull_requests();
+                }
+            }
+            Command::SelectCommit(id) => {
+                if let Some(t) = self.tab() {
+                    if t.index.contains_key(&id) {
+                        t.select_commit(id);
+                    } else {
+                        t.view = View::History;
+                        t.history.selected = Some(id);
+                        t.load_commit(id, false);
+                    }
+                }
+            }
+            Command::ShowCommit(id) => {
+                if let Some(t) = self.tab() {
+                    t.view = View::History;
+                    t.history.selected = None;
+                    let is_stash = t.stashes.iter().any(|s| s.id == id);
+                    t.load_commit(id, is_stash);
+                }
+            }
+            Command::FileHistory(path) => {
+                if let Some(t) = self.tab() {
+                    blame::open(t, path, false);
+                }
+            }
+            Command::Blame(path) => {
+                if let Some(t) = self.tab() {
+                    blame::open(t, path, true);
+                }
+            }
+            Command::ResolveConflict(path) => {
+                if let Some(t) = self.tab() {
+                    conflicts::open(t, path);
+                    t.view = View::Conflicts;
+                }
+            }
+            Command::PlanRebase(base) => {
+                if let Some(t) = self.tab() {
+                    match rebase::plan(t, base) {
+                        Ok(p) => t.rebase = Some(p),
+                        Err(e) => t.error(e),
+                    }
+                }
+            }
+            Command::LoadPullRequests => self.load_pull_requests(),
+            Command::CreatePullRequest(pr) => {
+                let token = self
+                    .tab()
+                    .and_then(|t| t.hosted.clone())
+                    .and_then(|h| Some((self.settings.token_for(h.kind, &h.host)?, h)));
+                match (token, self.tabs.get_mut(self.active)) {
+                    (Some((token, hosted)), Some(t)) => {
+                        t.spawn_job("Create pull request", ctx, move |_| {
+                            forge::create_pull_request(&hosted, &token, &pr)
+                                .map(JobOutput::PullRequestCreated)
+                                .map_err(|e| e.to_string())
+                        })
+                    }
+                    _ => self.error("Log in first (Settings → Accounts)."),
+                }
+            }
+            Command::VerifyAccount { kind, host, token } => {
+                self.spawn_global("Check token", ctx, move |_| {
+                    let username =
+                        forge::verify_token(kind, &host, &token).map_err(|e| e.to_string())?;
+                    Ok(JobOutput::Account(crate::settings::ForgeAccount {
+                        kind,
+                        host,
+                        username,
+                        token,
+                    }))
+                });
+            }
+            Command::Clone { url, parent, name } => {
+                self.spawn_global(&format!("Clone {name}"), ctx, move |progress| {
+                    ops::clone(&parent, &url, &name, |l| progress(l)).map_err(|e| e.to_string())?;
+                    Ok(JobOutput::OpenRepo(parent.join(&name)))
+                });
+            }
+            Command::Init(path) => match ops::init(&path) {
+                Ok(()) => self.open(path),
+                Err(e) => self.error(e.to_string()),
+            },
+            Command::Error(e) => self.error(e),
+            Command::Info(i) if i.starts_with("search:") || i.starts_with("select:") => {
+                if let Some(t) = self.tab() {
+                    if let Some(q) = i.strip_prefix("search:") {
+                        t.history.search = q.to_owned();
+                        t.apply_search();
+                    } else if let Some(rest) = i.strip_prefix("select:") {
+                        let (list, path) = rest.split_once(':').unwrap_or(("u", rest));
+                        let source = if list == "s" {
+                            ferrum_core::DiffSource::Staged
+                        } else {
+                            ferrum_core::DiffSource::Unstaged
+                        };
+                        t.view = View::Changes;
+                        t.select_change(source, path.to_owned());
+                    }
+                }
+            }
+            Command::Info(i) => self.info(i),
+            Command::Copy(text) => {
+                ctx.copy_text(text);
+                self.info("Copied to the clipboard");
+            }
+            Command::OpenUrl(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
+            Command::ShowSettings => self.settings_window.open = true,
+            Command::ShowPalette => self.palette.toggle(),
+            Command::FocusSearch => {
+                if let Some(t) = self.tab() {
+                    t.view = View::History;
+                    t.history.focus_search = true;
+                }
+            }
+        }
+    }
+
+    fn shortcuts(&mut self, ctx: &egui::Context, cmds: &mut Commands) {
+        let cmd = Modifiers::COMMAND;
+        let cs = Modifiers::COMMAND | Modifiers::SHIFT;
+        let pressed = |m: Modifiers, k: Key| {
+            ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k)))
+        };
+        if pressed(cmd, Key::P) || pressed(cs, Key::P) {
+            cmds.push(Command::ShowPalette);
+        }
+        if pressed(cmd, Key::O) {
+            cmds.push(Command::OpenRepoDialog);
+        }
+        if pressed(cmd, Key::Comma) {
+            cmds.push(Command::ShowSettings);
+        }
+        if self.tabs.is_empty() || self.dialog.is_some() {
+            return;
+        }
+        if pressed(Modifiers::NONE, Key::F5) || pressed(cmd, Key::R) {
+            cmds.push(Command::Refresh);
+        }
+        if pressed(cmd, Key::F) {
+            cmds.push(Command::FocusSearch);
+        }
+        if pressed(cmd, Key::Num1) {
+            cmds.push(Command::SetView(View::History));
+        }
+        if pressed(cmd, Key::Num2) {
+            cmds.push(Command::SetView(View::Changes));
+        }
+        if pressed(cmd, Key::B) {
+            let head = self.tabs[self.active]
+                .head
+                .clone()
+                .unwrap_or_else(|| "HEAD".into());
+            cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
+        }
+        if pressed(cs, Key::S) {
+            cmds.push(Command::Dialog(Dialog::stash()));
+        }
+        if pressed(cs, Key::F) {
+            cmds.run(Op::Fetch { remote: None });
+        }
+        if pressed(cs, Key::D) {
+            cmds.run(Op::Pull(self.settings.pull.mode()));
+        }
+        if pressed(cs, Key::U)
+            && let Some(b) = self.tabs[self.active].head.clone()
+        {
+            cmds.push(Command::Dialog(Dialog::push(&self.tabs[self.active], &b)));
+        }
+        if pressed(cmd, Key::W) {
+            cmds.push(Command::CloseTab(self.active));
+        }
+        if pressed(cmd, Key::Tab) {
+            cmds.push(Command::SelectTab((self.active + 1) % self.tabs.len()));
+        }
+        if pressed(cs, Key::Tab) {
+            cmds.push(Command::SelectTab(
+                (self.active + self.tabs.len() - 1) % self.tabs.len(),
+            ));
+        }
+        // Ctrl+Z belongs to text fields while one is focused.
+        let typing = ctx.memory(|m| m.focused().is_some());
+        if !typing && pressed(cmd, Key::Z) {
+            cmds.push(Command::Undo);
+        }
+    }
+
+    // ----- Layout -----
+
+    fn toolbar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        ui.horizontal(|ui| {
+            ui.menu_button("📂 Repository", |ui| {
+                if ui.button("Open…  (Ctrl+O)").clicked() {
+                    cmds.push(Command::OpenRepoDialog);
+                    ui.close();
+                }
+                if ui.button("Clone…").clicked() {
+                    cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
+                    ui.close();
+                }
+                if ui.button("New repository…").clicked() {
+                    cmds.push(Command::Dialog(Dialog::Init {
+                        path: String::new(),
+                    }));
+                    ui.close();
+                }
+                if !self.settings.recent.is_empty() {
+                    ui.separator();
+                    ui.weak("Recent");
+                    for p in self.settings.recent.clone() {
+                        if ui.button(p.display().to_string()).clicked() {
+                            cmds.push(Command::OpenRepo(p));
+                            ui.close();
+                        }
+                    }
+                }
+            });
+            let Some(tab) = self.tabs.get(self.active) else {
+                return;
+            };
+            ui.separator();
+            let busy = tab.busy();
+            let has_remote = !tab.remotes.is_empty();
+            ui.add_enabled_ui(!busy, |ui| {
+                if ui
+                    .add_enabled(has_remote, egui::Button::new("⬇ Fetch"))
+                    .on_hover_text("Fetch all remotes (Ctrl+Shift+F)")
+                    .clicked()
+                {
+                    cmds.run(Op::Fetch { remote: None });
+                }
+                let pull = ui.add_enabled(
+                    has_remote && tab.head.is_some(),
+                    egui::Button::new("⤓ Pull"),
+                );
+                if pull
+                    .on_hover_text(format!(
+                        "Pull — {} (Ctrl+Shift+D)\nRight-click for options",
+                        self.settings.pull.label()
+                    ))
+                    .clicked()
+                {
+                    cmds.run(Op::Pull(self.settings.pull.mode()));
+                }
+                if ui
+                    .add_enabled(
+                        has_remote && tab.head.is_some(),
+                        egui::Button::new("⤒ Push"),
+                    )
+                    .on_hover_text("Push (Ctrl+Shift+U)")
+                    .clicked()
+                    && let Some(b) = &tab.head
+                {
+                    cmds.push(Command::Dialog(Dialog::push(tab, b)));
+                }
+                ui.menu_button("⋯", |ui| {
+                    if ui.button("Pull with options…").clicked() {
+                        cmds.push(Command::Dialog(Dialog::Pull));
+                        ui.close();
+                    }
+                    if ui.button("Add remote…").clicked() {
+                        cmds.push(Command::Dialog(Dialog::AddRemote {
+                            name: String::new(),
+                            url: String::new(),
+                        }));
+                        ui.close();
+                    }
+                    if tab.uses_lfs {
+                        ui.separator();
+                        for a in ["fetch", "pull", "prune"] {
+                            if ui.button(format!("Git LFS {a}")).clicked() {
+                                cmds.run(Op::Lfs(a));
+                                ui.close();
+                            }
+                        }
+                    }
+                    if !tab.submodules.is_empty() && ui.button("Update submodules").clicked() {
+                        cmds.run(Op::SubmoduleUpdate);
+                        ui.close();
+                    }
+                });
+                ui.separator();
+                if ui
+                    .button("⑂ Branch")
+                    .on_hover_text("New branch (Ctrl+B)")
+                    .clicked()
+                {
+                    let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
+                    cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
+                }
+                if ui
+                    .add_enabled(!tab.status.is_empty(), egui::Button::new("▤ Stash"))
+                    .on_hover_text("Stash changes (Ctrl+Shift+S)")
+                    .clicked()
+                {
+                    cmds.push(Command::Dialog(Dialog::stash()));
+                }
+                if let Some(s) = tab.stashes.first()
+                    && ui
+                        .button("▤ Pop")
+                        .on_hover_text(format!("Apply and delete the latest stash: {}", s.message))
+                        .clicked()
+                {
+                    cmds.run(Op::StashApply {
+                        stash: s.clone(),
+                        pop: true,
+                    });
+                }
+                let undo = tab.undo.last().map(|u| u.label.clone());
+                let resp = ui.add_enabled(undo.is_some(), egui::Button::new("↶ Undo"));
+                if let Some(label) = undo {
+                    if resp
+                        .on_hover_text(format!("Undo: {label} (Ctrl+Z)"))
+                        .clicked()
+                    {
+                        cmds.push(Command::Undo);
+                    }
+                }
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("⚙").on_hover_text("Settings (Ctrl+,)").clicked() {
+                    cmds.push(Command::ShowSettings);
+                }
+                if ui
+                    .button("⌘")
+                    .on_hover_text("Command palette (Ctrl+P)")
+                    .clicked()
+                {
+                    cmds.push(Command::ShowPalette);
+                }
+            });
+        });
+    }
+
+    fn tab_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        ui.horizontal_wrapped(|ui| {
+            for (i, tab) in self.tabs.iter().enumerate() {
+                let mut label = tab.name.clone();
+                if let Some(b) = &tab.head {
+                    label.push_str(&format!("  ⑂ {b}"));
+                }
+                if tab.busy() {
+                    label.push_str(" ⏳");
+                }
+                let resp = ui
+                    .selectable_label(i == self.active, label)
+                    .on_hover_text(tab.path().display().to_string());
+                if resp.clicked() {
+                    cmds.push(Command::SelectTab(i));
+                }
+                if resp.middle_clicked()
+                    || ui
+                        .small_button("✕")
+                        .on_hover_text("Close (Ctrl+W)")
+                        .clicked()
+                {
+                    cmds.push(Command::CloseTab(i));
                 }
                 ui.separator();
             }
         });
-        if let Some(i) = close {
-            self.tabs.remove(i);
-            self.active = self.active.min(self.tabs.len().saturating_sub(1));
-        }
     }
-}
 
-fn sidebar(ui: &mut egui::Ui, tab: &RepoTab) {
-    egui::ScrollArea::vertical().show(ui, |ui| {
-        let section = |ui: &mut egui::Ui, title: &str, kind: BranchKind| {
-            egui::CollapsingHeader::new(title)
-                .default_open(true)
-                .show(ui, |ui| {
-                    for b in tab.branches.iter().filter(|b| b.kind == kind) {
-                        let text = egui::RichText::new(&b.name);
-                        let text = if b.is_head { text.strong() } else { text };
-                        let tracking = b
-                            .upstream
-                            .as_deref()
-                            .map_or("no upstream".into(), |u| format!("tracks {u}"));
-                        ui.add(egui::Label::new(text).truncate())
-                            .on_hover_text(format!("{}\n{tracking}", b.name));
-                    }
+    fn status_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        ui.horizontal(|ui| {
+            let tab = self.tabs.get(self.active);
+            let job = tab
+                .and_then(|t| t.job.as_ref())
+                .or(self.global_job.as_ref());
+            if let Some(job) = job {
+                ui.spinner();
+                let progress = job.progress();
+                ui.label(if progress.is_empty() {
+                    job.label.clone()
+                } else {
+                    format!("{} — {progress}", job.label)
                 });
-        };
-        section(ui, "Branches", BranchKind::Local);
-        section(ui, "Remotes", BranchKind::Remote);
-        egui::CollapsingHeader::new("Tags").show(ui, |ui| {
-            for t in &tab.tags {
-                ui.add(egui::Label::new(t).truncate());
-            }
-        });
-    });
-}
-
-const ROW_HEIGHT: f32 = 24.0;
-const LANE_WIDTH: f32 = 14.0;
-/// Very wide graphs are clipped so the description stays readable.
-const MAX_GRAPH_LANES: usize = 16;
-const AUTHOR_WIDTH: f32 = 150.0;
-const DATE_WIDTH: f32 = 120.0;
-const HASH_WIDTH: f32 = 64.0;
-
-const LANE_COLORS: [Color32; 8] = [
-    Color32::from_rgb(0x3d, 0x8b, 0xfd),
-    Color32::from_rgb(0xe8, 0x5d, 0x75),
-    Color32::from_rgb(0x4c, 0xc3, 0x8a),
-    Color32::from_rgb(0xf5, 0xa6, 0x23),
-    Color32::from_rgb(0x9b, 0x6c, 0xf6),
-    Color32::from_rgb(0x2c, 0xc4, 0xd4),
-    Color32::from_rgb(0xe0, 0x6c, 0x3c),
-    Color32::from_rgb(0xb5, 0xc9, 0x3a),
-];
-
-fn lane_color(index: usize) -> Color32 {
-    LANE_COLORS[index % LANE_COLORS.len()]
-}
-
-/// Column positions shared by the header and every row.
-struct Columns {
-    graph: Rect,
-    description: Rect,
-    author: Rect,
-    date: Rect,
-    hash: Rect,
-}
-
-impl Columns {
-    fn new(row: Rect, graph_lanes: usize) -> Self {
-        let graph_w = graph_lanes.clamp(1, MAX_GRAPH_LANES) as f32 * LANE_WIDTH + 8.0;
-        let mut x = row.right();
-        let mut take = |w: f32| {
-            let r = Rect::from_x_y_ranges(x - w..=x, row.y_range());
-            x -= w;
-            r
-        };
-        let hash = take(HASH_WIDTH);
-        let date = take(DATE_WIDTH);
-        let author = take(AUTHOR_WIDTH);
-        let graph = Rect::from_x_y_ranges(row.left()..=row.left() + graph_w, row.y_range());
-        let description = Rect::from_x_y_ranges(graph.right()..=author.left() - 8.0, row.y_range());
-        Self {
-            graph,
-            description,
-            author,
-            date,
-            hash,
-        }
-    }
-}
-
-fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab) {
-    let lanes = tab.graph.width;
-
-    // Header.
-    let (header, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
-    let cols = Columns::new(header, lanes);
-    let font = FontId::proportional(12.0);
-    let weak = ui.visuals().weak_text_color();
-    let painter = ui.painter();
-    for (rect, title) in [
-        (cols.graph, "Graph"),
-        (cols.description, "Description"),
-        (cols.author, "Author"),
-        (cols.date, "Date"),
-        (cols.hash, "Commit"),
-    ] {
-        painter.text(
-            rect.left_center() + vec2(4.0, 0.0),
-            Align2::LEFT_CENTER,
-            title,
-            font.clone(),
-            weak,
-        );
-    }
-    ui.separator();
-
-    egui::ScrollArea::vertical().auto_shrink(false).show_rows(
-        ui,
-        ROW_HEIGHT,
-        tab.commits.len(),
-        |ui, range| {
-            ui.spacing_mut().item_spacing.y = 0.0;
-            for i in range {
-                let (rect, resp) =
-                    ui.allocate_exact_size(vec2(ui.available_width(), ROW_HEIGHT), Sense::click());
-                if resp.clicked() {
-                    tab.selected = Some(i);
+                if let Some(t) = tab
+                    && !t.queue.is_empty()
+                {
+                    ui.weak(format!("(+{} queued)", t.queue.len()));
                 }
-                let selected = tab.selected == Some(i);
-                commit_row(ui, rect, tab, i, selected, resp.hovered());
+            } else {
+                let msg = tab
+                    .and_then(|t| t.message.as_ref())
+                    .or(self.message.as_ref());
+                if let Some(m) = msg {
+                    let fresh = m.at.elapsed() < Duration::from_secs(10);
+                    if m.error {
+                        let first = m.text.lines().next().unwrap_or_default();
+                        let resp =
+                            ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {first}"));
+                        if m.text.lines().count() > 1 {
+                            resp.on_hover_text(&m.text);
+                        }
+                        if ui.small_button("Copy").clicked() {
+                            cmds.push(Command::Copy(m.text.clone()));
+                        }
+                    } else if fresh {
+                        ui.label(&m.text);
+                    }
+                }
             }
-        },
-    );
-}
-
-fn commit_row(ui: &egui::Ui, rect: Rect, tab: &RepoTab, i: usize, selected: bool, hovered: bool) {
-    let painter = ui.painter();
-    let visuals = ui.visuals();
-    let commit = &tab.commits[i];
-    let row = &tab.graph.rows[i];
-    let labels = tab
-        .labels
-        .get(&commit.id)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    let is_head = labels.iter().any(|l| l.is_head);
-
-    if selected {
-        painter.rect_filled(rect, 0.0, visuals.selection.bg_fill);
-    } else if hovered {
-        painter.rect_filled(rect, 0.0, visuals.widgets.hovered.weak_bg_fill);
-    }
-
-    let cols = Columns::new(rect, tab.graph.width);
-    draw_graph(
-        &painter.with_clip_rect(cols.graph),
-        cols.graph,
-        row,
-        commit.parents.len() > 1,
-        is_head,
-    );
-
-    let font = FontId::proportional(13.0);
-    let text = if selected {
-        visuals.selection.stroke.color
-    } else {
-        visuals.text_color()
-    };
-    let weak = if selected {
-        text
-    } else {
-        visuals.weak_text_color()
-    };
-
-    // Description: ref labels, then the summary.
-    let desc = painter.with_clip_rect(cols.description);
-    let mut x = cols.description.left() + 4.0;
-    for label in labels {
-        x = draw_label(
-            &desc,
-            pos2(x, rect.center().y),
-            label,
-            lane_color(row.color),
-        ) + 4.0;
-    }
-    let summary_color = if is_head || !labels.is_empty() {
-        text
-    } else {
-        text.gamma_multiply(0.9)
-    };
-    desc.text(
-        pos2(x, rect.center().y),
-        Align2::LEFT_CENTER,
-        &commit.summary,
-        font.clone(),
-        summary_color,
-    );
-
-    for (col, value, color) in [
-        (cols.author, commit.author.as_str(), weak),
-        (
-            cols.date,
-            &format_time(commit.time, commit.offset_minutes),
-            weak,
-        ),
-    ] {
-        painter.with_clip_rect(col.shrink2(vec2(4.0, 0.0))).text(
-            col.left_center() + vec2(4.0, 0.0),
-            Align2::LEFT_CENTER,
-            value,
-            font.clone(),
-            color,
-        );
-    }
-    painter.text(
-        cols.hash.left_center() + vec2(4.0, 0.0),
-        Align2::LEFT_CENTER,
-        commit.short_id(),
-        FontId::monospace(12.0),
-        weak,
-    );
-}
-
-fn draw_graph(painter: &egui::Painter, rect: Rect, row: &GraphRow, is_merge: bool, is_head: bool) {
-    let x = |lane: usize| rect.left() + 4.0 + LANE_WIDTH * (lane as f32 + 0.5);
-    let (top, mid, bottom) = (rect.top(), rect.center().y, rect.bottom());
-
-    for line in &row.lines {
-        let (y0, y1) = match line.half {
-            Half::Top => (top, mid),
-            Half::Bottom => (mid, bottom),
-        };
-        let (p0, p1) = (pos2(x(line.from), y0), pos2(x(line.to), y1));
-        let stroke = Stroke::new(2.0, lane_color(line.color));
-        if line.from == line.to {
-            painter.line_segment([p0, p1], stroke);
-        } else {
-            let ym = (y0 + y1) / 2.0;
-            painter.add(CubicBezierShape::from_points_stroke(
-                [p0, pos2(p0.x, ym), pos2(p1.x, ym), p1],
-                false,
-                Color32::TRANSPARENT,
-                stroke,
-            ));
-        }
-    }
-
-    let center = pos2(x(row.lane), mid);
-    let color = lane_color(row.color);
-    if is_merge {
-        // Merge commits are drawn hollow.
-        painter.circle_filled(center, 4.5, painter.ctx().global_style().visuals.panel_fill);
-        painter.circle_stroke(center, 4.0, Stroke::new(2.0, color));
-    } else {
-        painter.circle_filled(center, 4.5, color);
-    }
-    if is_head {
-        painter.circle_stroke(center, 7.0, Stroke::new(1.5, color));
-    }
-}
-
-/// Draws a branch/tag badge starting at `pos` (left, vertical center) and returns its right edge.
-fn draw_label(painter: &egui::Painter, pos: Pos2, label: &RefLabel, lane: Color32) -> f32 {
-    let (fill, text) = match label.kind {
-        RefKind::Local => (lane, Color32::WHITE),
-        RefKind::Remote => (lane.gamma_multiply(0.45), Color32::WHITE),
-        RefKind::Tag => (Color32::from_rgb(0xd9, 0xb3, 0x4a), Color32::BLACK),
-    };
-    let icon = match label.kind {
-        RefKind::Tag => "🏷 ",
-        _ if label.is_head => "✔ ",
-        _ => "",
-    };
-    let galley = painter.layout_no_wrap(
-        format!("{icon}{}", label.name),
-        FontId::proportional(11.5),
-        text,
-    );
-    let size = galley.size() + vec2(10.0, 4.0);
-    let rect = Rect::from_min_size(pos2(pos.x, pos.y - size.y / 2.0), size);
-    painter.rect_filled(rect, 4.0, fill);
-    painter.galley(rect.min + vec2(5.0, 2.0), galley, text);
-    rect.right()
-}
-
-fn commit_details(ui: &mut egui::Ui, tab: &RepoTab) {
-    let Some(c) = tab.selected.and_then(|i| tab.commits.get(i)) else {
-        ui.weak("Select a commit to see its details.");
-        return;
-    };
-    egui::Grid::new("commit-details")
-        .num_columns(2)
-        .spacing([12.0, 4.0])
-        .show(ui, |ui| {
-            ui.strong("Commit");
-            ui.monospace(c.id.to_string());
-            ui.end_row();
-            ui.strong("Author");
-            ui.label(format!("{} <{}>", c.author, c.email));
-            ui.end_row();
-            ui.strong("Date");
-            ui.label(format_time(c.time, c.offset_minutes));
-            ui.end_row();
-            ui.strong("Parents");
-            ui.monospace(
-                c.parents
-                    .iter()
-                    .map(|p| p.to_string()[..7].to_owned())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-            );
-            ui.end_row();
+            let Some(tab) = tab else { return };
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let id = &tab.identity;
+                let who = match (&id.name, &id.email) {
+                    (Some(n), Some(e)) => format!("👤 {n} <{e}>"),
+                    _ => "👤 No identity".into(),
+                };
+                if ui
+                    .small_button(who)
+                    .on_hover_text("Author identity for this repository")
+                    .clicked()
+                {
+                    cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
+                }
+                if tab.uses_lfs {
+                    ui.weak("LFS");
+                }
+                if let Some(b) = tab.current_branch()
+                    && let Some((a, bh)) = b.ahead_behind
+                    && (a > 0 || bh > 0)
+                {
+                    ui.weak(format!("↑{a} ↓{bh}"));
+                }
+            });
         });
-    ui.separator();
-    ui.label(&c.summary);
+    }
+
+    fn banner(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        let Some(tab) = self.tabs.get(self.active) else {
+            return;
+        };
+        if tab.state == RepoState::Clean {
+            return;
+        }
+        let conflicts = tab.status.conflicted.len();
+        let fill = ui.visuals().warn_fg_color.gamma_multiply(0.25);
+        egui::Frame::new()
+            .fill(fill)
+            .inner_margin(6.0)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let mut text = format!("⚠ {}", tab.state.label());
+                    if conflicts > 0 {
+                        text.push_str(&format!(
+                            " — {conflicts} file{} with conflicts",
+                            if conflicts == 1 { "" } else { "s" }
+                        ));
+                    }
+                    ui.strong(text);
+                    ui.add_enabled_ui(!tab.busy(), |ui| {
+                        if conflicts > 0 && ui.button("Resolve conflicts").clicked() {
+                            cmds.push(Command::ResolveConflict(
+                                tab.status.conflicted[0].path.clone(),
+                            ));
+                        }
+                        let can_continue = conflicts == 0 && tab.state != RepoState::Bisect;
+                        if ui
+                            .add_enabled(can_continue, egui::Button::new("Continue"))
+                            .clicked()
+                        {
+                            cmds.run(Op::Continue(tab.state));
+                        }
+                        if matches!(
+                            tab.state,
+                            RepoState::Rebase | RepoState::CherryPick | RepoState::Revert
+                        ) && ui.button("Skip").clicked()
+                        {
+                            cmds.run(Op::Skip(tab.state));
+                        }
+                        if ui.button("Abort").clicked() {
+                            cmds.push(Command::Dialog(Dialog::confirm(
+                                "Abort",
+                                &format!(
+                                    "Abort the {}? Changes made by it will be thrown away.",
+                                    tab.state.label().to_lowercase()
+                                ),
+                                Op::Abort(tab.state),
+                                true,
+                            )));
+                        }
+                    });
+                });
+            });
+    }
+
+    fn welcome(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        ui.vertical_centered(|ui| {
+            ui.add_space(ui.available_height() / 5.0);
+            ui.heading(RichText::new("Ferrum").size(32.0));
+            ui.weak("A fast Git client");
+            ui.add_space(20.0);
+            ui.horizontal(|ui| {
+                ui.add_space((ui.available_width() - 360.0).max(0.0) / 2.0);
+                if ui
+                    .add(egui::Button::new("📂 Open…").min_size(egui::vec2(110.0, 32.0)))
+                    .clicked()
+                {
+                    cmds.push(Command::OpenRepoDialog);
+                }
+                if ui
+                    .add(egui::Button::new("⬇ Clone…").min_size(egui::vec2(110.0, 32.0)))
+                    .clicked()
+                {
+                    cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
+                }
+                if ui
+                    .add(egui::Button::new("✚ New…").min_size(egui::vec2(110.0, 32.0)))
+                    .clicked()
+                {
+                    cmds.push(Command::Dialog(Dialog::Init {
+                        path: String::new(),
+                    }));
+                }
+            });
+            if !self.settings.recent.is_empty() {
+                ui.add_space(24.0);
+                ui.strong("Recent repositories");
+                for p in self.settings.recent.clone() {
+                    if ui.link(p.display().to_string()).clicked() {
+                        cmds.push(Command::OpenRepo(p));
+                    }
+                }
+            }
+        });
+    }
 }
 
-/// Formats Unix seconds as `YYYY-MM-DD HH:MM` in the commit's own time zone, like `git log`.
-fn format_time(secs: i64, offset_minutes: i32) -> String {
-    let secs = secs + i64::from(offset_minutes) * 60;
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    // Civil-from-days algorithm (Howard Hinnant).
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    format!(
-        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
-        rem / 3600,
-        rem % 3600 / 60
-    )
+thread_local! {
+    /// The egui context, so helpers without a `ctx` parameter can start jobs.
+    static CTX: std::cell::RefCell<Option<egui::Context>> = const { std::cell::RefCell::new(None) };
 }
 
 impl eframe::App for FerrumApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.maybe_screenshot(ui.ctx());
+        let ctx = ui.ctx().clone();
+        CTX.with(|c| *c.borrow_mut() = Some(ctx.clone()));
+        self.maybe_screenshot(&ctx);
+        self.apply_look(&ctx);
+        self.poll_jobs(&ctx);
+
+        // Pick up changes made outside the app when the window regains focus.
+        let focused = ctx.input(|i| i.focused);
+        if focused
+            && !self.was_focused
+            && let Some(t) = self.tab()
+            && !t.busy()
+        {
+            t.refresh_all();
+        }
+        self.was_focused = focused;
+
+        let mut cmds = Commands::default();
+        for c in std::mem::take(&mut self.startup) {
+            cmds.push(c);
+        }
+        self.shortcuts(&ctx, &mut cmds);
+
+        let title = match self.tabs.get(self.active) {
+            Some(t) => format!(
+                "{} — {} — Ferrum",
+                t.name,
+                t.head.as_deref().unwrap_or("detached")
+            ),
+            None => "Ferrum".into(),
+        };
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
+
         egui::Panel::top("toolbar").show(ui, |ui| {
-            self.toolbar(ui);
+            ui.add_space(2.0);
+            self.toolbar(ui, &mut cmds);
             if !self.tabs.is_empty() {
                 ui.separator();
-                self.tab_bar(ui);
+                self.tab_bar(ui, &mut cmds);
             }
+            ui.add_space(2.0);
         });
+        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui, &mut cmds));
 
-        if let Some(err) = self.error.clone() {
-            egui::Panel::bottom("error").show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.colored_label(ui.visuals().error_fg_color, err);
-                    if ui.small_button("✕").clicked() {
-                        self.error = None;
-                    }
+        if self.tabs.is_empty() {
+            egui::CentralPanel::default_margins().show(ui, |ui| self.welcome(ui, &mut cmds));
+        } else {
+            let state_banner = self.tabs[self.active].state != RepoState::Clean;
+            if state_banner {
+                egui::Panel::top("banner").show(ui, |ui| self.banner(ui, &mut cmds));
+            }
+            let settings = &self.settings;
+            let tab = &mut self.tabs[self.active];
+            egui::Panel::left("sidebar")
+                .resizable(true)
+                .default_size(230.0)
+                .show(ui, |ui| {
+                    sidebar::show(ui, tab, &mut cmds);
                 });
-            });
+            match tab.view {
+                View::History => {
+                    egui::Panel::bottom("details")
+                        .resizable(true)
+                        .default_size(300.0)
+                        .show(ui, |ui| {
+                            details::show(ui, tab, &mut cmds);
+                        });
+                    egui::CentralPanel::default_margins().show(ui, |ui| {
+                        history::search_bar(ui, tab, &mut cmds);
+                        history::commit_list(ui, tab, &mut cmds);
+                    });
+                }
+                View::Changes => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| changes::show(ui, tab, &mut cmds));
+                }
+                View::Conflicts => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| conflicts::show(ui, tab, &mut cmds));
+                }
+                View::File => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| blame::show(ui, tab, &mut cmds));
+                }
+                View::PullRequests => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| forge_ui::show_view(ui, tab, settings, &mut cmds));
+                }
+            }
+            if tab.rebase.is_some() {
+                rebase::show(&ctx, tab, &mut cmds);
+            }
         }
 
-        let Some(tab) = self.tabs.get_mut(self.active) else {
-            egui::CentralPanel::default_margins().show(ui, |ui| {
-                ui.centered_and_justified(|ui| ui.heading("Open a repository to get started"));
-            });
-            return;
-        };
+        if let Some(mut d) = self.dialog.take() {
+            let keep = dialogs::show(
+                &ctx,
+                &mut d,
+                self.tabs.get(self.active),
+                &mut self.settings,
+                &mut cmds,
+            );
+            if keep && self.dialog.is_none() {
+                self.dialog = Some(d);
+            }
+        }
+        settings_ui::show(
+            &ctx,
+            &mut self.settings_window,
+            &mut self.settings,
+            &mut cmds,
+        );
+        let names: Vec<String> = self.tabs.iter().map(|t| t.name.clone()).collect();
+        palette::show(
+            &ctx,
+            &mut self.palette,
+            self.tabs.get(self.active),
+            &names,
+            &self.settings,
+            &mut cmds,
+        );
 
-        egui::Panel::left("sidebar")
-            .default_size(220.0)
-            .show(ui, |ui| {
-                ui.heading(tab.head.as_deref().unwrap_or("(detached)"));
-                ui.separator();
-                sidebar(ui, tab);
-            });
-        egui::Panel::bottom("details")
-            .resizable(true)
-            .default_size(180.0)
-            .show(ui, |ui| {
-                commit_details(ui, tab);
-            });
-        egui::CentralPanel::default_margins().show(ui, |ui| commit_list(ui, tab));
+        for c in cmds.take() {
+            self.handle(c, &ctx);
+        }
+        if self.tabs.iter().any(|t| t.job.is_some()) || self.global_job.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::format_time;
-
-    #[test]
-    fn formats_unix_time() {
-        assert_eq!(format_time(0, 0), "1970-01-01 00:00");
-        assert_eq!(format_time(1_700_000_000, 0), "2023-11-14 22:13");
-        assert_eq!(format_time(1_700_000_000, -180), "2023-11-14 19:13");
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        self.settings.open_repos = self.tabs.iter().map(|t| t.path().to_path_buf()).collect();
+        self.settings.active_repo = self.active;
+        eframe::set_value(storage, STORAGE_KEY, &self.settings);
     }
 }

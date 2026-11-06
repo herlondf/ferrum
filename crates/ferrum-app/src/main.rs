@@ -1,4 +1,10 @@
 mod app;
+mod command;
+mod jobs;
+mod settings;
+mod tab;
+mod ui;
+mod util;
 
 fn main() -> eframe::Result {
     let paths: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(Into::into).collect();
@@ -6,14 +12,15 @@ fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Ferrum")
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([800.0, 500.0]),
+            .with_app_id("ferrum")
+            .with_inner_size([1360.0, 860.0])
+            .with_min_inner_size([900.0, 560.0]),
         ..Default::default()
     };
 
     eframe::run_native(
         "Ferrum",
         options,
-        Box::new(move |_cc| Ok(Box::new(app::FerrumApp::new(paths)))),
+        Box::new(move |cc| Ok(Box::new(app::FerrumApp::new(cc, paths)))),
     )
 }
