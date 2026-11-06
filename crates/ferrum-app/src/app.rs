@@ -223,7 +223,12 @@ impl FerrumApp {
         };
         *frames += 1;
         ctx.request_repaint();
-        if *frames == 10 {
+        // FERRUM_SCREENSHOT_FRAMES lets slow background loads finish first.
+        let wanted = std::env::var("FERRUM_SCREENSHOT_FRAMES")
+            .ok()
+            .and_then(|f| f.parse().ok())
+            .unwrap_or(10);
+        if *frames == wanted {
             let (path, ctx2) = (path.clone(), ctx.clone());
             ctx.request_screenshot(move |img| {
                 let mut out = format!("P6\n{} {}\n255\n", img.size[0], img.size[1]).into_bytes();
