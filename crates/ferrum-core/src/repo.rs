@@ -84,6 +84,13 @@ impl Repo {
             }
             let target = branch.get().target();
             let upstream = branch.upstream().ok();
+            let missing_upstream = match (&upstream, kind) {
+                (None, git2::BranchType::Local) => self.configured_upstream(&name),
+                _ => None,
+            };
+            let time = target
+                .and_then(|t| self.inner.find_commit(t).ok())
+                .map_or(0, |c| c.time().seconds());
             let ahead_behind = match (target, upstream.as_ref().and_then(|u| u.get().target())) {
                 (Some(local), Some(remote)) => self.inner.graph_ahead_behind(local, remote).ok(),
                 _ => None,
@@ -98,6 +105,8 @@ impl Repo {
                 target,
                 upstream: upstream.and_then(|u| u.name_bytes().ok().map(lossy)),
                 ahead_behind,
+                missing_upstream,
+                time,
             });
         }
         out.sort_by(|a, b| a.name.cmp(&b.name));
@@ -111,15 +120,39 @@ impl Repo {
             let Ok(commit) = r.peel_to_commit() else {
                 continue;
             };
-            let annotated = r.peel_to_tag().is_ok();
+            let tag = r.peel_to_tag().ok();
+            let message = tag
+                .as_ref()
+                .and_then(|t| t.message_bytes().map(lossy))
+                .map(|m| m.trim().to_owned());
             tags.push(TagInfo {
                 name: lossy(r.shorthand_bytes()),
                 target: commit.id(),
-                annotated,
+                annotated: tag.is_some(),
+                message,
             });
         }
         tags.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(tags)
+    }
+
+    /// The upstream configured for a local branch (`remote/branch`), read
+    /// from `branch.<name>.remote` and `.merge`. Used when it cannot be resolved.
+    fn configured_upstream(&self, branch: &str) -> Option<String> {
+        let cfg = self.inner.config().ok()?;
+        let get = |key: &str| {
+            cfg.get_entry(&format!("branch.{branch}.{key}"))
+                .ok()
+                .map(|e| lossy(e.value_bytes()))
+        };
+        let merge = get("merge")?;
+        let remote = get("remote").unwrap_or_else(|| ".".into());
+        let short = merge.trim_start_matches("refs/heads/");
+        Some(if remote == "." {
+            short.to_owned()
+        } else {
+            format!("{remote}/{short}")
+        })
     }
 
     /// Branches and tags grouped by the commit they point at.
@@ -810,6 +843,44 @@ mod tests {
         assert_eq!((renamed.additions, renamed.deletions), (1, 0));
         let added = repo.commit_file_diff(head, "c.txt", None).unwrap().unwrap();
         assert_eq!(added.additions, 1);
+    }
+
+    #[test]
+    fn reports_missing_upstream_and_tag_messages() {
+        let t = TestRepo::new();
+        t.commit("a.txt", "a\n", "first");
+        let remote = tempfile::tempdir().unwrap();
+        let url = remote.path().to_string_lossy().into_owned();
+        crate::cli::Git::new(remote.path())
+            .run(&["init", "-q", "--bare"])
+            .unwrap();
+        t.git.run(&["remote", "add", "origin", &url]).unwrap();
+        t.git.run(&["push", "-q", "-u", "origin", "main"]).unwrap();
+        t.git.run(&["branch", "gone"]).unwrap();
+        t.git.run(&["push", "-q", "-u", "origin", "gone"]).unwrap();
+        t.git.run(&["branch", "plain"]).unwrap();
+        t.git
+            .run(&["push", "-q", "origin", "--delete", "gone"])
+            .unwrap();
+        t.git
+            .run(&["tag", "-a", "v1", "-m", "Release one"])
+            .unwrap();
+        t.git.run(&["tag", "light"]).unwrap();
+
+        let repo = t.repo();
+        let branches = repo.branches().unwrap();
+        let get = |n: &str| branches.iter().find(|b| b.name == n).unwrap();
+        assert_eq!(get("main").upstream.as_deref(), Some("origin/main"));
+        assert_eq!(get("main").missing_upstream, None);
+        assert_eq!(get("gone").upstream, None);
+        assert_eq!(get("gone").missing_upstream.as_deref(), Some("origin/gone"));
+        assert_eq!(get("plain").missing_upstream, None);
+        assert!(get("main").time > 0);
+
+        let tags = repo.tags().unwrap();
+        assert_eq!(tags[0].name, "light");
+        assert_eq!(tags[0].message, None);
+        assert_eq!(tags[1].message.as_deref(), Some("Release one"));
     }
 
     #[test]

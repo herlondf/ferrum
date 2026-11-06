@@ -190,6 +190,12 @@ pub fn set_upstream(git: &Git, branch: &str, upstream: &str) -> Result<()> {
     Ok(())
 }
 
+/// Removes the upstream (tracking) setting of a branch.
+pub fn unset_upstream(git: &Git, branch: &str) -> Result<()> {
+    git.run(&["branch", "--unset-upstream", branch])?;
+    Ok(())
+}
+
 /// Moves a branch that is not checked out to another commit.
 pub fn move_branch(git: &Git, branch: &str, target: &str) -> Result<()> {
     git.run(&["branch", "-f", branch, target])?;
