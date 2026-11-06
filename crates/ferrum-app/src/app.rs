@@ -29,6 +29,8 @@ pub struct FerrumApp {
     message: Option<Message>,
     applied: Option<(ThemeChoice, f32)>,
     was_focused: bool,
+    /// Last time local changes were checked in the background.
+    last_poll: Instant,
     /// Dev aid: with `FERRUM_SCREENSHOT=out.ppm`, save the window after a few frames and quit.
     screenshot: Option<(PathBuf, u32)>,
     /// Dev aid: commands from `FERRUM_START`, run on the first frame.
@@ -129,6 +131,7 @@ impl FerrumApp {
             message: None,
             applied: None,
             was_focused: true,
+            last_poll: Instant::now(),
             screenshot,
             startup: Vec::new(),
         };
@@ -219,6 +222,30 @@ impl FerrumApp {
         });
         ctx.set_zoom_factor(want.1);
         self.applied = Some(want);
+    }
+
+    /// Every few seconds, picks up edits made in other programs: local changes,
+    /// and everything when HEAD moved (e.g. a commit made in a terminal).
+    fn poll_changes(&mut self, ctx: &egui::Context) {
+        const INTERVAL: Duration = Duration::from_secs(3);
+        ctx.request_repaint_after(INTERVAL);
+        let minimized = ctx.input(|i| i.viewport().minimized.unwrap_or(false));
+        if self.last_poll.elapsed() < INTERVAL || minimized || self.dialog.is_some() {
+            return;
+        }
+        self.last_poll = Instant::now();
+        let Some(tab) = self.tabs.get_mut(self.active) else {
+            return;
+        };
+        if tab.busy() {
+            return;
+        }
+        let head_moved = tab.repo.head_oid() != tab.head_oid || tab.repo.head_branch() != tab.head;
+        if head_moved {
+            tab.refresh_all();
+        } else {
+            tab.refresh_status();
+        }
     }
 
     fn maybe_screenshot(&mut self, ctx: &egui::Context) {
@@ -979,6 +1006,7 @@ impl eframe::App for FerrumApp {
             t.refresh_all();
         }
         self.was_focused = focused;
+        self.poll_changes(&ctx);
 
         let mut cmds = Commands::default();
         for c in std::mem::take(&mut self.startup) {

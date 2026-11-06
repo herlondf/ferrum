@@ -316,3 +316,22 @@ fn interactive_rebase_reorder_from_window() {
     assert_eq!(git(p, &["log", "--format=%s", "-3"]), "C\nA\nB");
     assert!(h.state().tabs[0].rebase.is_none(), "the window closes");
 }
+
+#[test]
+fn picks_up_changes_made_outside_the_app() {
+    let dir = repo();
+    git(dir.path(), &["checkout", "-q", "--", "a.txt"]);
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    assert!(h.state().tabs[0].status.is_empty());
+    std::fs::write(dir.path().join("new.txt"), "from an editor\n").unwrap();
+    std::thread::sleep(Duration::from_millis(3200));
+    frames(&mut h);
+    assert_eq!(h.state().tabs[0].status.unstaged.len(), 1);
+    // A commit made in a terminal reloads the history too.
+    git(dir.path(), &["add", "-A"]);
+    git(dir.path(), &["commit", "-qm", "from terminal"]);
+    std::thread::sleep(Duration::from_millis(3200));
+    frames(&mut h);
+    assert_eq!(h.state().tabs[0].commits[0].summary, "from terminal");
+}
