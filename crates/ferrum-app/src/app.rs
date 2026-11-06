@@ -293,7 +293,7 @@ impl FerrumApp {
             self.global_job = None;
             match result {
                 Ok(out) => outputs.push((None, out)),
-                Err(e) => self.error(format!("{label} failed: {e}")),
+                Err(e) => self.error(t!("{} failed: {}", label, e)),
             }
         }
         for (tab, out) in outputs {
@@ -310,7 +310,11 @@ impl FerrumApp {
                     let n = hits.len();
                     t.history.content_hits = Some(hits);
                     t.apply_search();
-                    t.info(format!("{n} commit{} found", if n == 1 { "" } else { "s" }));
+                    t.info(if n == 1 {
+                        t!("1 commit found")
+                    } else {
+                        t!("{} commits found", n)
+                    });
                 }
             }
             JobOutput::PullRequests(list) => {
@@ -321,13 +325,13 @@ impl FerrumApp {
             }
             JobOutput::PullRequestCreated(pr) => {
                 if let Some(t) = t {
-                    t.info(format!("Created #{} {}", pr.number, pr.title));
+                    t.info(t!("Created #{} {}", pr.number, pr.title));
                     t.prs.list = None;
                 }
                 self.load_pull_requests();
             }
             JobOutput::Account(acc) => {
-                let msg = format!("Logged in to {} as {}", acc.host, acc.username);
+                let msg = t!("Logged in to {} as {}", acc.host, acc.username);
                 self.settings
                     .accounts
                     .retain(|a| !(a.kind == acc.kind && a.host.eq_ignore_ascii_case(&acc.host)));
@@ -348,7 +352,7 @@ impl FerrumApp {
         work: impl FnOnce(&dyn Fn(&str)) -> crate::jobs::JobResult + Send + 'static,
     ) {
         if self.global_job.is_some() {
-            self.error("Another operation is still running.");
+            self.error(t!("Another operation is still running."));
             return;
         }
         self.global_job = Some(Job::spawn(label, Refresh::None, ctx, work));
@@ -363,15 +367,12 @@ impl FerrumApp {
             return;
         };
         let Some(token) = self.settings.token_for(hosted.kind, &hosted.host) else {
-            tab.prs.error = Some(format!(
-                "Log in to {} to see {}s.",
-                hosted.host,
-                hosted.kind.request_name()
-            ));
+            let noun = hosted.kind.request_name();
+            tab.prs.error = Some(t!("Log in to {} to see {}s.", hosted.host, noun));
             return;
         };
         tab.prs.error = None;
-        tab.spawn_job("Load pull requests", &ctx, move |_| {
+        tab.spawn_job(&t!("Load pull requests"), &ctx, move |_| {
             forge::list_pull_requests(&hosted, &token)
                 .map(JobOutput::PullRequests)
                 .map_err(|e| e.to_string())
@@ -389,12 +390,12 @@ impl FerrumApp {
         match cmd {
             Command::Run(op) => match self.tabs.get_mut(self.active) {
                 Some(t) => t.run(op, ctx),
-                None => self.error("Open a repository first."),
+                None => self.error(t!("Open a repository first.")),
             },
             Command::Undo => {
                 if let Some(t) = self.tab() {
                     if t.undo.is_empty() {
-                        t.info("Nothing to undo.");
+                        t.info(t!("Nothing to undo."));
                     } else {
                         t.run_undo(ctx);
                     }
@@ -403,7 +404,7 @@ impl FerrumApp {
             Command::Refresh => {
                 if let Some(t) = self.tab() {
                     t.refresh_all();
-                    t.info("Refreshed");
+                    t.info(t!("Refreshed"));
                 }
             }
             Command::OpenRepo(p) => self.open(p),
@@ -507,11 +508,11 @@ impl FerrumApp {
                     (Some(hosted), Some(token), Some(t)) => {
                         t.run(Op::CreatePullRequest { hosted, token, pr }, ctx)
                     }
-                    _ => self.error("Log in first (Settings > Accounts)."),
+                    _ => self.error(t!("Log in first (Settings > Accounts).")),
                 }
             }
             Command::VerifyAccount { kind, host, token } => {
-                self.spawn_global("Check token", ctx, move |_| {
+                self.spawn_global(&t!("Check token"), ctx, move |_| {
                     let username =
                         forge::verify_token(kind, &host, &token).map_err(|e| e.to_string())?;
                     Ok(JobOutput::Account(crate::settings::ForgeAccount {
@@ -523,7 +524,7 @@ impl FerrumApp {
                 });
             }
             Command::Clone { url, parent, name } => {
-                self.spawn_global(&format!("Clone {name}"), ctx, move |progress| {
+                self.spawn_global(&t!("Clone {}", name), ctx, move |progress| {
                     ops::clone(&parent, &url, &name, |l| progress(l)).map_err(|e| e.to_string())?;
                     Ok(JobOutput::OpenRepo(parent.join(&name)))
                 });
@@ -550,7 +551,7 @@ impl FerrumApp {
             },
             Command::Copy(text) => {
                 ctx.copy_text(text);
-                self.info("Copied to the clipboard");
+                self.info(t!("Copied to the clipboard"));
             }
             Command::OpenUrl(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
             Command::ShowSettings => self.settings_window.open = true,
@@ -637,16 +638,16 @@ impl FerrumApp {
 
     fn toolbar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
         ui.horizontal(|ui| {
-            ui.menu_button("📂 Repository", |ui| {
-                if ui.button("Open…  (Ctrl+O)").clicked() {
+            ui.menu_button(t!("📂 Repository"), |ui| {
+                if ui.button(t!("Open…  (Ctrl+O)")).clicked() {
                     cmds.push(Command::OpenRepoDialog);
                     ui.close();
                 }
-                if ui.button("Clone…").clicked() {
+                if ui.button(t!("Clone…")).clicked() {
                     cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
                     ui.close();
                 }
-                if ui.button("New repository…").clicked() {
+                if ui.button(t!("New repository…")).clicked() {
                     cmds.push(Command::Dialog(Dialog::Init {
                         path: String::new(),
                     }));
@@ -654,7 +655,7 @@ impl FerrumApp {
                 }
                 if !self.settings.recent.is_empty() {
                     ui.separator();
-                    ui.weak("Recent");
+                    ui.weak(t!("Recent"));
                     for p in self.settings.recent.clone() {
                         if ui.button(p.display().to_string()).clicked() {
                             cmds.push(Command::OpenRepo(p));
@@ -672,7 +673,7 @@ impl FerrumApp {
             ui.add_enabled_ui(!busy, |ui| {
                 if ui
                     .add_enabled(has_remote, egui::Button::new("🔄 Fetch"))
-                    .on_hover_text("Fetch all remotes (Ctrl+Shift+F)")
+                    .on_hover_text(t!("Fetch all remotes (Ctrl+Shift+F)"))
                     .clicked()
                 {
                     cmds.run(Op::Fetch { remote: None });
@@ -681,13 +682,9 @@ impl FerrumApp {
                     has_remote && tab.head.is_some(),
                     egui::Button::new("⬇ Pull"),
                 );
-                if pull
-                    .on_hover_text(format!(
-                        "Pull — {} (Ctrl+Shift+D)\nRight-click for options",
-                        self.settings.pull.label()
-                    ))
-                    .clicked()
-                {
+                let mode = self.settings.pull.label();
+                let tip = t!("Pull — {} (Ctrl+Shift+D)\nRight-click for options", mode);
+                if pull.on_hover_text(tip).clicked() {
                     cmds.run(Op::Pull(self.settings.pull.mode()));
                 }
                 if ui
@@ -695,18 +692,18 @@ impl FerrumApp {
                         has_remote && tab.head.is_some(),
                         egui::Button::new("⬆ Push"),
                     )
-                    .on_hover_text("Push (Ctrl+Shift+U)")
+                    .on_hover_text(t!("Push (Ctrl+Shift+U)"))
                     .clicked()
                     && let Some(b) = &tab.head
                 {
                     cmds.push(Command::Dialog(Dialog::push(tab, b)));
                 }
                 ui.menu_button("☰", |ui| {
-                    if ui.button("Pull with options…").clicked() {
+                    if ui.button(t!("Pull with options…")).clicked() {
                         cmds.push(Command::Dialog(Dialog::Pull));
                         ui.close();
                     }
-                    if ui.button("Add remote…").clicked() {
+                    if ui.button(t!("Add remote…")).clicked() {
                         cmds.push(Command::Dialog(Dialog::AddRemote {
                             name: String::new(),
                             url: String::new(),
@@ -722,7 +719,7 @@ impl FerrumApp {
                             }
                         }
                     }
-                    if !tab.submodules.is_empty() && ui.button("Update submodules").clicked() {
+                    if !tab.submodules.is_empty() && ui.button(t!("Update submodules")).clicked() {
                         cmds.run(Op::SubmoduleUpdate);
                         ui.close();
                     }
@@ -730,7 +727,7 @@ impl FerrumApp {
                 ui.separator();
                 if ui
                     .button("🌿 Branch")
-                    .on_hover_text("New branch (Ctrl+B)")
+                    .on_hover_text(t!("New branch (Ctrl+B)"))
                     .clicked()
                 {
                     let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
@@ -738,15 +735,15 @@ impl FerrumApp {
                 }
                 if ui
                     .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
-                    .on_hover_text("Stash changes (Ctrl+Shift+S)")
+                    .on_hover_text(t!("Stash changes (Ctrl+Shift+S)"))
                     .clicked()
                 {
                     cmds.push(Command::Dialog(Dialog::stash()));
                 }
                 if let Some(s) = tab.stashes.first()
                     && ui
-                        .button("📤 Pop")
-                        .on_hover_text(format!("Apply and delete the latest stash: {}", s.message))
+                        .button(t!("📤 Pop"))
+                        .on_hover_text(t!("Apply and delete the latest stash: {}", s.message))
                         .clicked()
                 {
                     cmds.run(Op::StashApply {
@@ -755,22 +752,24 @@ impl FerrumApp {
                     });
                 }
                 let undo = tab.undo.last().map(|u| u.label.clone());
-                let resp = ui.add_enabled(undo.is_some(), egui::Button::new("↩ Undo"));
+                let resp = ui.add_enabled(undo.is_some(), egui::Button::new(t!("↩ Undo")));
                 if let Some(label) = undo
-                    && resp
-                        .on_hover_text(format!("Undo: {label} (Ctrl+Z)"))
-                        .clicked()
+                    && resp.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
                 {
                     cmds.push(Command::Undo);
                 }
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("⚙").on_hover_text("Settings (Ctrl+,)").clicked() {
+                if ui
+                    .button("⚙")
+                    .on_hover_text(t!("Settings (Ctrl+,)"))
+                    .clicked()
+                {
                     cmds.push(Command::ShowSettings);
                 }
                 if ui
                     .button("⌘")
-                    .on_hover_text("Command palette (Ctrl+P)")
+                    .on_hover_text(t!("Command palette (Ctrl+P)"))
                     .clicked()
                 {
                     cmds.push(Command::ShowPalette);
@@ -798,7 +797,7 @@ impl FerrumApp {
                 if resp.middle_clicked()
                     || ui
                         .small_button("×")
-                        .on_hover_text("Close (Ctrl+W)")
+                        .on_hover_text(t!("Close (Ctrl+W)"))
                         .clicked()
                 {
                     cmds.push(Command::CloseTab(i));
@@ -825,7 +824,7 @@ impl FerrumApp {
                 if let Some(t) = tab
                     && !t.queue.is_empty()
                 {
-                    ui.weak(format!("(+{} queued)", t.queue.len()));
+                    ui.weak(t!("(+{} queued)", t.queue.len()));
                 }
             } else {
                 let msg = tab
@@ -840,7 +839,7 @@ impl FerrumApp {
                         if m.text.lines().count() > 1 {
                             resp.on_hover_text(&m.text);
                         }
-                        if ui.small_button("Copy").clicked() {
+                        if ui.small_button(t!("Copy")).clicked() {
                             cmds.push(Command::Copy(m.text.clone()));
                         }
                     } else if fresh {
@@ -853,11 +852,11 @@ impl FerrumApp {
                 let id = &tab.identity;
                 let who = match (&id.name, &id.email) {
                     (Some(n), Some(e)) => format!("👤 {n} <{e}>"),
-                    _ => "👤 No identity".into(),
+                    _ => t!("👤 No identity"),
                 };
                 if ui
                     .small_button(who)
-                    .on_hover_text("Author identity for this repository")
+                    .on_hover_text(t!("Author identity for this repository"))
                     .clicked()
                 {
                     cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
@@ -889,23 +888,22 @@ impl FerrumApp {
             .inner_margin(6.0)
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    let mut text = format!("⚠ {}", tab.state.label());
-                    if conflicts > 0 {
-                        text.push_str(&format!(
-                            " — {conflicts} file{} with conflicts",
-                            if conflicts == 1 { "" } else { "s" }
-                        ));
+                    let mut text = format!("⚠ {}", crate::util::state_label(tab.state));
+                    if conflicts == 1 {
+                        text.push_str(&t!(" — 1 file with conflicts"));
+                    } else if conflicts > 1 {
+                        text.push_str(&t!(" — {} files with conflicts", conflicts));
                     }
                     ui.strong(text);
                     ui.add_enabled_ui(!tab.busy(), |ui| {
-                        if conflicts > 0 && ui.button("Resolve conflicts").clicked() {
+                        if conflicts > 0 && ui.button(t!("Resolve conflicts")).clicked() {
                             cmds.push(Command::ResolveConflict(
                                 tab.status.conflicted[0].path.clone(),
                             ));
                         }
                         let can_continue = conflicts == 0 && tab.state != RepoState::Bisect;
                         if ui
-                            .add_enabled(can_continue, egui::Button::new("Continue"))
+                            .add_enabled(can_continue, egui::Button::new(t!("Continue")))
                             .clicked()
                         {
                             cmds.run(Op::Continue(tab.state));
@@ -913,17 +911,18 @@ impl FerrumApp {
                         if matches!(
                             tab.state,
                             RepoState::Rebase | RepoState::CherryPick | RepoState::Revert
-                        ) && ui.button("Skip").clicked()
+                        ) && ui.button(t!("Skip")).clicked()
                         {
                             cmds.run(Op::Skip(tab.state));
                         }
-                        if ui.button("Abort").clicked() {
+                        if ui.button(t!("Abort")).clicked() {
+                            let name = crate::util::state_name(tab.state);
+                            // One line, so the translation tests find the key.
+                            #[rustfmt::skip]
+                            let text = t!("Abort the {} in progress? Changes made by it will be thrown away.", name);
                             cmds.push(Command::Dialog(Dialog::confirm(
-                                "Abort",
-                                &format!(
-                                    "Abort the {}? Changes made by it will be thrown away.",
-                                    tab.state.label().to_lowercase()
-                                ),
+                                &t!("Abort"),
+                                &text,
                                 Op::Abort(tab.state),
                                 true,
                             )));
@@ -937,24 +936,24 @@ impl FerrumApp {
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() / 5.0);
             ui.heading(RichText::new("Ferrum").size(32.0));
-            ui.weak("A fast Git client");
+            ui.weak(t!("A fast Git client"));
             ui.add_space(20.0);
             ui.horizontal(|ui| {
                 ui.add_space((ui.available_width() - 360.0).max(0.0) / 2.0);
                 if ui
-                    .add(egui::Button::new("📂 Open…").min_size(egui::vec2(110.0, 32.0)))
+                    .add(egui::Button::new(t!("📂 Open…")).min_size(egui::vec2(110.0, 32.0)))
                     .clicked()
                 {
                     cmds.push(Command::OpenRepoDialog);
                 }
                 if ui
-                    .add(egui::Button::new("⬇ Clone…").min_size(egui::vec2(110.0, 32.0)))
+                    .add(egui::Button::new(t!("⬇ Clone…")).min_size(egui::vec2(110.0, 32.0)))
                     .clicked()
                 {
                     cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
                 }
                 if ui
-                    .add(egui::Button::new("✚ New…").min_size(egui::vec2(110.0, 32.0)))
+                    .add(egui::Button::new(t!("✚ New…")).min_size(egui::vec2(110.0, 32.0)))
                     .clicked()
                 {
                     cmds.push(Command::Dialog(Dialog::Init {
@@ -964,7 +963,7 @@ impl FerrumApp {
             });
             if !self.settings.recent.is_empty() {
                 ui.add_space(24.0);
-                ui.strong("Recent repositories");
+                ui.strong(t!("Recent repositories"));
                 for p in self.settings.recent.clone() {
                     if ui.link(p.display().to_string()).clicked() {
                         cmds.push(Command::OpenRepo(p));
@@ -1010,7 +1009,7 @@ impl eframe::App for FerrumApp {
             Some(t) => format!(
                 "{} — {} — Ferrum",
                 t.name,
-                t.head.as_deref().unwrap_or("detached")
+                t.head.clone().unwrap_or_else(|| t!("detached"))
             ),
             None => "Ferrum".into(),
         };

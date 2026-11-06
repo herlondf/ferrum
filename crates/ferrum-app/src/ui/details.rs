@@ -10,7 +10,7 @@ use crate::util::{change_label, format_time, is_image_path};
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(view) = &tab.commit_view else {
-        ui.centered_and_justified(|ui| ui.weak("Select a commit to see its details."));
+        ui.centered_and_justified(|ui| ui.weak(t!("Select a commit to see its details.")));
         return;
     };
     let is_stash = view.is_stash;
@@ -29,13 +29,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     egui::CentralPanel::default_margins().show(ui, |ui| {
         let Some(view) = &tab.commit_view else { return };
         let Some(file) = view.selected_file.and(view.diff.as_ref()) else {
-            ui.centered_and_justified(|ui| ui.weak("No file selected."));
+            ui.centered_and_justified(|ui| ui.weak(t!("No file selected.")));
             return;
         };
         ui.horizontal(|ui| {
             ui.strong(&file.path);
             if let Some(old) = &file.old_path {
-                ui.weak(format!("(renamed from {old})"));
+                ui.weak(t!("(renamed from {})", old));
             }
         });
         let id = view.details.info.id;
@@ -62,22 +62,23 @@ fn info(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
         .num_columns(2)
         .spacing([10.0, 3.0])
         .show(ui, |ui| {
+            // Same word in every language; "Commit" alone is the button's key.
             ui.weak("Commit");
             ui.horizontal(|ui| {
                 ui.monospace(c.short_id()).on_hover_text(c.id.to_string());
-                if ui.small_button("Copy").clicked() {
+                if ui.small_button(t!("Copy")).clicked() {
                     cmds.push(Command::Copy(c.id.to_string()));
                 }
             });
             ui.end_row();
-            ui.weak("Author");
+            ui.weak(t!("Author"));
             ui.label(format!("{} <{}>", c.author, c.email));
             ui.end_row();
-            ui.weak("Date");
+            ui.weak(t!("Date"));
             ui.label(format_time(c.time, c.offset_minutes));
             ui.end_row();
             if d.committer != c.author || d.commit_time != c.time {
-                ui.weak("Committer");
+                ui.weak(t!("Committer"));
                 ui.label(format!(
                     "{} — {}",
                     d.committer,
@@ -87,9 +88,9 @@ fn info(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
             }
             if !c.parents.is_empty() {
                 ui.weak(if c.parents.len() > 1 {
-                    "Parents"
+                    t!("Parents")
                 } else {
-                    "Parent"
+                    t!("Parent")
                 });
                 ui.horizontal(|ui| {
                     for p in &c.parents {
@@ -124,22 +125,22 @@ fn stash_actions(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
     };
     ui.horizontal(|ui| {
         ui.add_enabled_ui(!tab.busy(), |ui| {
-            if ui.button("Apply").clicked() {
+            if ui.button(t!("Apply")).clicked() {
                 cmds.run(Op::StashApply {
                     stash: stash.clone(),
                     pop: false,
                 });
             }
-            if ui.button("Pop").clicked() {
+            if ui.button(t!("Pop")).clicked() {
                 cmds.run(Op::StashApply {
                     stash: stash.clone(),
                     pop: true,
                 });
             }
-            if ui.button("Drop…").clicked() {
+            if ui.button(t!("Drop…")).clicked() {
                 cmds.push(Command::Dialog(crate::ui::dialogs::Dialog::confirm(
-                    "Drop stash",
-                    &format!("Delete {}? This cannot be undone.", stash.refname()),
+                    &t!("Drop stash"),
+                    &t!("Delete {}? This cannot be undone.", stash.refname()),
                     Op::StashDrop(stash.clone()),
                     true,
                 )));
@@ -152,11 +153,11 @@ fn file_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(view) = &mut tab.commit_view else {
         return;
     };
-    ui.weak(format!(
-        "{} file{} changed",
-        view.files.len(),
-        if view.files.len() == 1 { "" } else { "s" }
-    ));
+    ui.weak(if view.files.len() == 1 {
+        t!("1 file changed")
+    } else {
+        t!("{} files changed", view.files.len())
+    });
     let mut clicked = None;
     egui::ScrollArea::vertical()
         .id_salt("commit-files")
@@ -170,15 +171,15 @@ fn file_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                     clicked = Some(i);
                 }
                 resp.on_hover_text(&f.path).context_menu(|ui| {
-                    if ui.button("Copy path").clicked() {
+                    if ui.button(t!("Copy path")).clicked() {
                         cmds.push(Command::Copy(f.path.clone()));
                         ui.close();
                     }
-                    if ui.button("File history").clicked() {
+                    if ui.button(t!("File history")).clicked() {
                         cmds.push(Command::FileHistory(f.path.clone()));
                         ui.close();
                     }
-                    if ui.button("Blame").clicked() {
+                    if ui.button(t!("Blame")).clicked() {
                         cmds.push(Command::Blame(f.path.clone()));
                         ui.close();
                     }

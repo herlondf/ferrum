@@ -28,9 +28,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
 fn views(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
     let changes = tab.status.total();
     let label = if changes > 0 {
-        format!("📝 Local Changes ({changes})")
+        t!("📝 Local Changes ({})", changes)
     } else {
-        "📝 Local Changes".into()
+        t!("📝 Local Changes")
     };
     let is_changes = matches!(tab.view, View::Changes | View::Conflicts);
     if ui
@@ -42,7 +42,7 @@ fn views(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
     if ui
         .add(egui::Button::selectable(
             tab.view == View::History,
-            "🕓 All Commits",
+            t!("🕓 All Commits"),
         ))
         .clicked()
     {
@@ -84,7 +84,7 @@ fn grouped<'a>(
 }
 
 fn local_branches(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
-    let header = egui::CollapsingHeader::new(RichText::new("Branches").strong())
+    let header = egui::CollapsingHeader::new(RichText::new(t!("Branches")).strong())
         .id_salt("branches")
         .default_open(true);
     header.show(ui, |ui| {
@@ -93,7 +93,7 @@ fn local_branches(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
             0,
         );
         if groups.is_empty() {
-            ui.weak("No branches yet.");
+            ui.weak(t!("No branches yet."));
         }
         for (folder, list) in groups {
             match folder {
@@ -137,11 +137,11 @@ fn branch_row(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, strip: usize, cm
         b.target.is_some() && tab.history.selected == b.target && tab.view == View::History;
     let resp = ui.add(egui::Button::selectable(selected, rich).truncate());
     let tracking = match (&b.upstream, b.ahead_behind) {
-        (Some(u), Some((a, bh))) => format!("tracks {u} ({a} ahead, {bh} behind)"),
-        (Some(u), None) => format!("tracks {u}"),
-        _ => "no upstream branch".into(),
+        (Some(u), Some((a, bh))) => t!("tracks {} ({} ahead, {} behind)", u, a, bh),
+        (Some(u), None) => t!("tracks {}", u),
+        _ => t!("no upstream branch"),
     };
-    let resp = resp.on_hover_text(format!("{}\n{tracking}\nDouble-click to check out", b.name));
+    let resp = resp.on_hover_text(t!("{}\n{}\nDouble-click to check out", b.name, tracking));
     if resp.clicked()
         && let Some(t) = b.target
     {
@@ -158,28 +158,30 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
     let name = b.name.clone();
     let current = tab.head.clone();
     ui.add_enabled_ui(!tab.busy(), |ui| {
-        if !b.is_head && ui.button(format!("Check out {name}")).clicked() {
+        if !b.is_head && ui.button(t!("Check out {}", name)).clicked() {
             cmds.run(Op::Checkout(name.clone()));
             ui.close();
         }
-        if b.is_head && ui.button("Pull").clicked() {
+        if b.is_head && ui.button(t!("Pull")).clicked() {
             cmds.push(Command::Dialog(Dialog::Pull));
             ui.close();
         }
-        if ui.button(format!("Push {name}…")).clicked() {
+        if ui.button(t!("Push {}…", name)).clicked() {
             cmds.push(Command::Dialog(Dialog::push(tab, &name)));
             ui.close();
         }
         if let Some(cur) = current.as_ref().filter(|c| **c != name) {
             ui.separator();
-            if ui.button(format!("Merge {name} into {cur}…")).clicked() {
+            if ui.button(t!("Merge {} into {}…", name, cur)).clicked() {
                 cmds.push(Command::Dialog(Dialog::merge(&name, &name)));
                 ui.close();
             }
-            if ui.button(format!("Rebase {cur} onto {name}…")).clicked() {
+            if ui.button(t!("Rebase {} onto {}…", cur, name)).clicked() {
+                #[rustfmt::skip]
+                let text = t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, name, cur);
                 cmds.push(Command::Dialog(Dialog::confirm(
-                    "Rebase",
-                    &format!("Rebase {cur} onto {name}? The commits of {cur} will be rewritten."),
+                    &t!("Rebase"),
+                    &text,
                     Op::Rebase { onto: name.clone() },
                     false,
                 )));
@@ -187,18 +189,18 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
             }
         }
         ui.separator();
-        if ui.button(format!("New branch from {name}…")).clicked() {
+        if ui.button(t!("New branch from {}…", name)).clicked() {
             cmds.push(Command::Dialog(Dialog::create_branch(&name, &name)));
             ui.close();
         }
-        if ui.button("Rename…").clicked() {
+        if ui.button(t!("Rename…")).clicked() {
             cmds.push(Command::Dialog(Dialog::RenameBranch {
                 old: name.clone(),
                 new: name.clone(),
             }));
             ui.close();
         }
-        if !b.is_head && ui.button("Delete…").clicked() {
+        if !b.is_head && ui.button(t!("Delete…")).clicked() {
             cmds.push(Command::Dialog(Dialog::delete_branch(b)));
             ui.close();
         }
@@ -208,7 +210,7 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
             .filter(|r| r.kind == BranchKind::Remote)
             .collect();
         if !remote_branches.is_empty() {
-            ui.menu_button("Track remote branch", |ui| {
+            ui.menu_button(t!("Track remote branch"), |ui| {
                 egui::ScrollArea::vertical()
                     .max_height(300.0)
                     .show(ui, |ui| {
@@ -228,10 +230,7 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
     });
     if let Some(h) = &tab.hosted {
         ui.separator();
-        if ui
-            .button(format!("Create {}…", h.kind.request_name()))
-            .clicked()
-        {
+        if ui.button(t!("Create {}…", h.kind.request_name())).clicked() {
             cmds.push(Command::Dialog(Dialog::Forge(forge_ui::new_pull_request(
                 tab, &name,
             ))));
@@ -239,19 +238,19 @@ fn local_branch_menu(ui: &mut egui::Ui, tab: &RepoTab, b: &BranchInfo, cmds: &mu
         }
     }
     ui.separator();
-    if ui.button("Copy name").clicked() {
+    if ui.button(t!("Copy name")).clicked() {
         cmds.push(Command::Copy(name));
         ui.close();
     }
 }
 
 fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
-    let header = egui::CollapsingHeader::new(RichText::new("Remotes").strong())
+    let header = egui::CollapsingHeader::new(RichText::new(t!("Remotes")).strong())
         .id_salt("remotes")
         .default_open(true);
     let resp = header.show(ui, |ui| {
         if tab.remotes.is_empty() {
-            ui.weak("No remotes.");
+            ui.weak(t!("No remotes."));
         }
         for remote in &tab.remotes {
             let prefix = format!("{}/", remote.name);
@@ -274,21 +273,21 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
             });
             r.header_response.on_hover_text(&remote.url).context_menu(|ui| {
                 ui.add_enabled_ui(!tab.busy(), |ui| {
-                    if ui.button(format!("Fetch {}", remote.name)).clicked() {
+                    if ui.button(t!("Fetch {}", remote.name)).clicked() {
                         cmds.run(Op::Fetch { remote: Some(remote.name.clone()) });
                         ui.close();
                     }
-                    if ui.button("Remove remote…").clicked() {
+                    if ui.button(t!("Remove remote…")).clicked() {
                         cmds.push(Command::Dialog(Dialog::confirm(
-                            "Remove remote",
-                            &format!("Remove the remote {}? Its remote-tracking branches will be deleted locally.", remote.name),
+                            &t!("Remove remote"),
+                            &t!("Remove the remote {}? Its remote-tracking branches will be deleted locally.", remote.name),
                             Op::RemoveRemote(remote.name.clone()),
                             true,
                         )));
                         ui.close();
                     }
                 });
-                if ui.button("Copy URL").clicked() {
+                if ui.button(t!("Copy URL")).clicked() {
                     cmds.push(Command::Copy(remote.url.clone()));
                     ui.close();
                 }
@@ -296,7 +295,7 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
         }
     });
     resp.header_response.context_menu(|ui| {
-        if ui.button("Add remote…").clicked() {
+        if ui.button(t!("Add remote…")).clicked() {
             cmds.push(Command::Dialog(Dialog::AddRemote {
                 name: String::new(),
                 url: String::new(),
@@ -304,7 +303,7 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
             ui.close();
         }
         if ui
-            .add_enabled(!tab.busy(), egui::Button::new("Fetch all"))
+            .add_enabled(!tab.busy(), egui::Button::new(t!("Fetch all")))
             .clicked()
         {
             cmds.run(Op::Fetch { remote: None });
@@ -328,7 +327,7 @@ fn remote_branch_row(
         .branches
         .iter()
         .find(|l| l.kind == BranchKind::Local && l.upstream.as_deref() == Some(&b.name));
-    let resp = resp.on_hover_text(format!("{}\nDouble-click to check out", b.name));
+    let resp = resp.on_hover_text(t!("{}\nDouble-click to check out", b.name));
     if resp.clicked()
         && let Some(t) = b.target
     {
@@ -350,46 +349,55 @@ fn remote_branch_row(
         ui.set_min_width(220.0);
         ui.add_enabled_ui(!tab.busy(), |ui| {
             let label = match local {
-                Some(l) => format!("Check out {}", l.name),
-                None => "Check out as local branch…".into(),
+                Some(l) => t!("Check out {}", l.name),
+                None => t!("Check out as local branch…"),
             };
             if ui.button(label).clicked() {
                 checkout(cmds);
                 ui.close();
             }
             if let Some(cur) = &tab.head {
-                if ui.button(format!("Merge {} into {cur}…", b.name)).clicked() {
+                if ui.button(t!("Merge {} into {}…", b.name, cur)).clicked() {
                     cmds.push(Command::Dialog(Dialog::merge(&b.name, &b.name)));
                     ui.close();
                 }
-                if ui.button(format!("Rebase {cur} onto {}…", b.name)).clicked() {
+                if ui.button(t!("Rebase {} onto {}…", cur, b.name)).clicked() {
+                    #[rustfmt::skip]
+                    let text = t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, b.name, cur);
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Rebase",
-                        &format!("Rebase {cur} onto {}? The commits of {cur} will be rewritten.", b.name),
-                        Op::Rebase { onto: b.name.clone() },
+                        &t!("Rebase"),
+                        &text,
+                        Op::Rebase {
+                            onto: b.name.clone(),
+                        },
                         false,
                     )));
                     ui.close();
                 }
             }
-            if ui.button("New branch from here…").clicked() {
+            if ui.button(t!("New branch from here…")).clicked() {
                 cmds.push(Command::Dialog(Dialog::create_branch(&b.name, &b.name)));
                 ui.close();
             }
             if let Some((remote, name)) = b.split_remote()
-                && ui.button(format!("Delete from {remote}…")).clicked()
+                && ui.button(t!("Delete from {}…", remote)).clicked()
             {
+                #[rustfmt::skip]
+                let text = t!("Delete the branch {} from {}? Other people using it will lose it.", name, remote);
                 cmds.push(Command::Dialog(Dialog::confirm(
-                    "Delete remote branch",
-                    &format!("Delete the branch {name} from {remote}? Other people using it will lose it."),
-                    Op::DeleteRemoteRef { remote: remote.to_owned(), name: name.to_owned() },
+                    &t!("Delete remote branch"),
+                    &text,
+                    Op::DeleteRemoteRef {
+                        remote: remote.to_owned(),
+                        name: name.to_owned(),
+                    },
                     true,
                 )));
                 ui.close();
             }
         });
         ui.separator();
-        if ui.button("Copy name").clicked() {
+        if ui.button(t!("Copy name")).clicked() {
             cmds.push(Command::Copy(b.name.clone()));
             ui.close();
         }
@@ -397,7 +405,7 @@ fn remote_branch_row(
 }
 
 fn tags(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
-    let title = format!("Tags ({})", tab.tags.len());
+    let title = t!("Tags ({})", tab.tags.len());
     egui::CollapsingHeader::new(RichText::new(title).strong())
         .id_salt("tags")
         .show(ui, |ui| {
@@ -409,12 +417,12 @@ fn tags(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                 }
                 resp.context_menu(|ui| {
                     ui.add_enabled_ui(!tab.busy(), |ui| {
-                        if ui.button("Check out (detached)").clicked() {
+                        if ui.button(t!("Check out (detached)")).clicked() {
                             cmds.run(Op::CheckoutDetached(t.name.clone()));
                             ui.close();
                         }
                         for r in &tab.remotes {
-                            if ui.button(format!("Push to {}", r.name)).clicked() {
+                            if ui.button(t!("Push to {}", r.name)).clicked() {
                                 cmds.run(Op::PushTag {
                                     remote: r.name.clone(),
                                     tag: t.name.clone(),
@@ -422,7 +430,7 @@ fn tags(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                                 ui.close();
                             }
                         }
-                        if ui.button("Delete…").clicked() {
+                        if ui.button(t!("Delete…")).clicked() {
                             cmds.push(Command::Dialog(Dialog::DeleteTag {
                                 name: t.name.clone(),
                                 remote: None,
@@ -430,7 +438,7 @@ fn tags(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                             ui.close();
                         }
                     });
-                    if ui.button("Copy name").clicked() {
+                    if ui.button(t!("Copy name")).clicked() {
                         cmds.push(Command::Copy(t.name.clone()));
                         ui.close();
                     }
@@ -443,7 +451,7 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
     if tab.stashes.is_empty() {
         return;
     }
-    let title = format!("Stashes ({})", tab.stashes.len());
+    let title = t!("Stashes ({})", tab.stashes.len());
     egui::CollapsingHeader::new(RichText::new(title).strong())
         .id_salt("stashes")
         .default_open(true)
@@ -461,28 +469,26 @@ fn stashes(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                 }
                 resp.on_hover_text(s.refname()).context_menu(|ui| {
                     ui.add_enabled_ui(!tab.busy(), |ui| {
-                        if ui.button("Apply").clicked() {
+                        if ui.button(t!("Apply")).clicked() {
                             cmds.run(Op::StashApply {
                                 stash: s.clone(),
                                 pop: false,
                             });
                             ui.close();
                         }
-                        if ui.button("Pop (apply and delete)").clicked() {
+                        if ui.button(t!("Pop (apply and delete)")).clicked() {
                             cmds.run(Op::StashApply {
                                 stash: s.clone(),
                                 pop: true,
                             });
                             ui.close();
                         }
-                        if ui.button("Drop…").clicked() {
+                        if ui.button(t!("Drop…")).clicked() {
+                            let (r, m) = (s.refname(), &s.message);
+                            let text = t!("Delete {} ({})? This cannot be undone.", r, m);
                             cmds.push(Command::Dialog(Dialog::confirm(
-                                "Drop stash",
-                                &format!(
-                                    "Delete {} ({})? This cannot be undone.",
-                                    s.refname(),
-                                    s.message
-                                ),
+                                &t!("Drop stash"),
+                                &text,
                                 Op::StashDrop(s.clone()),
                                 true,
                             )));
@@ -498,7 +504,7 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
     if tab.submodules.is_empty() {
         return;
     }
-    let title = format!("Submodules ({})", tab.submodules.len());
+    let title = t!("Submodules ({})", tab.submodules.len());
     let resp = egui::CollapsingHeader::new(RichText::new(title).strong())
         .id_salt("submodules")
         .show(ui, |ui| {
@@ -506,7 +512,7 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                 let label = if s.initialized {
                     format!("▣ {}", s.path)
                 } else {
-                    format!("☐ {} (not initialized)", s.path)
+                    t!("☐ {} (not initialized)", s.path)
                 };
                 let resp = ui.add(egui::Button::selectable(false, label).truncate());
                 let resp = resp.on_hover_text(s.url.clone().unwrap_or_default());
@@ -514,12 +520,12 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                     cmds.push(Command::OpenRepo(tab.path().join(&s.path)));
                 }
                 resp.context_menu(|ui| {
-                    if s.initialized && ui.button("Open in new tab").clicked() {
+                    if s.initialized && ui.button(t!("Open in new tab")).clicked() {
                         cmds.push(Command::OpenRepo(tab.path().join(&s.path)));
                         ui.close();
                     }
                     if ui
-                        .add_enabled(!tab.busy(), egui::Button::new("Update all submodules"))
+                        .add_enabled(!tab.busy(), egui::Button::new(t!("Update all submodules")))
                         .clicked()
                     {
                         cmds.run(Op::SubmoduleUpdate);
@@ -530,7 +536,7 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
         });
     resp.header_response.context_menu(|ui| {
         if ui
-            .add_enabled(!tab.busy(), egui::Button::new("Update all submodules"))
+            .add_enabled(!tab.busy(), egui::Button::new(t!("Update all submodules")))
             .clicked()
         {
             cmds.run(Op::SubmoduleUpdate);
@@ -540,11 +546,11 @@ fn submodules(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
 }
 
 fn worktrees(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
-    let title = format!("Worktrees ({})", tab.worktrees.len());
+    let title = t!("Worktrees ({})", tab.worktrees.len());
     let resp = egui::CollapsingHeader::new(RichText::new(title).strong()).id_salt("worktrees").show(ui, |ui| {
         for w in &tab.worktrees {
             let name = std::path::Path::new(&w.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(w.path.clone());
-            let branch = w.branch.clone().unwrap_or_else(|| "detached".into());
+            let branch = w.branch.clone().unwrap_or_else(|| t!("detached"));
             let current = std::path::Path::new(&w.path) == tab.path() || tab.path().starts_with(&w.path) && w.is_main;
             let label = format!("{}{name} ({branch})", if current { "✔ " } else { "" });
             let resp = ui.add(egui::Button::selectable(false, label).truncate()).on_hover_text(&w.path);
@@ -552,29 +558,29 @@ fn worktrees(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
                 cmds.push(Command::OpenRepo(w.path.clone().into()));
             }
             resp.context_menu(|ui| {
-                if ui.button("Open in new tab").clicked() {
+                if ui.button(t!("Open in new tab")).clicked() {
                     cmds.push(Command::OpenRepo(w.path.clone().into()));
                     ui.close();
                 }
-                if !w.is_main && ui.add_enabled(!tab.busy(), egui::Button::new("Remove…")).clicked() {
+                if !w.is_main && ui.add_enabled(!tab.busy(), egui::Button::new(t!("Remove…"))).clicked() {
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Remove worktree",
-                        &format!("Remove the worktree at {}? Uncommitted changes in it will be lost.", w.path),
+                        &t!("Remove worktree"),
+                        &t!("Remove the worktree at {}? Uncommitted changes in it will be lost.", w.path),
                         Op::WorktreeRemove { path: w.path.clone(), force: true },
                         true,
                     )));
                     ui.close();
                 }
-                if ui.button("Copy path").clicked() {
+                if ui.button(t!("Copy path")).clicked() {
                     cmds.push(Command::Copy(w.path.clone()));
                     ui.close();
                 }
             });
         }
-        if ui.small_button("+ Add worktree…").clicked() {
+        if ui.small_button(t!("+ Add worktree…")).clicked() {
             cmds.push(Command::Dialog(Dialog::worktree_add(tab)));
         }
     });
     resp.header_response
-        .on_hover_text("Extra working folders that share this repository");
+        .on_hover_text(t!("Extra working folders that share this repository"));
 }
