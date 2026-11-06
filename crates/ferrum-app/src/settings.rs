@@ -37,12 +37,12 @@ impl PullChoice {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            PullChoice::Default => "Default (git config)",
-            PullChoice::Merge => "Merge",
-            PullChoice::Rebase => "Rebase",
-            PullChoice::FastForwardOnly => "Fast-forward only",
+            PullChoice::Default => t!("Default (git config)"),
+            PullChoice::Merge => t!("Merge"),
+            PullChoice::Rebase => t!("Rebase"),
+            PullChoice::FastForwardOnly => t!("Fast-forward only"),
         }
     }
 }

@@ -16,6 +16,7 @@ pub const SOURCES: &[&str] = &[
     include_str!("command.rs"),
     include_str!("tab.rs"),
     include_str!("util.rs"),
+    include_str!("settings.rs"),
     include_str!("ui/blame.rs"),
     include_str!("ui/changes.rs"),
     include_str!("ui/conflicts.rs"),

@@ -78,9 +78,9 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.label("🔍");
         let hint = if tab.history.content_search {
-            "Search changes (git log -S), press Enter"
+            t!("Search changes (git log -S), press Enter")
         } else {
-            "Filter by message, author or hash"
+            t!("Filter by message, author or hash")
         };
         let resp = ui.add(
             egui::TextEdit::singleline(&mut tab.history.search)
@@ -94,7 +94,7 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         let mut changed = resp.changed();
         let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
         if ui
-            .checkbox(&mut tab.history.content_search, "In changes")
+            .checkbox(&mut tab.history.content_search, t!("In changes"))
             .changed()
         {
             tab.history.content_hits = None;
@@ -104,12 +104,14 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             if changed {
                 tab.history.content_hits = None;
             }
-            if (enter || ui.button("Search").clicked()) && !tab.history.search.trim().is_empty() {
+            if (enter || ui.button(t!("Search")).clicked()) && !tab.history.search.trim().is_empty()
+            {
                 cmds.push(Command::FocusSearch);
                 start_content_search(tab, ui.ctx());
             }
         }
-        if !tab.history.search.is_empty() && ui.small_button("×").on_hover_text("Clear").clicked()
+        if !tab.history.search.is_empty()
+            && ui.small_button("×").on_hover_text(t!("Clear")).clicked()
         {
             tab.history.search.clear();
             tab.history.content_hits = None;
@@ -119,7 +121,7 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             tab.apply_search();
         }
         if let Some(v) = &tab.history.visible {
-            ui.weak(format!("{} of {} commits", v.len(), tab.commits.len()));
+            ui.weak(t!("{} of {} commits", v.len(), tab.commits.len()));
         }
     });
 }
@@ -127,7 +129,7 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
 fn start_content_search(tab: &mut RepoTab, ctx: &egui::Context) {
     let term = tab.history.search.trim().to_owned();
     let path = tab.path().to_path_buf();
-    tab.spawn_job("Search in changes", ctx, move |_| {
+    tab.spawn_job(&t!("Search in changes"), ctx, move |_| {
         let repo = ferrum_core::Repo::open(&path).map_err(|e| e.to_string())?;
         let hits = repo.search_content(&term).map_err(|e| e.to_string())?;
         Ok(crate::jobs::JobOutput::SearchHits(
@@ -189,11 +191,12 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let cols = Columns::new(header, lanes);
     let weak = ui.visuals().weak_text_color();
     for (rect, title) in [
-        (cols.graph, "Graph"),
-        (cols.description, "Description"),
-        (cols.author, "Author"),
-        (cols.date, "Date"),
-        (cols.hash, "Commit"),
+        (cols.graph, t!("Graph")),
+        (cols.description, t!("Description")),
+        (cols.author, t!("Author")),
+        (cols.date, t!("Date")),
+        // Same word in every language; "Commit" alone is the button's key.
+        (cols.hash, "Commit".to_owned()),
     ] {
         if rect.width() > 0.0 {
             ui.painter().text(
@@ -216,9 +219,9 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         ui.add_space(20.0);
         ui.vertical_centered(|ui| {
             ui.weak(if filtered {
-                "No commits match the search."
+                t!("No commits match the search.")
             } else {
-                "No commits yet."
+                t!("No commits yet.")
             });
         });
         return;
@@ -449,34 +452,34 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
     ui.set_min_width(240.0);
     ui.add_enabled_ui(!busy, |ui| {
         for l in labels.iter().filter(|l| l.kind == RefKind::Local && !l.is_head) {
-            if ui.button(format!("Check out {}", l.name)).clicked() {
+            if ui.button(t!("Check out {}", l.name)).clicked() {
                 cmds.run(Op::Checkout(l.name.clone()));
                 ui.close();
             }
         }
         for l in labels.iter().filter(|l| l.kind == RefKind::Remote) {
             let has_local = tab.branches.iter().any(|b| b.kind == BranchKind::Local && b.upstream.as_deref() == Some(&l.name));
-            if !has_local && ui.button(format!("Check out {}", l.name)).clicked() {
+            if !has_local && ui.button(t!("Check out {}", l.name)).clicked() {
                 let local = l.name.split_once('/').map_or(l.name.as_str(), |(_, b)| b).to_owned();
                 cmds.push(Command::Dialog(Dialog::checkout_remote(&l.name, &local)));
                 ui.close();
             }
         }
-        if ui.button(format!("Check out {short} (detached)")).clicked() {
+        if ui.button(t!("Check out {} (detached)", short)).clicked() {
             cmds.push(Command::Dialog(Dialog::confirm(
-                "Check out commit",
-                &format!("Check out {short}? HEAD will be detached: new commits will not belong to any branch until you create one."),
+                &t!("Check out commit"),
+                &t!("Check out {}? HEAD will be detached: new commits will not belong to any branch until you create one.", short),
                 Op::CheckoutDetached(sha.clone()),
                 false,
             )));
             ui.close();
         }
         ui.separator();
-        if ui.button("New branch here…").clicked() {
+        if ui.button(t!("New branch here…")).clicked() {
             cmds.push(Command::Dialog(Dialog::create_branch(&sha, &short)));
             ui.close();
         }
-        if ui.button("New tag here…").clicked() {
+        if ui.button(t!("New tag here…")).clicked() {
             cmds.push(Command::Dialog(Dialog::create_tag(&sha, &short)));
             ui.close();
         }
@@ -485,14 +488,14 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             let target = labels.iter().find(|l| l.kind != RefKind::Tag).map_or(short.clone(), |l| l.name.clone());
             let rev = labels.iter().find(|l| l.kind != RefKind::Tag).map_or(sha.clone(), |l| l.name.clone());
             if tab.head_oid != Some(id) {
-                if ui.button(format!("Merge {target} into {cur}…")).clicked() {
+                if ui.button(t!("Merge {} into {}…", target, cur)).clicked() {
                     cmds.push(Command::Dialog(Dialog::merge(&rev, &target)));
                     ui.close();
                 }
-                if ui.button(format!("Rebase {cur} onto {target}…")).clicked() {
+                if ui.button(t!("Rebase {} onto {}…", cur, target)).clicked() {
                     cmds.push(Command::Dialog(Dialog::confirm(
-                        "Rebase",
-                        &format!("Rebase {cur} onto {target}? The commits of {cur} will be rewritten."),
+                        &t!("Rebase"),
+                        &t!("Rebase {} onto {}? The commits of {} will be rewritten.", cur, target, cur),
                         Op::Rebase { onto: rev.clone() },
                         false,
                     )));
@@ -501,19 +504,19 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             }
         }
         let in_head = tab.head_oid.is_some_and(|h| tab.repo.is_ancestor(id, h));
-        if in_head && tab.head_oid != Some(id) && ui.button(format!("Interactive rebase after {short}…")).clicked() {
+        if in_head && tab.head_oid != Some(id) && ui.button(t!("Interactive rebase after {}…", short)).clicked() {
             cmds.push(Command::PlanRebase(Some(id)));
             ui.close();
         }
-        if in_head && c.parents.is_empty() && ui.button("Interactive rebase from the first commit…").clicked() {
+        if in_head && c.parents.is_empty() && ui.button(t!("Interactive rebase from the first commit…")).clicked() {
             cmds.push(Command::PlanRebase(None));
             ui.close();
         }
-        if !in_head && ui.button(format!("Cherry-pick {short}")).clicked() {
+        if !in_head && ui.button(t!("Cherry-pick {}", short)).clicked() {
             cmds.run(Op::CherryPick { id, is_merge });
             ui.close();
         }
-        if ui.button(format!("Revert {short}")).clicked() {
+        if ui.button(t!("Revert {}", short)).clicked() {
             cmds.run(Op::Revert { id, is_merge });
             ui.close();
         }
@@ -525,13 +528,13 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             .map(|b| b.name.clone())
             .collect();
         if !movable.is_empty() {
-            ui.menu_button("Move branch to here", |ui| {
+            ui.menu_button(t!("Move branch to here"), |ui| {
                 egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                     for name in movable {
                         if ui.button(&name).clicked() {
                             cmds.push(Command::Dialog(Dialog::confirm(
-                                "Move branch",
-                                &format!("Point {name} at {short}? Commits only on {name} may become unreachable (you can undo right after)."),
+                                &t!("Move branch"),
+                                &t!("Point {} at {}? Commits only on {} may become unreachable (you can undo right after).", name, short, name),
                                 Op::MoveBranch { name: name.clone(), target: sha.clone() },
                                 false,
                             )));
@@ -542,11 +545,11 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             });
         }
         if let Some(cur) = &current {
-            ui.menu_button(format!("Reset {cur} to here"), |ui| {
+            ui.menu_button(t!("Reset {} to here", cur), |ui| {
                 for (mode, label, help) in [
-                    (ResetMode::Soft, "Soft", "keep all changes staged"),
-                    (ResetMode::Mixed, "Mixed", "keep changes, unstaged"),
-                    (ResetMode::Hard, "Hard", "discard all changes"),
+                    (ResetMode::Soft, "Soft", t!("keep all changes staged")),
+                    (ResetMode::Mixed, "Mixed", t!("keep changes, unstaged")),
+                    (ResetMode::Hard, "Hard", t!("discard all changes")),
                 ] {
                     if ui.button(format!("{label} — {help}")).clicked() {
                         cmds.push(Command::Dialog(Dialog::reset(&sha, &short, cur, mode)));
@@ -557,11 +560,11 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
         }
     });
     ui.separator();
-    if ui.button("Copy commit hash").clicked() {
+    if ui.button(t!("Copy commit hash")).clicked() {
         cmds.push(Command::Copy(sha.clone()));
         ui.close();
     }
-    if ui.button("Copy message").clicked() {
+    if ui.button(t!("Copy message")).clicked() {
         let msg = tab
             .repo
             .commit_details(id)
@@ -575,7 +578,7 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
             ferrum_core::forge::ForgeKind::GitHub => format!("{}/commit/{sha}", h.web_url()),
             ferrum_core::forge::ForgeKind::GitLab => format!("{}/-/commit/{sha}", h.web_url()),
         };
-        if ui.button(format!("Open on {}", h.kind.name())).clicked() {
+        if ui.button(t!("Open on {}", h.kind.name())).clicked() {
             cmds.push(Command::OpenUrl(url));
             ui.close();
         }

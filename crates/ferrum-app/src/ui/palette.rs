@@ -47,42 +47,52 @@ fn entry(
 
 fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> Vec<Entry> {
     let mut list = vec![
-        entry("Open repository…", "Ctrl+O", || Command::OpenRepoDialog),
-        entry("Clone repository…", "", || {
+        entry(t!("Open repository…"), "Ctrl+O", || {
+            Command::OpenRepoDialog
+        }),
+        entry(t!("Clone repository…"), "", || {
             Command::Dialog(Dialog::Clone {
                 url: String::new(),
                 parent: String::new(),
                 name: String::new(),
             })
         }),
-        entry("New repository…", "", || {
+        entry(t!("New repository…"), "", || {
             Command::Dialog(Dialog::Init {
                 path: String::new(),
             })
         }),
-        entry("Settings", "Ctrl+,", || Command::ShowSettings),
+        entry(t!("Settings"), "Ctrl+,", || Command::ShowSettings),
     ];
     if let Some(t) = tab {
         let pull = settings.pull.mode();
         list.extend([
-            entry("Show history", "Ctrl+1", || Command::SetView(View::History)),
-            entry("Show local changes", "Ctrl+2", || {
+            entry(t!("Show history"), "Ctrl+1", || {
+                Command::SetView(View::History)
+            }),
+            entry(t!("Show local changes"), "Ctrl+2", || {
                 Command::SetView(View::Changes)
             }),
-            entry("Search commits", "Ctrl+F", || Command::FocusSearch),
-            entry("Refresh", "F5", || Command::Refresh),
-            entry("Undo last action", "Ctrl+Z", || Command::Undo),
-            entry("Fetch all remotes", "Ctrl+Shift+F", || {
+            entry(t!("Search commits"), "Ctrl+F", || Command::FocusSearch),
+            entry(t!("Refresh"), "F5", || Command::Refresh),
+            entry(t!("Undo last action"), "Ctrl+Z", || Command::Undo),
+            entry(t!("Fetch all remotes"), "Ctrl+Shift+F", || {
                 Command::Run(Op::Fetch { remote: None })
             }),
-            entry("Pull", "Ctrl+Shift+D", move || Command::Run(Op::Pull(pull))),
-            entry("Pull with options…", "", || Command::Dialog(Dialog::Pull)),
-            entry("Stage all changes", "", || Command::Run(Op::StageAll)),
-            entry("Unstage all changes", "", || Command::Run(Op::UnstageAll)),
-            entry("Stash changes…", "Ctrl+Shift+S", || {
+            entry(t!("Pull"), "Ctrl+Shift+D", move || {
+                Command::Run(Op::Pull(pull))
+            }),
+            entry(t!("Pull with options…"), "", || {
+                Command::Dialog(Dialog::Pull)
+            }),
+            entry(t!("Stage all changes"), "", || Command::Run(Op::StageAll)),
+            entry(t!("Unstage all changes"), "", || {
+                Command::Run(Op::UnstageAll)
+            }),
+            entry(t!("Stash changes…"), "Ctrl+Shift+S", || {
                 Command::Dialog(Dialog::stash())
             }),
-            entry("Add remote…", "", || {
+            entry(t!("Add remote…"), "", || {
                 Command::Dialog(Dialog::AddRemote {
                     name: String::new(),
                     url: String::new(),
@@ -91,7 +101,7 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
         ]);
         let head = t.head.clone().unwrap_or_else(|| "HEAD".into());
         let h2 = head.clone();
-        list.push(entry("New branch…", "Ctrl+B", move || {
+        list.push(entry(t!("New branch…"), "Ctrl+B", move || {
             Command::Dialog(Dialog::create_branch(&h2, &h2))
         }));
         if let Some(b) = t.head.clone() {
@@ -103,7 +113,7 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
                 ..
             } = push
             {
-                list.push(entry("Push…", "Ctrl+Shift+U", move || {
+                list.push(entry(t!("Push…"), "Ctrl+Shift+U", move || {
                     Command::Dialog(Dialog::Push {
                         remote: remote.clone(),
                         branch: branch.clone(),
@@ -116,7 +126,7 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
         }
         if let Some(s) = t.stashes.first().cloned() {
             list.push(entry(
-                format!("Pop latest stash ({})", s.message),
+                t!("Pop latest stash ({})", s.message),
                 "",
                 move || {
                     Command::Run(Op::StashApply {
@@ -127,11 +137,11 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             ));
         }
         let id = t.identity.clone();
-        list.push(entry("Set repository identity…", "", move || {
+        list.push(entry(t!("Set repository identity…"), "", move || {
             Command::Dialog(Dialog::identity(&id))
         }));
         if t.hosted.is_some() {
-            list.push(entry("Show pull requests", "", || {
+            list.push(entry(t!("Show pull requests"), "", || {
                 Command::SetView(View::PullRequests)
             }));
         }
@@ -142,13 +152,13 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             }));
         }
         if !t.submodules.is_empty() {
-            list.push(entry("Update submodules", "", || {
+            list.push(entry(t!("Update submodules"), "", || {
                 Command::Run(Op::SubmoduleUpdate)
             }));
         }
         let wt = Dialog::worktree_add(t);
         if let Dialog::WorktreeAdd { path, rev, .. } = wt {
-            list.push(entry("Add worktree…", "", move || {
+            list.push(entry(t!("Add worktree…"), "", move || {
                 Command::Dialog(Dialog::WorktreeAdd {
                     path: path.clone(),
                     rev: rev.clone(),
@@ -157,10 +167,14 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             }));
         }
         if t.head_oid.is_some() {
-            list.push(entry("Interactive rebase of the last 10 commits…", "", {
-                let base = t.repo.resolve("HEAD~10").ok();
-                move || Command::PlanRebase(base)
-            }));
+            list.push(entry(
+                t!("Interactive rebase of the last 10 commits…"),
+                "",
+                {
+                    let base = t.repo.resolve("HEAD~10").ok();
+                    move || Command::PlanRebase(base)
+                },
+            ));
         }
         for b in t
             .branches
@@ -168,13 +182,13 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
             .filter(|b| b.kind == BranchKind::Local && !b.is_head)
         {
             let name = b.name.clone();
-            list.push(entry(format!("Check out {name}"), "", move || {
+            list.push(entry(t!("Check out {}", name), "", move || {
                 Command::Run(Op::Checkout(name.clone()))
             }));
         }
     }
     for (i, name) in tab_names.iter().enumerate() {
-        list.push(entry(format!("Switch to {name}"), "Ctrl+Tab", move || {
+        list.push(entry(t!("Switch to {}", name), "Ctrl+Tab", move || {
             Command::SelectTab(i)
         }));
     }
@@ -242,7 +256,7 @@ pub fn show(
                 ui.set_width(520.0);
                 let resp = ui.add(
                     egui::TextEdit::singleline(&mut p.query)
-                        .hint_text("Type a command…")
+                        .hint_text(t!("Type a command…"))
                         .desired_width(f32::INFINITY),
                 );
                 if p.just_opened {
@@ -304,7 +318,7 @@ pub fn show(
                             }
                         }
                         if matches.is_empty() {
-                            ui.weak("No matching command.");
+                            ui.weak(t!("No matching command."));
                         }
                     });
             });

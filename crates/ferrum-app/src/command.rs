@@ -12,6 +12,7 @@ use ferrum_core::{FileChange, Identity, Oid, RepoState, StashInfo};
 use crate::jobs::{JobOutput, JobResult, Refresh};
 use crate::tab::View;
 use crate::ui::dialogs::Dialog;
+use crate::util::state_name;
 
 pub enum Command {
     /// Run a git operation on the active repository.
@@ -222,65 +223,63 @@ pub enum Op {
 impl Op {
     pub fn label(&self) -> String {
         match self {
-            Op::Stage(p) => format!("Stage {}", files(p.len())),
-            Op::StageAll => "Stage all changes".into(),
-            Op::Unstage(p) => format!("Unstage {}", files(p.len())),
-            Op::UnstageAll => "Unstage all changes".into(),
-            Op::Discard(f) => format!("Discard changes in {}", files(f.len())),
-            Op::ApplyPatch { label, .. } => (*label).into(),
-            Op::Commit { amend: true, .. } => "Amend commit".into(),
-            Op::Commit { .. } => "Commit".into(),
-            Op::Fetch { remote: Some(r) } => format!("Fetch {r}"),
-            Op::Fetch { remote: None } => "Fetch all remotes".into(),
-            Op::Pull(_) => "Pull".into(),
-            Op::Push(o) => format!("Push {} to {}", o.branch, o.remote),
-            Op::PushTag { tag, remote } => format!("Push tag {tag} to {remote}"),
-            Op::DeleteRemoteRef { remote, name } => format!("Delete {name} from {remote}"),
-            Op::Checkout(b) => format!("Check out {b}"),
-            Op::CheckoutRemote { local, .. } => format!("Check out {local}"),
-            Op::CheckoutDetached(r) => format!("Check out {}", short(r)),
-            Op::CreateBranch { name, .. } => format!("Create branch {name}"),
-            Op::RenameBranch { old, new } => format!("Rename {old} to {new}"),
-            Op::DeleteBranch { name, .. } => format!("Delete branch {name}"),
-            Op::MoveBranch { name, .. } => format!("Move branch {name}"),
-            Op::SetUpstream { branch, upstream } => format!("Track {upstream} from {branch}"),
-            Op::Merge { rev, .. } => format!("Merge {}", short(rev)),
-            Op::Rebase { onto } => format!("Rebase onto {}", short(onto)),
+            Op::Stage(p) => t!("Stage {}", files(p.len())),
+            Op::StageAll => t!("Stage all changes"),
+            Op::Unstage(p) => t!("Unstage {}", files(p.len())),
+            Op::UnstageAll => t!("Unstage all changes"),
+            Op::Discard(f) => t!("Discard changes in {}", files(f.len())),
+            // Labels come from the views; translated here if the table has them.
+            Op::ApplyPatch { label, .. } => crate::i18n::tr(label).into(),
+            Op::Commit { amend: true, .. } => t!("Amend commit"),
+            Op::Commit { .. } => t!("Commit"),
+            Op::Fetch { remote: Some(r) } => t!("Fetch {}", r),
+            Op::Fetch { remote: None } => t!("Fetch all remotes"),
+            Op::Pull(_) => t!("Pull"),
+            Op::Push(o) => t!("Push {} to {}", o.branch, o.remote),
+            Op::PushTag { tag, remote } => t!("Push tag {} to {}", tag, remote),
+            Op::DeleteRemoteRef { remote, name } => t!("Delete {} from {}", name, remote),
+            Op::Checkout(b) => t!("Check out {}", b),
+            Op::CheckoutRemote { local, .. } => t!("Check out {}", local),
+            Op::CheckoutDetached(r) => t!("Check out {}", short(r)),
+            Op::CreateBranch { name, .. } => t!("Create branch {}", name),
+            Op::RenameBranch { old, new } => t!("Rename {} to {}", old, new),
+            Op::DeleteBranch { name, .. } => t!("Delete branch {}", name),
+            Op::MoveBranch { name, .. } => t!("Move branch {}", name),
+            Op::SetUpstream { branch, upstream } => t!("Track {} from {}", upstream, branch),
+            Op::Merge { rev, .. } => t!("Merge {}", short(rev)),
+            Op::Rebase { onto } => t!("Rebase onto {}", short(onto)),
             Op::InteractiveRebase { steps, .. } => {
-                format!("Interactive rebase of {}", commits(steps.len()))
+                t!("Interactive rebase of {}", commits(steps.len()))
             }
-            Op::CherryPick { id, .. } => format!("Cherry-pick {}", ferrum_core::short(*id)),
-            Op::Revert { id, .. } => format!("Revert {}", ferrum_core::short(*id)),
-            Op::Reset { rev, .. } => format!("Reset to {}", short(rev)),
-            Op::CreateTag { name, .. } => format!("Create tag {name}"),
-            Op::DeleteTag(n) => format!("Delete tag {n}"),
-            Op::StashPush { .. } => "Stash changes".into(),
-            Op::StashApply { stash, pop: true } => format!("Pop {}", stash.refname()),
-            Op::StashApply { stash, .. } => format!("Apply {}", stash.refname()),
-            Op::StashDrop(s) => format!("Drop {}", s.refname()),
-            Op::Continue(s) => format!("Continue {}", state_word(*s)),
-            Op::Abort(s) => format!("Abort {}", state_word(*s)),
-            Op::Skip(s) => format!("Skip commit in {}", state_word(*s)),
+            Op::CherryPick { id, .. } => t!("Cherry-pick {}", ferrum_core::short(*id)),
+            Op::Revert { id, .. } => t!("Revert {}", ferrum_core::short(*id)),
+            Op::Reset { rev, .. } => t!("Reset to {}", short(rev)),
+            Op::CreateTag { name, .. } => t!("Create tag {}", name),
+            Op::DeleteTag(n) => t!("Delete tag {}", n),
+            Op::StashPush { .. } => t!("Stash changes"),
+            Op::StashApply { stash, pop: true } => t!("Pop {}", stash.refname()),
+            Op::StashApply { stash, .. } => t!("Apply {}", stash.refname()),
+            Op::StashDrop(s) => t!("Drop {}", s.refname()),
+            Op::Continue(s) => t!("Continue {}", state_name(*s)),
+            Op::Abort(s) => t!("Abort {}", state_name(*s)),
+            Op::Skip(s) => t!("Skip commit in {}", state_name(*s)),
             Op::ResolveWith { path, side } => {
-                format!(
-                    "Resolve {path} with {}",
-                    if *side == Side::Ours {
-                        "ours"
-                    } else {
-                        "theirs"
-                    }
-                )
+                if *side == Side::Ours {
+                    t!("Resolve {} with ours", path)
+                } else {
+                    t!("Resolve {} with theirs", path)
+                }
             }
-            Op::SaveResolution { path, .. } => format!("Resolve {path}"),
-            Op::AddRemote { name, .. } => format!("Add remote {name}"),
-            Op::RemoveRemote(n) => format!("Remove remote {n}"),
+            Op::SaveResolution { path, .. } => t!("Resolve {}", path),
+            Op::AddRemote { name, .. } => t!("Add remote {}", name),
+            Op::RemoveRemote(n) => t!("Remove remote {}", n),
             Op::Lfs(a) => format!("Git LFS {a}"),
-            Op::SubmoduleUpdate => "Update submodules".into(),
-            Op::WorktreeAdd { path, .. } => format!("Add worktree {path}"),
-            Op::WorktreeRemove { path, .. } => format!("Remove worktree {path}"),
-            Op::SetIdentity(_) => "Set repository identity".into(),
+            Op::SubmoduleUpdate => t!("Update submodules"),
+            Op::WorktreeAdd { path, .. } => t!("Add worktree {}", path),
+            Op::WorktreeRemove { path, .. } => t!("Remove worktree {}", path),
+            Op::SetIdentity(_) => t!("Set repository identity"),
             Op::CreatePullRequest { hosted, .. } => {
-                format!("Create {}", hosted.kind.request_name())
+                t!("Create {}", hosted.kind.request_name())
             }
             Op::Sequence(label, _) => label.clone(),
         }
@@ -391,17 +390,17 @@ impl Op {
 
 fn files(n: usize) -> String {
     if n == 1 {
-        "1 file".into()
+        t!("1 file")
     } else {
-        format!("{n} files")
+        t!("{} files", n)
     }
 }
 
 fn commits(n: usize) -> String {
     if n == 1 {
-        "1 commit".into()
+        t!("1 commit")
     } else {
-        format!("{n} commits")
+        t!("{} commits", n)
     }
 }
 
@@ -411,16 +410,5 @@ fn short(rev: &str) -> &str {
         &rev[..7]
     } else {
         rev
-    }
-}
-
-fn state_word(s: RepoState) -> &'static str {
-    match s {
-        RepoState::Merge => "merge",
-        RepoState::Rebase => "rebase",
-        RepoState::CherryPick => "cherry-pick",
-        RepoState::Revert => "revert",
-        RepoState::Bisect => "bisect",
-        _ => "operation",
     }
 }

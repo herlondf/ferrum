@@ -441,10 +441,7 @@ impl RepoTab {
         }
         if let Some(entry) = self.undo.pop() {
             self.pending_undo = None;
-            self.start(
-                Op::Sequence(format!("Undo: {}", entry.label), entry.ops),
-                ctx,
-            );
+            self.start(Op::Sequence(t!("Undo: {}", entry.label), entry.ops), ctx);
         }
     }
 
@@ -468,7 +465,7 @@ impl RepoTab {
         work: impl FnOnce(&dyn Fn(&str)) -> crate::jobs::JobResult + Send + 'static,
     ) {
         if self.job.is_some() {
-            self.error("Wait for the current operation to finish.");
+            self.error(t!("Wait for the current operation to finish."));
             return;
         }
         self.pending_undo = None;
@@ -493,14 +490,14 @@ impl RepoTab {
                     self.undo.push(entry);
                 }
                 if job.refresh != Refresh::None {
-                    self.info(format!("{} — done", job.label));
+                    self.info(t!("{} — done", job.label));
                 }
                 Some(out)
             }
             Err(e) => {
                 self.pending_undo = None;
                 self.changes.committing = false;
-                self.error(format!("{} failed: {e}", job.label));
+                self.error(t!("{} failed: {}", job.label, e));
                 // Do not run queued operations on top of a failure.
                 self.queue.clear();
                 None

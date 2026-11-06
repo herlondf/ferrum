@@ -1,7 +1,7 @@
 //! Small helpers shared by the views.
 
 use eframe::egui::{self, Color32};
-use ferrum_core::ChangeKind;
+use ferrum_core::{ChangeKind, RepoState};
 
 /// Formats Unix seconds as `YYYY-MM-DD HH:MM` in the given time zone, like `git log`.
 pub fn format_time(secs: i64, offset_minutes: i32) -> String {
@@ -23,6 +23,32 @@ pub fn format_time(secs: i64, offset_minutes: i32) -> String {
         rem / 3600,
         rem % 3600 / 60
     )
+}
+
+/// What the repository is in the middle of, e.g. "Merge in progress".
+/// (The core's `RepoState::label` stays English.)
+pub fn state_label(s: RepoState) -> String {
+    match s {
+        RepoState::Clean => String::new(),
+        RepoState::Merge => t!("Merge in progress"),
+        RepoState::Rebase => t!("Rebase in progress"),
+        RepoState::CherryPick => t!("Cherry-pick in progress"),
+        RepoState::Revert => t!("Revert in progress"),
+        RepoState::Bisect => t!("Bisect in progress"),
+        RepoState::Other => t!("Operation in progress"),
+    }
+}
+
+/// The operation's name for use inside sentences, e.g. "merge".
+pub fn state_name(s: RepoState) -> String {
+    match s {
+        RepoState::Merge => t!("merge"),
+        RepoState::Rebase => t!("rebase"),
+        RepoState::CherryPick => t!("cherry-pick"),
+        RepoState::Revert => t!("revert"),
+        RepoState::Bisect => t!("bisect"),
+        _ => t!("operation"),
+    }
 }
 
 pub fn added_color(ui: &egui::Ui) -> Color32 {
