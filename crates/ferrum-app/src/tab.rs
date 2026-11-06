@@ -126,6 +126,8 @@ pub struct RepoTab {
     pub rebase: Option<rebase::RebasePlan>,
     pub file_view: Option<blame::FileView>,
     pub prs: forge_ui::PrState,
+    pub sidebar: crate::ui::sidebar_model::SidebarState,
+    pub pane: crate::ui::focus::PaneFocus,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -169,6 +171,8 @@ impl RepoTab {
             rebase: None,
             file_view: None,
             prs: Default::default(),
+            sidebar: Default::default(),
+            pane: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,

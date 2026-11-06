@@ -18,6 +18,11 @@ pub struct BranchInfo {
     pub upstream: Option<String>,
     /// Commits ahead of / behind the upstream.
     pub ahead_behind: Option<(usize, usize)>,
+    /// Upstream set in the config whose branch no longer exists (or whose
+    /// remote is missing), e.g. after the remote branch was deleted.
+    pub missing_upstream: Option<String>,
+    /// Commit time of the tip, in seconds since the Unix epoch.
+    pub time: i64,
 }
 
 impl BranchInfo {
@@ -49,6 +54,8 @@ pub struct TagInfo {
     pub name: String,
     pub target: Oid,
     pub annotated: bool,
+    /// Message of an annotated tag.
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone)]

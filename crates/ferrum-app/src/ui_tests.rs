@@ -35,6 +35,9 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/settings.rs"),
     include_str!("ui/sidebar.rs"),
     include_str!("ui/tools.rs"),
+    include_str!("ui/sidebar_model.rs"),
+    include_str!("ui/focus.rs"),
+    include_str!("i18n/pt_br/sidebar.rs"),
     include_str!("i18n/mod.rs"),
     include_str!("i18n/pt_br/mod.rs"),
     include_str!("i18n/pt_br/common.rs"),
@@ -484,3 +487,6 @@ fn settings_sections_show_preferences() {
     frames(&mut h);
     assert!(h.query_by_label("Verbose git output").is_some());
 }
+/// Sidebar flows (in their own file to keep this one small).
+#[path = "ui_tests_sidebar.rs"]
+mod sidebar;

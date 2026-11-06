@@ -206,15 +206,6 @@ pub static T: &[(&str, &str)] = &[
         "acompanha {} ({} à frente, {} atrás)",
     ),
     ("tracks {}", "acompanha {}"),
-    ("no upstream branch", "sem branch upstream"),
-    (
-        "{}\n{}\nDouble-click to check out",
-        "{}\n{}\nClique duas vezes para fazer checkout",
-    ),
-    (
-        "{}\nDouble-click to check out",
-        "{}\nClique duas vezes para fazer checkout",
-    ),
     ("Push {}…", "Fazer push de {}…"),
     ("Merge {} into {}…", "Fazer merge de {} em {}…"),
     ("Rebase {} onto {}…", "Fazer rebase de {} sobre {}…"),
@@ -273,7 +264,6 @@ pub static T: &[(&str, &str)] = &[
         "Remover a worktree em {}? As alterações sem commit nela serão perdidas.",
     ),
     ("Copy path", "Copiar caminho"),
-    ("+ Add worktree…", "+ Adicionar worktree…"),
     (
         "Extra working folders that share this repository",
         "Pastas de trabalho extras que compartilham este repositório",

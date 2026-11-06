@@ -102,6 +102,9 @@ pub struct Settings {
     pub prefs: crate::prefs::Prefs,
     /// Editor, terminal, diff and merge tools (Settings > Tools).
     pub external: crate::external::ExternalTools,
+    /// Sidebar state per repository (pinned refs, open folders, sort).
+    #[serde(default)]
+    pub repos: std::collections::BTreeMap<String, crate::ui::sidebar_model::RepoPrefs>,
 }
 
 impl Default for Settings {
@@ -119,6 +122,7 @@ impl Default for Settings {
             clone_dir: String::new(),
             prefs: Default::default(),
             external: Default::default(),
+            repos: Default::default(),
         }
     }
 }

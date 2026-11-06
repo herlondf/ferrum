@@ -176,6 +176,18 @@ fn entries(tab: Option<&RepoTab>, tab_names: &[String], settings: &Settings) -> 
                 },
             ));
         }
+        // Pinned refs (see the sidebar): jump to their commit.
+        for refname in &t.sidebar.prefs.pinned {
+            let short = ["refs/heads/", "refs/remotes/", "refs/tags/"]
+                .iter()
+                .find_map(|p| refname.strip_prefix(p))
+                .unwrap_or(refname);
+            if let Ok(id) = t.repo.resolve(refname) {
+                list.push(entry(t!("📌 Show {}", short), "", move || {
+                    Command::SelectCommit(id)
+                }));
+            }
+        }
         for b in t
             .branches
             .iter()
