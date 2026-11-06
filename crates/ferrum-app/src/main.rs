@@ -3,6 +3,7 @@ mod i18n;
 
 mod app;
 mod command;
+mod commit_prefs;
 mod icon;
 mod jobs;
 mod settings;

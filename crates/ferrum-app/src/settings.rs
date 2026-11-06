@@ -98,6 +98,8 @@ pub struct Settings {
     pub accounts: Vec<ForgeAccount>,
     /// Folder suggested when cloning.
     pub clone_dir: String,
+    pub commit: crate::commit_prefs::CommitPrefs,
+    pub ai: crate::commit_prefs::AiPrefs,
 }
 
 impl Default for Settings {
@@ -113,6 +115,8 @@ impl Default for Settings {
             profiles: Vec::new(),
             accounts: Vec::new(),
             clone_dir: String::new(),
+            commit: Default::default(),
+            ai: Default::default(),
         }
     }
 }

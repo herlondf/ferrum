@@ -41,7 +41,8 @@ pub struct FerrumApp {
 /// screen for screenshots: `changes`, `history`, `commit:N` (N-th commit),
 /// `file:PATH`, `blame:PATH`, `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `palette`, `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login`,
-/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`.
+/// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
+/// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -73,6 +74,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             }))),
             "palette" => out.push(Command::ShowPalette),
             "search" => out.push(Command::DevStep(DevStep::Search(arg.into()))),
+            "local" => out.push(Command::DevStep(DevStep::Changes(arg.into()))),
             "select" => {
                 if let Some((list, path)) = arg.split_once(':') {
                     let source = if list == "staged" {
@@ -546,6 +548,11 @@ impl FerrumApp {
                     if let Some(t) = self.tab() {
                         t.view = View::Changes;
                         t.select_change(source, path);
+                    }
+                }
+                DevStep::Changes(arg) => {
+                    if let Some(t) = self.tabs.get_mut(self.active) {
+                        changes::dev_step(t, &mut self.settings, &arg);
                     }
                 }
             },
@@ -1033,7 +1040,7 @@ impl eframe::App for FerrumApp {
             if state_banner {
                 egui::Panel::top("banner").show(ui, |ui| self.banner(ui, &mut cmds));
             }
-            let settings = &self.settings;
+            let settings = &mut self.settings;
             let tab = &mut self.tabs[self.active];
             egui::Panel::left("sidebar")
                 .resizable(true)
@@ -1056,7 +1063,7 @@ impl eframe::App for FerrumApp {
                 }
                 View::Changes => {
                     egui::CentralPanel::default_margins()
-                        .show(ui, |ui| changes::show(ui, tab, &mut cmds));
+                        .show(ui, |ui| changes::show(ui, tab, settings, &mut cmds));
                 }
                 View::Conflicts => {
                     egui::CentralPanel::default_margins()

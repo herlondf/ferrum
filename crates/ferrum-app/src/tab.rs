@@ -86,6 +86,8 @@ pub struct ChangesState {
     pub committing: bool,
     /// The message was filled from MERGE_MSG and similar.
     pub prefilled: bool,
+    /// State of the file lists and the commit box.
+    pub ui: crate::ui::changes::ChangesUi,
 }
 
 pub struct UndoEntry {
@@ -279,6 +281,12 @@ impl RepoTab {
             Ok(s) => self.status = s,
             Err(e) => self.error(e.to_string()),
         }
+        // When amending, the staged list also shows the last commit's changes.
+        if self.changes.amend
+            && let Ok(list) = self.repo.amend_staged()
+        {
+            self.status.staged = list;
+        }
         self.reload_change_diff();
         if self.view == View::Conflicts && self.status.conflicted.is_empty() {
             self.view = View::Changes;
@@ -405,7 +413,12 @@ impl RepoTab {
             self.changes.diff = None;
             return;
         }
-        match self.repo.file_diff(source, &path) {
+        let diff = if source == DiffSource::Staged && self.changes.amend {
+            self.repo.amend_file_diff(&path)
+        } else {
+            self.repo.file_diff(source, &path)
+        };
+        match diff {
             Ok(d) => {
                 // Line numbers shift after staging; a stale selection would be misleading.
                 if self.changes.diff.as_ref().map(|old| &old.hunks)
@@ -480,9 +493,13 @@ impl RepoTab {
         let output = match result {
             Ok(out) => {
                 if job.is_commit {
+                    let was_amend = self.changes.amend;
                     self.changes.message.clear();
                     self.changes.amend = false;
                     self.changes.committing = false;
+                    if was_amend {
+                        self.refresh_status();
+                    }
                 }
                 if let Some(entry) = self.pending_undo.take()
                     && self.state == RepoState::Clean

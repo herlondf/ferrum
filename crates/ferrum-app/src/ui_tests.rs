@@ -19,6 +19,11 @@ pub const SOURCES: &[&str] = &[
     include_str!("settings.rs"),
     include_str!("ui/blame.rs"),
     include_str!("ui/changes.rs"),
+    include_str!("ui/changes_tools.rs"),
+    include_str!("ui/commit_box.rs"),
+    include_str!("ui/commit_settings.rs"),
+    include_str!("ui/ai_message.rs"),
+    include_str!("commit_prefs.rs"),
     include_str!("ui/conflicts.rs"),
     include_str!("ui/details.rs"),
     include_str!("ui/dialogs.rs"),
@@ -36,6 +41,7 @@ pub const SOURCES: &[&str] = &[
     include_str!("i18n/pt_br/main.rs"),
     include_str!("i18n/pt_br/editing.rs"),
     include_str!("i18n/pt_br/extras.rs"),
+    include_str!("i18n/pt_br/local.rs"),
 ];
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -113,11 +119,9 @@ fn stage_all_and_commit() {
         "a.txt"
     );
 
-    let message = h.get_by_role(Role::MultilineTextInput);
-    message.focus();
-    frames(&mut h);
-    h.get_by_role(Role::MultilineTextInput)
-        .type_text("Second commit");
+    type_into(&mut h, "Summary", "Second commit");
+    type_into(&mut h, "Description (optional)", "More about it");
+    h.get_by_label("Sign off").click();
     frames(&mut h);
     h.get_by_label("Commit 1 file").click();
     settle(&mut h);
@@ -125,14 +129,141 @@ fn stage_all_and_commit() {
         git(dir.path(), &["log", "-1", "--format=%s"]),
         "Second commit"
     );
+    let body = git(dir.path(), &["log", "-1", "--format=%b"]);
+    assert!(body.starts_with("More about it"), "{body}");
+    assert!(body.contains("Signed-off-by: Test <test@example.com>"));
     assert_eq!(git(dir.path(), &["status", "--porcelain"]), "");
-    // The message box is cleared after a successful commit.
+    // The message box is cleared after a successful commit, and the message
+    // goes to the recent list.
+    assert_eq!(h.state().tabs[0].changes.message, "");
     assert_eq!(
-        h.get_by_role(Role::MultilineTextInput)
-            .value()
-            .unwrap_or_default(),
-        ""
+        h.state().settings.commit.recent_messages,
+        ["Second commit\n\nMore about it"]
     );
+}
+
+/// The text field with this placeholder.
+fn field<'a>(h: &'a Harness<'_, FerrumApp>, placeholder: &'static str) -> egui_kittest::Node<'a> {
+    h.get_by(move |n| n.placeholder() == Some(placeholder))
+}
+
+fn type_into(h: &mut Harness<'_, FerrumApp>, placeholder: &'static str, text: &str) {
+    field(h, placeholder).focus();
+    frames(h);
+    field(h, placeholder).type_text(text);
+    frames(h);
+}
+
+fn file_row<'a>(h: &'a Harness<'_, FerrumApp>, name: &'a str) -> egui_kittest::Node<'a> {
+    h.get_all_by_label_contains(name)
+        .find(|n| n.accesskit_node().role() == Role::Button)
+        .expect("file row")
+}
+
+#[test]
+fn enter_toggles_stage_and_amend_shows_last_commit() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    file_row(&h, "a.txt").click();
+    frames(&mut h);
+    h.key_press(eframe::egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "a.txt"
+    );
+    // The selection follows the file into the staged list; Enter unstages it.
+    h.key_press(eframe::egui::Key::Enter);
+    settle(&mut h);
+    assert_eq!(git(dir.path(), &["diff", "--cached", "--name-only"]), "");
+
+    // Amending lists the files of the last commit as staged.
+    h.get_by_label("Amend last commit").click();
+    frames(&mut h);
+    h.get_by_label_contains("Staged + last commit (1)");
+    assert_eq!(h.state().tabs[0].changes.message, "first");
+}
+
+#[test]
+fn drag_file_to_staged_list() {
+    let dir = repo();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    let from = file_row(&h, "a.txt").rect().center();
+    let to = h.get_by_label("Nothing staged yet.").rect().center();
+    h.hover_at(from);
+    h.step();
+    h.drag_at(from);
+    h.step();
+    for i in 1..=5 {
+        h.hover_at(from + (to - from) * (i as f32 / 5.0));
+        h.step();
+    }
+    // Release without taking the cursor away, as a real mouse does.
+    h.event(eframe::egui::Event::PointerButton {
+        pos: to,
+        button: eframe::egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: eframe::egui::Modifiers::NONE,
+    });
+    settle(&mut h);
+    assert_eq!(
+        git(dir.path(), &["diff", "--cached", "--name-only"]),
+        "a.txt"
+    );
+}
+
+#[test]
+fn ignore_untracked_file_from_menu() {
+    let dir = repo();
+    std::fs::write(dir.path().join("debug.log"), "x\n").unwrap();
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    file_row(&h, "debug.log").click_secondary();
+    frames(&mut h);
+    h.get_by_label("Ignore").hover();
+    frames(&mut h);
+    h.get_by_label("All *.log files").click();
+    settle(&mut h);
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join(".gitignore")).unwrap(),
+        "*.log\n"
+    );
+    assert!(!git(dir.path(), &["status", "--porcelain"]).contains("debug.log"));
+}
+
+#[cfg(unix)]
+#[test]
+fn failing_hook_offers_commit_without_hooks() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = repo();
+    let hook = dir.path().join(".git/hooks/pre-commit");
+    std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+    std::fs::write(&hook, "#!/bin/sh\necho lint found problems\nexit 1\n").unwrap();
+    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    git(dir.path(), &["add", "-A"]);
+
+    let mut h = harness(dir.path());
+    frames(&mut h);
+    h.get_by_label_contains("Local Changes").click();
+    frames(&mut h);
+    type_into(&mut h, "Summary", "Change");
+    h.get_by_label("Commit 1 file").click();
+    settle(&mut h);
+    h.get_by_label("The commit failed");
+    assert!(h.query_all_by_label_contains("lint found problems").count() > 0);
+    assert_eq!(git(dir.path(), &["log", "-1", "--format=%s"]), "first");
+
+    h.get_by_label("Commit without hooks").click();
+    settle(&mut h);
+    assert_eq!(git(dir.path(), &["log", "-1", "--format=%s"]), "Change");
 }
 
 #[test]

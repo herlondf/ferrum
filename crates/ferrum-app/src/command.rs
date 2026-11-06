@@ -64,6 +64,8 @@ pub enum DevStep {
     Search(String),
     Select(ferrum_core::DiffSource, String),
     Theme(crate::settings::ThemeChoice),
+    /// A `local:` step for the local changes view.
+    Changes(String),
 }
 
 /// Collects commands while the UI is drawn.
@@ -101,6 +103,20 @@ pub enum Op {
     Commit {
         message: String,
         amend: bool,
+        signoff: bool,
+        /// Skip the pre-commit and commit-msg hooks.
+        no_verify: bool,
+        /// Receives the output of hooks while the commit runs.
+        log: crate::ui::commit_box::HookLog,
+    },
+    /// Stop tracking files, keeping them on disk.
+    Untrack(Vec<String>),
+    /// Unstage files in the amend view (back to the parent of HEAD).
+    UnstageAmend(Vec<String>),
+    /// Replace a file with its content at a revision.
+    ResetFileTo {
+        path: String,
+        rev: String,
     },
     Fetch {
         remote: Option<String>,
@@ -237,6 +253,9 @@ impl Op {
             },
             Op::Commit { amend: true, .. } => t!("Amend commit"),
             Op::Commit { .. } => t!("Commit"),
+            Op::Untrack(p) => t!("Stop tracking {}", files(p.len())),
+            Op::UnstageAmend(p) => t!("Unstage {}", files(p.len())),
+            Op::ResetFileTo { path, rev } => t!("Reset {} to {}", path, short(rev)),
             Op::Fetch { remote: Some(r) } => t!("Fetch {}", r),
             Op::Fetch { remote: None } => t!("Fetch all remotes"),
             Op::Pull(_) => t!("Pull"),
@@ -297,6 +316,9 @@ impl Op {
             | Op::Unstage(_)
             | Op::UnstageAll
             | Op::Discard(_)
+            | Op::Untrack(_)
+            | Op::UnstageAmend(_)
+            | Op::ResetFileTo { .. }
             | Op::ApplyPatch { .. }
             | Op::ResolveWith { .. }
             | Op::SaveResolution { .. } => Refresh::Status,
@@ -331,7 +353,28 @@ impl Op {
                 reverse,
                 ..
             } => ops::apply_patch(git, patch, *target, *reverse),
-            Op::Commit { message, amend } => ops::commit(git, message, *amend),
+            Op::Commit {
+                message,
+                amend,
+                signoff,
+                no_verify,
+                log,
+            } => {
+                let opts = ferrum_core::local::CommitOptions {
+                    amend: *amend,
+                    signoff: *signoff,
+                    no_verify: *no_verify,
+                };
+                ferrum_core::local::commit(git, message, opts, |line| {
+                    if let Ok(mut l) = log.lock() {
+                        l.push(line.to_owned());
+                    }
+                    p(line);
+                })
+            }
+            Op::Untrack(paths) => ferrum_core::local::untrack(git, paths),
+            Op::UnstageAmend(paths) => ferrum_core::local::unstage_from_amend(git, paths),
+            Op::ResetFileTo { path, rev } => ferrum_core::local::reset_file_to(git, rev, path),
             Op::Fetch { remote } => ops::fetch(git, remote.as_deref(), p),
             Op::Pull(mode) => ops::pull(git, *mode, p),
             Op::Push(opts) => ops::push(git, opts, p),
