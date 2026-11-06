@@ -158,6 +158,8 @@ pub fn show(
         .id(egui::Id::unique("ai-review"))
         .open(&mut open)
         .default_size([720.0, 560.0])
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(ctx.content_rect().center())
         .resizable(true)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {

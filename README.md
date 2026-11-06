@@ -133,8 +133,25 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   and Go to line; history of a range of lines (`git log -L`) from the blame or
   any diff line's menu; a separate window per file; "File history…" in the
   command palette finds files and folders by name.
-- **GitHub and GitLab**: list, check out and create pull/merge requests
-  (uses your GitHub CLI login automatically, or a saved token).
+- **Hosted services**: accounts for GitHub (and Enterprise), GitLab (and
+  self-hosted), Bitbucket Cloud and Server/Data Center, Azure DevOps and
+  Gitea/Forgejo, several per service (uses your GitHub CLI login
+  automatically). List, check out and create pull/merge requests (with the
+  repository's PR templates); an **Issues** view with state, author,
+  assignee, label and text filters, recent searches and "New issue"; GitHub
+  notifications in the toolbar; "Open website" in the Repository menu; the
+  remote used for pull requests and issues can be picked when a repository
+  has several. The clone dialog lists the accounts' repositories (SSH or
+  HTTPS URL).
+- **Authentication**: HTTPS usernames/passwords and SSH passphrases asked in
+  a window (Ferrum is git's `GIT_ASKPASS`/`SSH_ASKPASS`; answers can be
+  remembered until it closes), unknown SSH hosts shown with their
+  fingerprints before trusting them. Settings > SSH keys lists the keys in
+  `~/.ssh` and other locations, generates ED25519 keys, adds them to the
+  ssh-agent (which remembers the passphrase) or to a GitHub/GitLab/Gitea
+  account; a first-time SSH assistant does it in one go.
+- **AI code review** of a branch (branch menus) or of two compared commits,
+  with the AI command from Settings > AI and an editable prompt.
 - **Profiles**: per-repository name, email, SSH key and commit signing.
 - **External tools**: open the repository in a terminal, the file manager or
   your editor/IDE (VS Code, Zed, Sublime, JetBrains, Neovim, Cursor or a custom
@@ -249,7 +266,11 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `details:compare=0,3`, `details:workdir=1`, `details:popup`, `details:window`,
   see `details::dev_step`;
   merge, rebase and cherry-pick dialogs: `flow:merge=REV`, `flow:rebase=REV`,
-  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`).
+  `flow:pick=REV,REV`, `flow:select=REV,REV`, see `flow::dev_steps`;
+  hosted services: `issues`, `settings:accounts`, `settings:ssh`,
+  `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
+  `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
+  `app/hosted.rs`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
