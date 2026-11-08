@@ -9,33 +9,6 @@ use crate::command::{Command, Commands};
 use crate::external::Launch;
 use crate::prefs::{Prefs, ToolbarButton};
 
-/// Entries of the Repository menu for the open repository.
-pub fn repository_menu(ui: &mut egui::Ui, repo: &Path, cmds: &mut Commands) {
-    let entries = [
-        (
-            t!("Open in terminal"),
-            Launch::Terminal { dir: repo.into() },
-        ),
-        (
-            t!("Show in file manager"),
-            Launch::Reveal { path: repo.into() },
-        ),
-        (
-            t!("Open in editor"),
-            Launch::Editor {
-                path: repo.into(),
-                line: None,
-            },
-        ),
-    ];
-    for (label, launch) in entries {
-        if ui.button(label).clicked() {
-            cmds.push(Command::External(launch));
-            ui.close();
-        }
-    }
-}
-
 /// The terminal and file manager toolbar buttons (each can be hidden in Settings).
 pub fn toolbar_buttons(ui: &mut egui::Ui, prefs: &Prefs, repo: &Path, cmds: &mut Commands) {
     let terminal = prefs.shows(ToolbarButton::Terminal);

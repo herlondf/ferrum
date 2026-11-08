@@ -659,9 +659,9 @@ fn opens_the_repository_in_a_custom_editor() {
         ..Default::default()
     };
     frames(&mut h);
-    h.get_by_label("📂 Repository").click();
+    h.query_all_by_label("Repository").next().unwrap().click();
     frames(&mut h);
-    h.get_by_label("Open in editor").click();
+    h.get_by_label_contains("Open in editor").click();
     frames(&mut h);
     for _ in 0..200 {
         if let Ok(s) = std::fs::read_to_string(&marker)

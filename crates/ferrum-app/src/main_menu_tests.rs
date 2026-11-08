@@ -77,6 +77,14 @@ fn menu_bar_can_be_hidden() {
     h.state_mut().settings.prefs.hide_menu_bar = true;
     frames(&mut h);
     assert!(h.query_by_label("Help").is_none());
+    // The menus move behind ☰ in the toolbar.
+    h.query_all_by_label("☰").next().unwrap().click();
+    frames(&mut h);
+    h.get_by_label_contains("Help").hover();
+    frames(&mut h);
+    assert!(h.query_by_label_contains("Report an issue").is_some());
+    h.key_press(Key::Escape);
+    frames(&mut h);
     h.state_mut().settings.prefs.hide_menu_bar = false;
     frames(&mut h);
     assert!(h.query_by_label("Help").is_some());

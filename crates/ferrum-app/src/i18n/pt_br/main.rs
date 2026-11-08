@@ -30,8 +30,6 @@ pub static T: &[(&str, &str)] = &[
         "Copiado para a área de transferência",
     ),
     // app.rs: toolbar, tabs, status bar
-    ("📂 Repository", "📂 Repositório"),
-    ("Open…  (Ctrl+O)", "Abrir…  (Ctrl+O)"),
     ("Clone…", "Clonar…"),
     ("New repository…", "Novo repositório…"),
     ("Recent", "Recentes"),

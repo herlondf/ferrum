@@ -628,25 +628,6 @@ fn sources(ui: &mut egui::Ui, lib: &mut Library, scanning: bool, cmds: &mut Comm
     }
 }
 
-/// Entries of the toolbar's Repository menu.
-pub fn repository_menu(ui: &mut egui::Ui, has_tabs: bool, cmds: &mut Commands) {
-    let mut item = |ui: &mut egui::Ui, text: String, cmd: RepoCmd| {
-        if ui.button(text).clicked() {
-            cmds.push(Command::Repos(cmd));
-            ui.close();
-        }
-    };
-    item(
-        ui,
-        t!("Open Quickly…  (Ctrl+Shift+O)"),
-        RepoCmd::OpenQuickly,
-    );
-    item(ui, t!("Repository Manager  (Ctrl+T)"), RepoCmd::NewTab);
-    if has_tabs {
-        item(ui, t!("Repository settings…"), RepoCmd::Settings);
-    }
-}
-
 /// Command palette entries: Open Quickly, tabs and "Workspace: X".
 pub fn palette_entries(settings: &Settings, tab: Option<&RepoTab>, list: &mut Vec<Entry>) {
     use crate::keymap::Action;

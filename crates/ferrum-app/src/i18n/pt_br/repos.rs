@@ -5,10 +5,6 @@ pub static T: &[(&str, &str)] = &[
     ("Repositories", "Repositórios"),
     ("📁 Repositories", "📁 Repositórios"),
     ("Repository Manager", "Gerenciador de repositórios"),
-    (
-        "Repository Manager  (Ctrl+T)",
-        "Gerenciador de repositórios  (Ctrl+T)",
-    ),
     ("Filter repositories", "Filtrar repositórios"),
     (
         "Drop a folder on the window to open it. Enter opens, F2 renames, Delete removes from the list.",
@@ -92,10 +88,6 @@ pub static T: &[(&str, &str)] = &[
     ("Open Quickly", "Abrir rapidamente"),
     ("Open Quickly…", "Abrir rapidamente…"),
     ("🔍 Open Quickly…", "🔍 Abrir rapidamente…"),
-    (
-        "Open Quickly…  (Ctrl+Shift+O)",
-        "Abrir rapidamente…  (Ctrl+Shift+O)",
-    ),
     (
         "Type a repository name…",
         "Digite o nome de um repositório…",

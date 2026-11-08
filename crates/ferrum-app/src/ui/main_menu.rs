@@ -180,14 +180,7 @@ pub fn show(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
                 let (resp, _) = egui::containers::menu::MenuButton::new(job).ui(ui, |ui| {
                     ui.set_min_width(300.0);
                     CHECK_COLUMN.set(matches!(menu, Menu::View | Menu::Window));
-                    match menu {
-                        Menu::File => file(ui, &bar, cmds),
-                        Menu::Edit => edit(ui, &bar, cmds),
-                        Menu::View => view(ui, &mut bar, cmds),
-                        Menu::Repository => repository(ui, &bar, cmds),
-                        Menu::Window => window(ui, &bar, cmds),
-                        Menu::Help => help(ui, cmds),
-                    }
+                    contents(ui, menu, &mut bar, cmds);
                 });
                 ids.push(Popup::menu(&resp).get_id());
             }
@@ -205,6 +198,32 @@ pub fn show(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
         None => {}
     }
     ctx.data_mut(|d| d.insert_temp(ids_id(), ids));
+}
+
+/// All menus behind one ☰ button, for when the menu bar is hidden.
+pub fn compact(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
+    ui.menu_button("☰", |ui| {
+        for menu in MENUS {
+            ui.menu_button(menu.title(), |ui| {
+                ui.set_min_width(300.0);
+                CHECK_COLUMN.set(matches!(menu, Menu::View | Menu::Window));
+                contents(ui, menu, &mut bar, cmds);
+            });
+        }
+    })
+    .response
+    .on_hover_text(t!("Menu"));
+}
+
+fn contents(ui: &mut egui::Ui, menu: Menu, bar: &mut Bar, cmds: &mut Commands) {
+    match menu {
+        Menu::File => file(ui, bar, cmds),
+        Menu::Edit => edit(ui, bar, cmds),
+        Menu::View => view(ui, bar, cmds),
+        Menu::Repository => repository(ui, bar, cmds),
+        Menu::Window => window(ui, bar, cmds),
+        Menu::Help => help(ui, cmds),
+    }
 }
 
 // ----- Items -----

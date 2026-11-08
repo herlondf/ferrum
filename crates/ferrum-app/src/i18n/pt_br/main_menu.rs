@@ -4,6 +4,7 @@ pub static T: &[(&str, &str)] = &[
     ("Edit", "Editar"),
     ("Window", "Janela"),
     ("Help", "Ajuda"),
+    ("Menu", "Menu"),
     ("New tab", "Nova aba"),
     ("Settings…", "Configurações…"),
     ("Quit", "Sair"),

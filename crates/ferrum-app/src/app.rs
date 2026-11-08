@@ -848,39 +848,9 @@ impl FerrumApp {
 
     fn toolbar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
         ui.horizontal(|ui| {
-            ui.menu_button(t!("📂 Repository"), |ui| {
-                if ui.button(t!("Open…  (Ctrl+O)")).clicked() {
-                    cmds.push(Command::OpenRepoDialog);
-                    ui.close();
-                }
-                if ui.button(t!("Clone…")).clicked() {
-                    cmds.push(Command::Dialog(Dialog::clone_repo(&self.settings)));
-                    ui.close();
-                }
-                if ui.button(t!("New repository…")).clicked() {
-                    cmds.push(Command::Dialog(Dialog::Init {
-                        path: String::new(),
-                    }));
-                    ui.close();
-                }
-                crate::ui::repo_manager::repository_menu(ui, !self.tabs.is_empty(), cmds);
-                if let Some(tab) = self.tabs.get(self.active) {
-                    ui.separator();
-                    crate::ui::tools::repository_menu(ui, tab.path(), cmds);
-                    crate::ui::custom_commands::repository_menu(ui, tab, cmds);
-                    crate::ui::issues::website_button(ui, tab, cmds);
-                }
-                if !self.settings.recent.is_empty() {
-                    ui.separator();
-                    ui.weak(t!("Recent"));
-                    for p in self.settings.recent.clone() {
-                        if ui.button(p.display().to_string()).clicked() {
-                            cmds.push(Command::OpenRepo(p));
-                            ui.close();
-                        }
-                    }
-                }
-            });
+            if self.settings.prefs.hide_menu_bar {
+                crate::ui::main_menu::compact(ui, self.menu_bar(), cmds);
+            }
             let Some(tab) = self.tabs.get(self.active).filter(|_| !self.repos.home_active) else {
                 return;
             };
@@ -890,33 +860,6 @@ impl FerrumApp {
             let show = |b| self.settings.prefs.shows(b);
             ui.add_enabled_ui(!busy, |ui| {
                 crate::ui::sync_ui::toolbar(ui, tab, &self.settings, cmds);
-                ui.menu_button("☰", |ui| {
-                    if ui.button(t!("Pull with options…")).clicked() {
-                        cmds.push(Command::Dialog(Dialog::pull(tab)));
-                        ui.close();
-                    }
-                    if ui.button(t!("Add remote…")).clicked() {
-                        cmds.push(Command::Dialog(Dialog::AddRemote {
-                            name: String::new(),
-                            url: String::new(),
-                        }));
-                        ui.close();
-                    }
-                    ui.separator();
-                    crate::ui::lfs::menu(ui, tab, cmds);
-                    if ui.button(t!("Add submodule…")).clicked() {
-                        let d = crate::ui::submodules::SubmoduleDialog::add();
-                        cmds.push(Command::Dialog(Dialog::Submodule(d)));
-                        ui.close();
-                    }
-                    if !tab.submodules.is_empty() && ui.button(t!("Update submodules")).clicked() {
-                        cmds.run(Op::SubmoduleUpdate);
-                        ui.close();
-                    }
-                    ui.separator();
-                    crate::ui::gitflow::menu(ui, tab, cmds);
-                    crate::ui::patches::menu(ui, tab, cmds);
-                });
                 ui.separator();
                 if show(Tb::Branch)
                     && ui
@@ -991,15 +934,18 @@ impl FerrumApp {
         });
     }
 
-    fn main_menu(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
-        let bar = crate::ui::main_menu::Bar {
+    fn menu_bar(&mut self) -> crate::ui::main_menu::Bar<'_> {
+        crate::ui::main_menu::Bar {
             settings: &mut self.settings,
             tabs: &self.tabs,
             active: self.active,
             home: self.repos.home_active || self.tabs.is_empty(),
             can_reopen: !self.repos.closed.is_empty(),
-        };
-        crate::ui::main_menu::show(ui, bar, cmds);
+        }
+    }
+
+    fn main_menu(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        crate::ui::main_menu::show(ui, self.menu_bar(), cmds);
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
