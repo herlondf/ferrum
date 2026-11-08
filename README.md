@@ -6,6 +6,10 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 
 ## Features
 
+- **Main menu bar**: File, Edit, View, Repository, Window and Help, with every
+  item's shortcut (from Settings > Shortcuts). F10 opens the first menu,
+  Alt + the underlined letter opens a menu, Left / Right switch menus. It can be
+  hidden in Settings > Appearance.
 - **Repository Manager** (start screen, and Ctrl+T in a new tab): known
   repositories in groups, rename (F2), remove from the list (Delete), open
   (Enter or double-click), Ctrl/Shift+click to select several, missing folders
@@ -277,11 +281,13 @@ in Settings > Shortcuts. Defaults:
 | Undo | Ctrl+Z |
 | Open in terminal / show in file manager | Ctrl+Alt+T / Ctrl+Alt+O |
 | Close tab, next / previous tab | Ctrl+W, Ctrl+Tab / Ctrl+Shift+Tab |
+| Quit | Ctrl+Q |
 | *Context keys (fixed):* | |
 | Copy commit id (commit list focused) | Ctrl+C |
 | Apply the patch on the clipboard (history or local changes focused) | Ctrl+V |
 | Repository Manager: open, rename, remove from the list | Enter, F2, Delete |
 | Collapse / expand the selected merge | Left / Right |
+| Main menu: open the first menu / a menu / switch menus | F10 / Alt+letter / Left, Right |
 | Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
 | Fetch / Pull / Push with options | Alt+click or right-click the toolbar button |
 | Compare two commits / select several | Ctrl+click / Shift+click |

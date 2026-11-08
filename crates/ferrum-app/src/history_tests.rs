@@ -73,7 +73,7 @@ fn collapse_merges_with_keys_and_view_menu() {
     frames(&mut h);
     assert_eq!(summaries(&h).len(), 6);
 
-    h.get_by_label("View").click();
+    h.query_all_by_label("View").last().unwrap().click(); // the history toolbar, not the menu bar
     frames(&mut h);
     h.get_by_label("Collapse all merges").click();
     frames(&mut h);

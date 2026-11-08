@@ -16,6 +16,7 @@ mod history;
 mod hosted;
 mod local;
 mod main;
+mod main_menu;
 mod parts;
 mod preferences;
 mod refs;
@@ -30,6 +31,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     details::T,
     diff::T,
     main::T,
+    main_menu::T,
     parts::T,
     editing::T,
     extras::T,

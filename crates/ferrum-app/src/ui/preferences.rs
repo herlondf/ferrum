@@ -102,6 +102,8 @@ pub fn appearance(ui: &mut egui::Ui, settings: &mut Settings) {
     });
 
     subheading(ui, t!("Toolbar buttons"));
+    ui.checkbox(&mut p.hide_menu_bar, t!("Hide the menu bar"))
+        .on_hover_text(t!("F10 and Alt+letter only work while it is shown"));
     ui.horizontal_wrapped(|ui| {
         for b in ToolbarButton::ALL {
             let mut shown = p.shows(b);

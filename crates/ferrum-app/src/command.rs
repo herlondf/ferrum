@@ -94,6 +94,8 @@ pub enum DevStep {
     Sidebar(String),
     /// A `local:` step for the local changes view.
     Changes(String),
+    /// Open a menu of the main menu bar (`menu:N`).
+    Menu(usize),
 }
 
 /// Collects commands while the UI is drawn.

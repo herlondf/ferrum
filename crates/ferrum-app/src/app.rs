@@ -52,7 +52,7 @@ pub struct FerrumApp {
 /// `file:PATH`, `blame:PATH`, `lines:PATH:A-B`, `finder:TEXT`, `file-window`,
 /// `conflict:PATH`, `prs`, `rebase:N` (last N
 /// commits), `settings`, `settings:SECTION` (appearance, git, tools, shortcuts,
-/// commands...), `palette`, `palette:QUERY`,
+/// commands...), `palette`, `palette:QUERY`, `menu:N` (main menu N),
 /// `theme:light|dark`, `dialog:branch|push|stash|clone|identity|pr|login|
 /// submodule|submodule-update|lfs`,
 /// `dialog:fetch|pull|push-many|push-tags|track|remote`,
@@ -105,6 +105,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "palette" if arg.is_empty() => out.push(Command::ShowPalette),
             "palette" => out.push(Command::DevStep(DevStep::Palette(arg.into()))),
             "activity" => out.push(Command::ShowActivity),
+            "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
             "collapse-all" => out.push(history_options::cmd(|t, _| {
@@ -691,6 +692,7 @@ impl FerrumApp {
                     self.settings_window.select(&name);
                 }
                 DevStep::Theme(theme) => self.settings.theme = theme,
+                DevStep::Menu(i) => crate::ui::main_menu::open(ctx, i),
                 DevStep::Palette(q) => self.palette.open_with(&q),
                 DevStep::Search(q) => {
                     if let Some(t) = self.tab() {
@@ -775,6 +777,9 @@ impl FerrumApp {
         }
         if pressed(A::Settings) {
             cmds.push(Command::ShowSettings);
+        }
+        if pressed(A::Quit) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
         if self.showing_home() || self.dialog.is_some() {
             return;
@@ -986,6 +991,17 @@ impl FerrumApp {
         });
     }
 
+    fn main_menu(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        let bar = crate::ui::main_menu::Bar {
+            settings: &mut self.settings,
+            tabs: &self.tabs,
+            active: self.active,
+            home: self.repos.home_active || self.tabs.is_empty(),
+            can_reopen: !self.repos.closed.is_empty(),
+        };
+        crate::ui::main_menu::show(ui, bar, cmds);
+    }
+
     fn status_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
         ui.horizontal(|ui| {
             let tab = self.tabs.get(self.active);
@@ -1101,6 +1117,9 @@ impl eframe::App for FerrumApp {
         let title = self.window_title();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
+        if !self.settings.prefs.hide_menu_bar {
+            egui::Panel::top("main-menu").show(ui, |ui| self.main_menu(ui, &mut cmds));
+        }
         egui::Panel::top("toolbar").show(ui, |ui| {
             ui.add_space(2.0);
             self.toolbar(ui, &mut cmds);

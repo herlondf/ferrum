@@ -31,6 +31,8 @@ mod icon;
 mod jobs;
 mod keymap;
 #[cfg(test)]
+mod main_menu_tests;
+#[cfg(test)]
 mod parts_tests;
 mod prefs;
 mod ref_ops;

@@ -42,6 +42,7 @@ pub mod image_diff;
 pub mod issue_links;
 pub mod issues;
 pub mod lfs;
+pub mod main_menu;
 pub mod open_quickly;
 pub mod overview;
 pub mod palette;

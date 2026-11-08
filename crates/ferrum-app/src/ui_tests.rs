@@ -127,6 +127,8 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/clone_repos.rs"),
     include_str!("ui/issues.rs"),
     include_str!("i18n/pt_br/hosted.rs"),
+    include_str!("ui/main_menu.rs"),
+    include_str!("i18n/pt_br/main_menu.rs"),
 ];
 
 pub fn git(dir: &Path, args: &[&str]) -> String {

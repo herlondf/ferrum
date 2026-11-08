@@ -7,7 +7,7 @@ use crate::command::{Command, Commands, Op};
 use crate::settings::{PullChoice, Settings, ThemeChoice};
 use crate::ui::dialogs::dirs_home;
 
-const REPO_URL: &str = "https://github.com/herlondf/ferrum";
+pub(crate) const REPO_URL: &str = "https://github.com/herlondf/ferrum";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum Section {

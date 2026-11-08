@@ -132,6 +132,7 @@ pub struct Prefs {
     /// Git executable; empty = `git` on the PATH.
     pub git_path: String,
     pub verbose_git: bool,
+    pub hide_menu_bar: bool,
 }
 
 impl Default for Prefs {
@@ -148,6 +149,7 @@ impl Default for Prefs {
             ask_local_changes: false,
             git_path: String::new(),
             verbose_git: false,
+            hide_menu_bar: false,
         }
     }
 }

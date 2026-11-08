@@ -80,6 +80,7 @@ actions! {
     OpenQuickly = "open_quickly", t!("Open Quickly (search known repositories)"), ["Mod+Shift+O"];
     NextTab = "next_tab", t!("Next tab"), ["Mod+Tab"];
     PrevTab = "previous_tab", t!("Previous tab"), ["Mod+Shift+Tab"];
+    Quit = "quit", t!("Quit"), ["Mod+Q"];
 }
 
 /// A key with modifiers. `command` is Ctrl, or Cmd on macOS; `ctrl` is the
@@ -278,6 +279,9 @@ struct State {
     capture: Option<Option<Combo>>,
     /// The recording editor was drawn last frame (else recording stops).
     alive: bool,
+    /// Actions picked in a menu, run next frame as if their key was pressed.
+    queued: Vec<Action>,
+    triggered: Vec<Action>,
 }
 
 thread_local! {
@@ -286,6 +290,8 @@ thread_local! {
         map: Keymap::new(&Overrides::new()),
         capture: None,
         alive: false,
+        queued: Vec::new(),
+        triggered: Vec::new(),
     });
 }
 
@@ -298,6 +304,7 @@ pub fn begin_frame(ctx: &egui::Context, overrides: &Overrides) {
             s.map = Keymap::new(overrides);
             s.overrides = Some(overrides.clone());
         }
+        s.triggered = std::mem::take(&mut s.queued);
         if !std::mem::take(&mut s.alive) {
             s.capture = None;
         }
@@ -323,6 +330,12 @@ pub fn begin_frame(ctx: &egui::Context, overrides: &Overrides) {
             }
         }
     });
+}
+
+/// Runs `a` next frame as if one of its keys was pressed (menus use it).
+pub fn trigger(ctx: &egui::Context, a: Action) {
+    STATE.with(|s| s.borrow_mut().queued.push(a));
+    ctx.request_repaint();
 }
 
 /// Starts recording the next key combination (Escape cancels).
@@ -372,6 +385,17 @@ pub fn peek(ctx: &egui::Context, a: Action) -> bool {
 }
 
 fn check(ctx: &egui::Context, a: Action, consume: bool) -> bool {
+    let picked = STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let pos = s.triggered.iter().position(|&t| t == a);
+        if consume && let Some(i) = pos {
+            s.triggered.remove(i);
+        }
+        pos.is_some()
+    });
+    if picked {
+        return true;
+    }
     let keys: Vec<Combo> = STATE.with(|s| {
         let s = s.borrow();
         if s.capture.is_some() {
