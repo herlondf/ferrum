@@ -627,6 +627,14 @@ fn new_pr_dialog(
     ui.horizontal(|ui| {
         ui.label(t!("Description"));
         template_picker(ui, f);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let base = if f.target.is_empty() {
+                String::new()
+            } else {
+                format!("{}/{}", f.remote, f.target)
+            };
+            crate::ui::ai_pr::write_button(ui, "new-pr", tab.path(), &base, &f.source, &mut f.body);
+        });
     });
     ui.add(
         egui::TextEdit::multiline(&mut f.body)

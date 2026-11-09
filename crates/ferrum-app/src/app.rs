@@ -7,6 +7,7 @@ use eframe::egui;
 use ferrum_core::forge;
 use ferrum_core::{RepoState, ops};
 
+mod ai;
 mod background;
 mod hosted;
 mod parts;
@@ -51,6 +52,7 @@ pub struct FerrumApp {
     toasts: crate::ui::toasts::Toasts,
     /// Operation timeline, secrets warning, learning panel.
     safety: safety::State,
+    ai: ai::State,
 }
 
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
@@ -72,7 +74,8 @@ pub struct FerrumApp {
 /// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
 /// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`),
 /// `toast:success|info|error` (see `toasts::dev_step`),
-/// `timeline`, `restore:N`, `learning`, `secrets:scan` (see `app/safety.rs`).
+/// `timeline`, `restore:N`, `learning`, `secrets:scan` (see `app/safety.rs`),
+/// `ai:explain=N|diff=PATH|history=PATH|split` (see `app/ai.rs`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -120,6 +123,8 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "activity" => out.push(Command::ShowActivity),
             "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
             "toast" => out.push(Command::DevStep(DevStep::Toast(step.into()))),
+            // ai:explain=N|diff=PATH|history=PATH|split (see `app/ai.rs`)
+            "ai" => out.push(Command::Ai(crate::ai::AiCmd::Dev(arg.into()))),
             "timeline" | "restore" | "learning" | "secrets" | "discard-all" => {
                 out.push(safety::dev_command(step))
             }
@@ -253,6 +258,7 @@ impl FerrumApp {
             repos: Default::default(),
             toasts: Default::default(),
             safety: Default::default(),
+            ai: Default::default(),
         };
         // Repositories given on the command line replace the saved session.
         let (to_open, active) = if paths.is_empty() {
@@ -787,6 +793,7 @@ impl FerrumApp {
             }
             Command::Hosted(c) => self.handle_hosted(c, ctx),
             Command::Safety(c) => self.handle_safety(c, ctx),
+            Command::Ai(c) => self.handle_ai(c, ctx),
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -970,6 +977,7 @@ impl eframe::App for FerrumApp {
         self.apply_look(&ctx);
         self.poll_jobs(&ctx);
         self.safety_tick(&ctx);
+        self.ai_tick(&ctx);
         self.background_tick(&ctx);
         self.repos_tick(&ctx);
         self.hosted_tick(&ctx);
@@ -1040,6 +1048,7 @@ impl eframe::App for FerrumApp {
             if state_banner {
                 egui::Panel::top("banner").show(ui, |ui| self.banner(ui, &mut cmds));
             }
+            self.ai_panel(ui, &mut cmds);
             let settings = &mut self.settings;
             let tab = &mut self.tabs[self.active];
             if self.dialog.is_none() {
@@ -1125,6 +1134,7 @@ impl eframe::App for FerrumApp {
         self.repo_windows(&ctx, &mut cmds);
         self.show_activity(&ctx);
         self.safety_windows(&ctx, &mut cmds);
+        self.ai_windows(&ctx, &mut cmds);
         crate::ui::custom_commands::output_window(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
         self.hosted_windows(&ctx, &mut cmds);

@@ -69,7 +69,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds:
     let in_message = ui.memory(|m| m.has_focus(subject_id) || m.has_focus(body_id));
     let commit_key = in_message && pressed(ui.ctx(), Action::Commit);
 
-    tools(ui, tab, settings);
+    tools(ui, tab, settings, cmds);
     message_fields(ui, tab, settings, subject_id, body_id);
     options(ui, tab, settings);
     buttons(ui, tab, settings, cmds, commit_key, commit_push);
@@ -415,11 +415,11 @@ fn options(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
 }
 
 /// The header over the message: recent messages, wrap and AI.
-fn tools(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
+fn tools(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &mut Commands) {
     ui.horizontal(|ui| {
         ui.label(theme::strong(t!("Commit message")));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ai_button(ui, tab, settings);
+            ai_button(ui, tab, settings, cmds);
             let column = settings.commit.ruler_column;
             if column > 0
                 && ui
@@ -461,7 +461,7 @@ fn tools(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
     });
 }
 
-fn ai_button(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings) {
+fn ai_button(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmds: &mut Commands) {
     if let Some(task) = &tab.changes.ui.commit.ai {
         ui.spinner();
         if ui
@@ -474,6 +474,15 @@ fn ai_button(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings) {
         return;
     }
     let can = !tab.status.staged.is_empty();
+    let cfg = crate::ui::ai_common::config(ui.ctx());
+    let hover = if cfg.enabled {
+        t!(
+            "Write the message from the staged changes. {}",
+            crate::ai::where_to(&cfg.provider).long
+        )
+    } else {
+        t!("AI is off: turn it on in Settings > AI.")
+    };
     let resp = ui
         .add_enabled(
             can,
@@ -481,12 +490,13 @@ fn ai_button(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings) {
                 .small()
                 .frame_when_inactive(false),
         )
-        .on_hover_text(t!(
-            "Write the message from the staged changes with {}",
-            settings.ai.command
-        ))
+        .on_hover_text(hover)
         .on_disabled_hover_text(t!("Stage some changes first"));
     if resp.clicked() {
+        if !cfg.enabled {
+            cmds.push(crate::command::Command::Ai(crate::ai::AiCmd::OpenSettings));
+            return;
+        }
         let task = AiTask::start(
             tab.path().to_path_buf(),
             &settings.ai,

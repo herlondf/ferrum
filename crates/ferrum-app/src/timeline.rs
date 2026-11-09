@@ -149,6 +149,8 @@ fn needs_point(op: &Op) -> Option<Vec<String>> {
             ..
         }) => Vec::new(),
         Op::SecretCheck(c) => return needs_point(&c.op),
+        // Split into commits resets the index.
+        Op::Ai(_) => Vec::new(),
         _ => return None,
     })
 }

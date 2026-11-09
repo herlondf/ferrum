@@ -303,7 +303,11 @@ fn ai_review_shows_the_answer() {
     git(p, &["commit", "-qam", "second"]);
     let mut h = harness(p);
     frames(&mut h);
-    h.state_mut().settings.ai.command = "grep '^+two'".into();
+    let ai = &mut h.state_mut().settings.ai;
+    ai.command = "grep '^+two'".into();
+    ai.provider = crate::commit_prefs::AiProvider::Command;
+    ai.enabled = true;
+    frames(&mut h);
     run(
         &mut h,
         Command::Hosted(HostedCmd::Review {

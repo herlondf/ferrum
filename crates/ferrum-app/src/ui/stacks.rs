@@ -380,7 +380,19 @@ fn requests_ui(
                 ui.add_space(theme::SPACE_XS);
             }
         });
-    ui.label(t!("Description (added to each)"));
+    ui.horizontal(|ui| {
+        ui.label(t!("Description (added to each)"));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let base = f
+                .stack
+                .branches
+                .first()
+                .map(|b| b.parent.clone())
+                .unwrap_or_default();
+            let head = f.stack.top().name.clone();
+            crate::ui::ai_pr::write_button(ui, "stack-prs", tab.path(), &base, &head, &mut f.body);
+        });
+    });
     ui.add(
         egui::TextEdit::multiline(&mut f.body)
             .desired_rows(2)

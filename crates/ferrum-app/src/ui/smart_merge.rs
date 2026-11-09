@@ -260,7 +260,7 @@ pub fn card(
 }
 
 /// A small read-only diff.
-fn diff_lines(ui: &mut egui::Ui, lines: &[Option<conflict::DiffLine>]) {
+pub(crate) fn diff_lines(ui: &mut egui::Ui, lines: &[Option<conflict::DiffLine>]) {
     if lines.is_empty() {
         ui.weak(t!("No differences."));
         return;

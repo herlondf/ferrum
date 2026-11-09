@@ -1,17 +1,17 @@
-//! AI code review of a branch or commit range: runs the AI command from
+//! AI code review of a branch or commit range: asks the provider of
 //! Settings > AI with an editable prompt and `git diff base...head`, and
-//! shows the answer. Cancellable.
+//! shows the answer as it streams. Cancellable.
 
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui::{self, RichText};
+use ferrum_core::ai::Prompt;
 use ferrum_core::browse::Rev;
 use ferrum_core::cli::Git;
 
+use crate::ai::Stream;
 use crate::command::{Command, Commands};
-use crate::hosted::{HostedCmd, Pending};
+use crate::hosted::HostedCmd;
 use crate::settings::Settings;
 use crate::tab::RepoTab;
 use crate::ui::ai_message;
@@ -23,7 +23,7 @@ pub struct ReviewWindow {
     pub base: String,
     pub head: String,
     pub prompt: String,
-    running: Option<(Pending<String>, Arc<AtomicBool>)>,
+    running: Option<Stream>,
     pub output: Option<Result<String, String>>,
 }
 
@@ -43,15 +43,14 @@ impl ReviewWindow {
         self.running.is_some()
     }
 
-    fn start(&mut self, ctx: &egui::Context, command: String) {
-        let cancel = Arc::new(AtomicBool::new(false));
+    fn start(&mut self, ctx: &egui::Context) {
         let (dir, base, head) = (self.dir.clone(), self.base.clone(), self.head.clone());
-        let (template, flag) = (self.prompt.clone(), cancel.clone());
-        let task = Pending::spawn(ctx, move || {
-            run(&dir, &command, &template, &base, &head, &flag)
-        });
+        let template = self.prompt.clone();
+        let cfg = crate::ui::ai_common::config(ctx);
         self.output = None;
-        self.running = Some((task, cancel));
+        self.running = Some(Stream::start(ctx, &cfg, move || {
+            prompt(&dir, &template, &base, &head)
+        }));
     }
 }
 
@@ -67,28 +66,9 @@ pub fn review_diff(dir: &std::path::Path, base: &str, head: &str) -> Result<Stri
     Ok(ai_message::truncate(diff, MAX_DIFF))
 }
 
-fn run(
-    dir: &std::path::Path,
-    command: &str,
-    template: &str,
-    base: &str,
-    head: &str,
-    cancel: &AtomicBool,
-) -> Result<String, String> {
-    if command.trim().is_empty() {
-        return Err(t!("Set the AI command in Settings first."));
-    }
+fn prompt(dir: &std::path::Path, template: &str, base: &str, head: &str) -> Result<Prompt, String> {
     let diff = review_diff(dir, base, head)?;
-    let out = ai_message::run_command(
-        dir,
-        command,
-        ai_message::build_prompt(template, &diff),
-        cancel,
-    )?;
-    if out.trim().is_empty() {
-        return Err(t!("The AI tool returned an empty answer."));
-    }
-    Ok(out.trim().to_owned())
+    Ok(Prompt::new("", ai_message::build_prompt(template, &diff)))
 }
 
 /// The branch a review compares `rev` with: the remote's default branch, or main/master.
@@ -147,10 +127,8 @@ pub fn show(
     settings: &mut Settings,
     cmds: &mut Commands,
 ) -> bool {
-    if let Some((task, _)) = &w.running
-        && let Some(r) = task.poll()
-    {
-        w.output = Some(r);
+    if let Some(r) = w.running.as_ref().and_then(Stream::finished) {
+        w.output = Some(r.map(|t| ferrum_core::ai::strip_thinking(&t).trim().to_owned()));
         w.running = None;
     }
     let mut open = true;
@@ -168,12 +146,13 @@ pub fn show(
                 ui.label(t!("Changes of"));
                 ui.add(egui::TextEdit::singleline(&mut w.head).desired_width(200.0));
             });
-            ui.weak(t!(
-                "Reviews git diff {}...{} with: {}",
-                w.base,
-                w.head,
-                settings.ai.command
-            ));
+            ui.horizontal(|ui| {
+                ui.weak(t!("Reviews git diff {}...{}", w.base, w.head));
+                crate::ui::ai_common::badge(ui);
+            });
+            if !settings.ai.enabled {
+                crate::ui::ai_common::off_card(ui, cmds);
+            }
             egui::CollapsingHeader::new(t!("Prompt"))
                 .default_open(w.output.is_none() && !w.running())
                 .show(ui, |ui| {
@@ -192,19 +171,21 @@ pub fn show(
                     });
                 });
             ui.horizontal(|ui| {
-                if let Some((_, cancel)) = &w.running {
+                if let Some(stream) = &w.running {
                     ui.spinner();
                     ui.label(t!("Reviewing…"));
                     if ui.button(t!("Cancel")).clicked() {
-                        cancel.store(true, Ordering::Relaxed);
+                        stream.cancel();
                     }
                 } else {
-                    let ready = !w.base.trim().is_empty() && !w.head.trim().is_empty();
+                    let ready = settings.ai.enabled
+                        && !w.base.trim().is_empty()
+                        && !w.head.trim().is_empty();
                     if ui
                         .add_enabled(ready, egui::Button::new(t!("Start review")))
                         .clicked()
                     {
-                        w.start(ctx, settings.ai.command.clone());
+                        w.start(ctx);
                     }
                 }
                 if let Some(Ok(text)) = &w.output
@@ -217,6 +198,10 @@ pub fn show(
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| match &w.output {
+                    None if w.running.is_some() => {
+                        let text = w.running.as_ref().map(Stream::text).unwrap_or_default();
+                        markdown(ui, &ferrum_core::ai::strip_thinking(&text));
+                    }
                     Some(Ok(text)) => markdown(ui, text),
                     Some(Err(e)) => {
                         ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {e}"));
@@ -224,8 +209,8 @@ pub fn show(
                     None => {}
                 });
         });
-    if !open && let Some((_, cancel)) = &w.running {
-        cancel.store(true, Ordering::Relaxed);
+    if !open && let Some(stream) = &w.running {
+        stream.cancel();
     }
     open
 }
@@ -337,24 +322,16 @@ mod tests {
         git.run(&["checkout", "-qb", "feature"]).unwrap();
         std::fs::write(dir.path().join("a.txt"), "one\nadded line\n").unwrap();
         git.run(&["commit", "-qam", "second"]).unwrap();
-        let cancel = AtomicBool::new(false);
-        // `grep` returns the matching line of the prompt (the diff).
-        let out = run(
-            dir.path(),
-            "grep '^+added'",
-            "Review:\n{diff}",
-            "main",
-            "feature",
-            &cancel,
-        )
-        .unwrap();
-        assert_eq!(out, "+added line");
+        // The prompt carries the diff of the branch.
+        let p = prompt(dir.path(), "Review:\n{diff}", "main", "feature").unwrap();
         assert!(
-            run(dir.path(), "cat", "{diff}", "feature", "main", &cancel).is_err(),
+            p.user.starts_with("Review:\n") && p.user.contains("+added line"),
+            "{}",
+            p.user
+        );
+        assert!(
+            prompt(dir.path(), "{diff}", "feature", "main").is_err(),
             "nothing new on main"
         );
-        assert!(run(dir.path(), "", "{diff}", "main", "feature", &cancel).is_err());
-        cancel.store(true, Ordering::Relaxed);
-        assert!(run(dir.path(), "sleep 5", "{diff}", "main", "feature", &cancel).is_err());
     }
 }

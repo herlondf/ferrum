@@ -355,6 +355,18 @@ fn toolbar(
                 cmds.push(Command::Copy(view.path.clone()));
             }
             base_menu(ui, tab, view);
+            if ui
+                .button(crate::icons::text(crate::icons::AI, t!("Explain")))
+                .on_hover_text(t!(
+                    "Explain this file's history: {}",
+                    crate::ui::ai_common::menu_hint(ui.ctx())
+                ))
+                .clicked()
+            {
+                cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+                    crate::ai::Subject::History(view.path.clone()),
+                )));
+            }
         });
     });
 }
@@ -752,6 +764,20 @@ fn entry_menu(
 ) {
     let e = &entries[i];
     let selected = view.selected.unwrap_or(0);
+    if crate::ui::ai_common::menu_item(ui, &t!("Explain this file's history")) {
+        cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+            crate::ai::Subject::History(view.path.clone()),
+        )));
+    }
+    if crate::ui::ai_common::menu_item(ui, &t!("Explain this diff")) {
+        cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+            crate::ai::Subject::Diff(ferrum_core::ai::prompts::DiffOf::Commit {
+                id: e.commit.id,
+                path: e.path.clone(),
+            }),
+        )));
+    }
+    ui.separator();
     if i != selected && ui.button(t!("Compare with the selected commit")).clicked() {
         let vid = view.id;
         cmds.push(crate::ui::file_window::with_view(vid, move |v| {

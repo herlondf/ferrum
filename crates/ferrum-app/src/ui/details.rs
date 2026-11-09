@@ -885,6 +885,15 @@ fn files(
                 }
                 file_actions::workdir_menu(ui, &root, &f.path, cmds);
                 custom_commands::commit_file_menu(ui, &root, &f.path, id, cmds);
+                ui.separator();
+                if crate::ui::ai_common::menu_item(ui, &t!("Explain this diff")) {
+                    cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+                        crate::ai::Subject::Diff(ferrum_core::ai::prompts::DiffOf::Commit {
+                            id,
+                            path: f.path.clone(),
+                        }),
+                    )));
+                }
             };
             clicked = file_tree::changed_files(
                 ui,

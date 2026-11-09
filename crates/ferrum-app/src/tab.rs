@@ -641,6 +641,7 @@ impl RepoTab {
             Op::Flow(crate::flow::FlowOp::WithLocalChanges { op, .. }) => return self.undo_for(op),
             Op::SecretCheck(c) => return self.undo_for(&c.op),
             Op::Stack(s) => return s.undo(self),
+            Op::Ai(a) => return a.undo(self),
             Op::Checkout(_) | Op::CheckoutDetached(_) => vec![self.back_to_current()?],
             Op::CheckoutRemote { local, .. } => {
                 vec![

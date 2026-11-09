@@ -2,6 +2,7 @@
 mod i18n;
 
 mod accent;
+mod ai;
 mod app;
 mod benchmark;
 #[cfg(test)]

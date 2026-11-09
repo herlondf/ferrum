@@ -90,6 +90,7 @@ impl SettingsWindow {
             "shortcuts" => Section::Shortcuts,
             "commands" => Section::Commands,
             "safety" => Section::Safety,
+            "ai" => Section::Ai,
             "about" => Section::About,
             _ => Section::General,
         };
@@ -152,7 +153,7 @@ pub fn show(
                             }
                             Section::Profiles => profiles(ui, win, settings, cmds),
                             Section::Commit => super::commit_settings::commit(ui, settings),
-                            Section::Ai => super::commit_settings::ai(ui, settings),
+                            Section::Ai => crate::ui::ai_settings::section(ui, settings),
                             Section::Accounts => {
                                 crate::ui::accounts::accounts(ui, &mut win.accounts, settings, cmds)
                             }
