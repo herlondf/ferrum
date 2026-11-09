@@ -440,7 +440,14 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
                     cmds.run(Op::Checkout(l.name.clone()));
                 }
             }
-            if resp.drag_started() && chain.contains(&id) && !tab.busy() {
+            // Branch labels: drag one onto another branch (see branch_dnd).
+            let refs: Vec<_> = draw
+                .labels
+                .iter()
+                .map(|(r, l)| (*r, l.kind, l.name.as_str()))
+                .collect();
+            let label_drag = crate::ui::branch_dnd::graph_row(ui, tab, &resp, &refs);
+            if resp.drag_started() && !label_drag && chain.contains(&id) && !tab.busy() {
                 tab.history.ext.drag = Some(id);
             }
             if let Some(src) = tab.history.ext.drag

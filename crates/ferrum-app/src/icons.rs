@@ -31,6 +31,7 @@ pub const ARROW_CLOCKWISE: &str = "\u{e036}";
 pub const ARROW_COUNTER_CLOCKWISE: &str = "\u{e038}";
 pub const ARROW_DOWN: &str = "\u{e03e}";
 pub const ARROW_ELBOW_DOWN_LEFT: &str = "\u{e044}";
+pub const ARROW_ELBOW_RIGHT_UP: &str = "\u{e052}";
 pub const ARROW_LEFT: &str = "\u{e058}";
 pub const ARROW_LINE_DOWN: &str = "\u{e05c}";
 pub const ARROW_LINE_UP: &str = "\u{e066}";
@@ -46,6 +47,7 @@ pub const ARROWS_IN_SIMPLE: &str = "\u{e09e}";
 pub const ARROWS_OUT_SIMPLE: &str = "\u{e0a6}";
 pub const BELL: &str = "\u{e0ce}";
 pub const BOOKMARK_SIMPLE: &str = "\u{e0ea}";
+pub const BROWSERS: &str = "\u{e0f6}";
 pub const BUG: &str = "\u{e5f4}";
 pub const CARET_DOWN: &str = "\u{e136}";
 pub const CARET_LEFT: &str = "\u{e138}";
@@ -56,6 +58,7 @@ pub const CHART_BAR: &str = "\u{e150}";
 pub const CHECK: &str = "\u{e182}";
 pub const CHECK_CIRCLE: &str = "\u{e184}";
 pub const CHECK_SQUARE: &str = "\u{e186}";
+pub const CHERRIES: &str = "\u{e830}";
 pub const CIRCLE: &str = "\u{e18a}";
 pub const CIRCLE_DASHED: &str = "\u{e602}";
 pub const CLIPBOARD_TEXT: &str = "\u{e198}";
@@ -93,6 +96,7 @@ pub const FOLDER: &str = "\u{e24a}";
 pub const FOLDER_OPEN: &str = "\u{e256}";
 pub const FOLDER_PLUS: &str = "\u{e258}";
 pub const FOLDER_SIMPLE: &str = "\u{e25a}";
+pub const FOLDER_SIMPLE_PLUS: &str = "\u{e25e}";
 pub const FUNNEL: &str = "\u{e266}";
 pub const GEAR_SIX: &str = "\u{e272}";
 pub const GIT_BRANCH: &str = "\u{e278}";
@@ -104,6 +108,7 @@ pub const GIT_PULL_REQUEST: &str = "\u{e282}";
 pub const GITHUB_LOGO: &str = "\u{e576}";
 pub const GITLAB_LOGO: &str = "\u{e694}";
 pub const GLOBE: &str = "\u{e288}";
+pub const HAND_GRABBING: &str = "\u{e57c}";
 pub const HARD_DRIVES: &str = "\u{e2a0}";
 pub const HASH: &str = "\u{e2a2}";
 pub const HOURGLASS: &str = "\u{e2b2}";
@@ -245,6 +250,7 @@ pub const ALL: &[&str] = &[
     ARROW_COUNTER_CLOCKWISE,
     ARROW_DOWN,
     ARROW_ELBOW_DOWN_LEFT,
+    ARROW_ELBOW_RIGHT_UP,
     ARROW_LEFT,
     ARROW_LINE_DOWN,
     ARROW_LINE_UP,
@@ -260,6 +266,7 @@ pub const ALL: &[&str] = &[
     ARROWS_OUT_SIMPLE,
     BELL,
     BOOKMARK_SIMPLE,
+    BROWSERS,
     BUG,
     CARET_DOWN,
     CARET_LEFT,
@@ -270,6 +277,7 @@ pub const ALL: &[&str] = &[
     CHECK,
     CHECK_CIRCLE,
     CHECK_SQUARE,
+    CHERRIES,
     CIRCLE,
     CIRCLE_DASHED,
     CLIPBOARD_TEXT,
@@ -307,6 +315,7 @@ pub const ALL: &[&str] = &[
     FOLDER_OPEN,
     FOLDER_PLUS,
     FOLDER_SIMPLE,
+    FOLDER_SIMPLE_PLUS,
     FUNNEL,
     GEAR_SIX,
     GIT_BRANCH,
@@ -318,6 +327,7 @@ pub const ALL: &[&str] = &[
     GITHUB_LOGO,
     GITLAB_LOGO,
     GLOBE,
+    HAND_GRABBING,
     HARD_DRIVES,
     HASH,
     HOURGLASS,
