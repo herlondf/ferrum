@@ -314,6 +314,11 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &m
         if resp.clicked() {
             stage(tab, settings, cmds, Vec::new());
         }
+        let can_absorb = !busy && !tab.status.is_empty() && tab.head.is_some();
+        let label = t!("Absorb into commits…");
+        if rows::tool_button(ui, can_absorb, crate::icons::ARROWS_IN_SIMPLE, &label).clicked() {
+            cmds.push(Command::Dialog(crate::ui::absorb::open(tab)));
+        }
     });
     let mut order = Vec::new();
     let top = ui.cursor().top();

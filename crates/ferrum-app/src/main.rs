@@ -53,6 +53,9 @@ mod repos;
 mod repos_tests;
 mod settings;
 mod single_instance;
+mod stack_ops;
+#[cfg(test)]
+mod stacks_tests;
 mod sync;
 #[cfg(test)]
 mod sync_tests;

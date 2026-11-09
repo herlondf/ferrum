@@ -441,6 +441,7 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
                 .map(|(r, l)| (*r, l.kind, l.name.as_str()))
                 .collect();
             let label_drag = crate::ui::branch_dnd::graph_row(ui, tab, &resp, &refs);
+            crate::ui::move_hunks::graph_row(ui, tab, &resp, rect, id, cmds);
             if resp.drag_started() && !label_drag && chain.contains(&id) && !tab.busy() {
                 tab.history.ext.drag = Some(id);
             }
@@ -719,6 +720,7 @@ fn paint_row(
         x = r.right() + 4.0;
         hits.labels.push((r.intersect(desc_rect), label));
     }
+    x = crate::ui::stacks::paint_graph_mark(ui, &desc, pos2(x, line1), tab, commit.id);
 
     // Summary, with the conventional prefix and issue links highlighted.
     let summary = if ext.stashes.contains_key(&commit.id) {

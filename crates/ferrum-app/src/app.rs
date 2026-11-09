@@ -149,6 +149,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "gitflow" => out.extend(crate::ui::gitflow::dev_step(arg, tab)),
             "bisect" => out.extend(crate::ui::bisect::dev_step(arg, tab)),
             "patch" => out.extend(crate::ui::patches::dev_step(arg, tab)),
+            "stack" => out.extend(crate::ui::stacks::dev_step(arg, tab)),
             "manager" | "quick" | "overview" | "repo-settings" | "workspace" | "vertical-tabs" => {
                 out.push(Command::Repos(crate::repos::RepoCmd::Dev(step.into())))
             }
@@ -451,6 +452,13 @@ impl FerrumApp {
             JobOutput::PullRequestCreated(pr) => {
                 if let Some(t) = t {
                     t.info(t!("Created #{} {}", pr.number, pr.title));
+                    t.prs.list = None;
+                }
+                self.load_pull_requests();
+            }
+            JobOutput::PullRequestsCreated(text) => {
+                if let Some(t) = t {
+                    t.info(text);
                     t.prs.list = None;
                 }
                 self.load_pull_requests();

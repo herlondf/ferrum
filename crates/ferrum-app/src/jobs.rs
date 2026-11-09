@@ -28,6 +28,8 @@ pub enum JobOutput {
     Done,
     PullRequests(Vec<PullRequest>),
     PullRequestCreated(PullRequest),
+    /// Requests opened for a stack: what to tell the user.
+    PullRequestsCreated(String),
     Account(ForgeAccount),
     /// A repository was cloned or created; open it.
     OpenRepo(std::path::PathBuf),

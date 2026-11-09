@@ -22,6 +22,7 @@ mod preferences;
 mod refs;
 mod repos;
 mod sidebar;
+mod stacks;
 mod sync;
 mod toolbar;
 mod ux;
@@ -49,6 +50,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     refs::T,
     repos::T,
     sidebar::T,
+    stacks::T,
     sync::T,
     toolbar::T,
     views::T,

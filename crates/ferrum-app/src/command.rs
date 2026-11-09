@@ -289,6 +289,8 @@ pub enum Op {
     Sequence(String, Vec<Op>),
     /// A custom command's script or program (see `custom_commands.rs`).
     Custom(crate::custom_commands::Run),
+    /// Stacked branches, absorb and moving hunks (see `stack_ops.rs`).
+    Stack(crate::stack_ops::StackOp),
 }
 
 impl Op {
@@ -391,6 +393,7 @@ impl Op {
             Op::Repo(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
             Op::Custom(r) => r.label.clone(),
+            Op::Stack(s) => s.label(),
         }
     }
 
@@ -416,6 +419,7 @@ impl Op {
             Op::Patch(p) => p.refresh(),
             Op::Repo(_) => Refresh::Status,
             Op::Custom(r) => r.refresh(),
+            Op::Stack(s) => s.refresh(),
             _ => Refresh::All,
         }
     }
@@ -428,6 +432,7 @@ impl Op {
             }
             Op::Part(p) => return p.execute(git, progress),
             Op::Patch(p) => return p.execute(git),
+            Op::Stack(s) => return s.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -541,6 +546,7 @@ impl Op {
             Op::Repo(r) => r.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
             Op::Custom(r) => r.run(git, progress),
+            Op::Stack(s) => s.run(git, progress),
         }
     }
 }

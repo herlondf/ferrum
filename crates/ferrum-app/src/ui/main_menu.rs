@@ -493,6 +493,7 @@ fn repository(ui: &mut egui::Ui, bar: &Bar, cmds: &mut Commands) {
         crate::ui::lfs::menu(ui, t, cmds);
         crate::ui::gitflow::menu(ui, t, cmds);
         crate::ui::patches::menu(ui, t, cmds);
+        crate::ui::stacks::repository_menu(ui, t, cmds);
         crate::ui::custom_commands::repository_menu(ui, t, cmds);
     });
     ui.separator();

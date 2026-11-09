@@ -131,6 +131,7 @@ impl RepoTab {
             swap(&mut self.remotes, &mut fresh.remotes);
             swap(&mut self.submodules, &mut fresh.submodules);
             swap(&mut self.worktrees, &mut fresh.worktrees);
+            swap(&mut self.stacks, &mut fresh.stacks);
             swap(&mut self.uses_lfs, &mut fresh.uses_lfs);
             swap(&mut self.hosted, &mut fresh.hosted);
             swap(&mut self.commits, &mut fresh.commits);
