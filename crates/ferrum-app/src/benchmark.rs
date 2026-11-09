@@ -1,5 +1,7 @@
 //! `ferrum --benchmark <repo> [runs]`: times each step of loading a
-//! repository, to find what makes a big repository slow.
+//! repository, to find what makes a big repository slow, plus scrolling to
+//! the end of the history and searching it. `scripts/benchmark.sh` runs it
+//! on large public repositories.
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -7,7 +9,7 @@ use std::time::{Duration, Instant};
 use ferrum_core::{Repo, graph};
 
 use crate::tab::RepoTab;
-use crate::ui::history_model::{HistorySettings, PAGE};
+use crate::ui::history_model::{self, HistorySettings, PAGE};
 
 /// One timed step: name, time, and a count of what it loaded.
 type Step = (&'static str, Duration, String);
@@ -83,13 +85,45 @@ pub fn run_once(path: &Path) -> Result<Vec<Step>, String> {
                 .unwrap_or_else(|_| "error".into())
         },
     );
-    // What the app does on open and after operations, all steps together.
+    // Scrolling to the very end of the history loads every commit.
+    let all = time(
+        &mut s,
+        "all commits",
+        || repo.log(&Default::default(), usize::MAX),
+        |r| {
+            r.as_ref()
+                .map(|l| l.commits.len().to_string())
+                .unwrap_or_else(|_| "error".into())
+        },
+    );
+    let all = all.map(|l| l.commits).unwrap_or_default();
     let _ = time(
         &mut s,
+        "all graph layout",
+        || graph::layout(&all),
+        |g| format!("{} lanes", g.width),
+    );
+    drop(all);
+    let _ = time(
+        &mut s,
+        "path search",
+        || repo.search_paths("readme", false),
+        len,
+    );
+    // What the app does on open and after operations, all steps together.
+    let tab = time(
+        &mut s,
         "full reload (app)",
-        || RepoTab::open_with(path.to_path_buf(), &HistorySettings::default()).is_ok(),
+        || RepoTab::open_with(path.to_path_buf(), &HistorySettings::default()),
         |_| String::new(),
     );
+    if let Ok(mut tab) = tab {
+        tab.history.search = "fix".into();
+        let started = Instant::now();
+        history_model::apply_search(&mut tab);
+        let hits = tab.history.visible.as_ref().map_or(0, Vec::len);
+        s.push(("text search (page)", started.elapsed(), format!("{hits}")));
+    }
     Ok(s)
 }
 
@@ -134,6 +168,8 @@ mod tests {
         let names: Vec<_> = steps.iter().map(|s| s.0).collect();
         assert!(names.contains(&"commits"));
         assert!(names.contains(&"status"));
-        assert_eq!(names.last(), Some(&"full reload (app)"));
+        assert!(names.contains(&"all commits"));
+        assert!(names.contains(&"path search"));
+        assert_eq!(names.last(), Some(&"text search (page)"));
     }
 }
