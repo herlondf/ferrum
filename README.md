@@ -27,6 +27,13 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   each remembering its own tabs, switched from the manager or the command
   palette ("Workspace: …"), shown in the window title. **Open Quickly**
   (Ctrl+Shift+O) searches every known, recent and scanned repository.
+- **Multi-repository dashboard** (in the Repository Manager): cards or a list
+  with branch, commits ahead/behind the upstream, local changes, last fetch,
+  last commit and problems (a failed fetch, a merge or rebase in progress);
+  filters (changes, ahead, behind, problems) with counts; **Fetch all** and
+  **Pull all (fast-forward only)** on the repositories shown, run in the
+  background four at a time with progress and a result per repository
+  (listed in the Activity window, cancellable); open tabs reload afterwards.
 - **Toolbar** like Fork's: large buttons with the label underneath, in groups
   (Fetch / Pull / Push, Branch / Stash / Pop, Undo, Terminal / Folder), with
   the commits to pull and to push as badges on Pull and Push and a spinner on
@@ -44,6 +51,23 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   images read from the repository), a chart of commits per week over the last
   year, remotes and counts of commits, contributors, branches and tags, and the
   size on disk.
+- **Insights** (sidebar > Insights, next to Overview): repository health for a
+  period (30 days to all time) and a path: **hotspots** (files changed most
+  often and recently) with a churn chart of lines added and deleted,
+  **knowledge risk** (files mostly changed by one person) and the **bus
+  factor**, **contributors over time** (stacked per person), and **code
+  owners** from CODEOWNERS (who owns a path). Computed with libgit2 in the
+  background; click a file for its history.
+- **Cleanup assistant** (Insights > Cleanup): the **largest files in history**
+  (size, versions, commits, still in HEAD or not) with advice (Git LFS, with
+  the `git lfs migrate` command, or removal); **remove paths from history** with
+  git filter-repo when it is installed (backup refs under
+  `refs/ferrum/backup/filter-…`, an optional bundle of everything, a restore
+  point, typed confirmation and a clear force-push warning), otherwise the
+  commands to run by hand; **merged branches** (local and remote) to delete
+  after a preview; `git gc` with the space it freed.
+- **Sparse checkout** (Insights > Sparse checkout): pick the folders of a large
+  repository in a tree (cone mode); "Check out everything" turns it off.
 - **Opening**: drop a folder on the window (`git init` is offered when it is not
   a repository); `ferrum PATH` and `ferrum log -- FILE` reuse the running window;
   "Open in Desktop" links (`x-github-client://openRepo/…`,
@@ -471,7 +495,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `gitflow:init|start=feature|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`,
   `patch:FILE`;
   repositories: `manager`, `quick:TEXT`, `overview`, `repo-settings`,
-  `workspace:NAME`, `vertical-tabs`, see `app/repos.rs`;
+  `workspace:NAME`, `vertical-tabs`, `manager-list`,
+  `manager-filter:changes|ahead|behind|problems`, `fetch-all`,
+  `insights[:cleanup|rewrite|sparse]`, see `app/repos.rs`;
   hosted services: `issues`, `settings:accounts`, `settings:ssh`,
   `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
