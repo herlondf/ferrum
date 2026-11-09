@@ -1,0 +1,41 @@
+name: Website
+
+# Publishes site/ to GitHub Pages. Runs only when started by hand
+# (Actions > Website > Run workflow), after Pages is enabled with
+# "GitHub Actions" as the source; see docs/RELEASING.md.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pages are up to date with site/build.py
+        run: python3 site/build.py --check
+      - name: Collect the site
+        run: |
+          mkdir -p _site
+          cp -R site/index.html site/pt-BR site/style.css site/site.js site/assets _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
