@@ -141,6 +141,8 @@ pub const SOURCES: &[&str] = &[
     include_str!("i18n/pt_br/visual.rs"),
     include_str!("ui/toolbar.rs"),
     include_str!("ui/status_bar.rs"),
+    include_str!("ui/structural_view.rs"),
+    include_str!("ui/smart_merge.rs"),
     include_str!("ui/toasts.rs"),
     include_str!("i18n/pt_br/toolbar.rs"),
 ];

@@ -62,6 +62,7 @@ pub mod shortcut_actions;
 pub mod shortcuts;
 pub mod sidebar;
 pub mod sidebar_model;
+pub mod smart_merge;
 pub mod stats;
 pub mod status_bar;
 pub mod structural_view;

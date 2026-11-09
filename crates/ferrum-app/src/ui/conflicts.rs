@@ -14,8 +14,10 @@ use ferrum_core::{Oid, RepoState};
 
 use crate::command::{Command, Commands, Op};
 use crate::flow::FlowOp;
+use crate::icons;
 use crate::tab::{RepoTab, View};
 use crate::ui::dialogs::Dialog;
+use crate::ui::smart_merge::{self, CardAction, Outcome};
 
 /// Lines of unchanged text kept visible next to each conflict.
 const CONTEXT: usize = 3;
@@ -35,6 +37,14 @@ pub struct ConflictState {
     scroll_to: Option<usize>,
     /// Compare a file without markers left with theirs instead of ours.
     compare_theirs: bool,
+    /// Semantic merge suggestions for the conflicted files.
+    pub smart: smart_merge::Suggestions,
+    /// Show the base version between both sides.
+    show_base: bool,
+    /// The suggestion's difference with ours (false) or theirs (true).
+    compare: Option<bool>,
+    /// The conflict last navigated to.
+    current: usize,
 }
 
 /// What the stopped operation is doing, re-read when the repository changes.
@@ -80,6 +90,8 @@ struct FileState {
     result: String,
     /// The result was edited by hand: choices no longer regenerate it.
     edited: bool,
+    /// The result is the semantic merge suggestion.
+    suggested: bool,
     /// Common chunks shown in full.
     expanded: HashSet<usize>,
     /// Diff of the result with one side, for files without markers: (theirs?, result, lines).
@@ -191,6 +203,7 @@ fn load(tab: &RepoTab, path: &str) -> FileState {
         chunks,
         choices,
         edited: false,
+        suggested: false,
         expanded: HashSet::new(),
         review: None,
         error,
@@ -270,6 +283,7 @@ pub fn side_names(tab: &mut RepoTab) -> (String, String) {
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
+    smart_merge::update(ui.ctx(), tab);
     let conflicted: Vec<String> = tab
         .status
         .conflicted
@@ -280,7 +294,22 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         match conflicted.first() {
             Some(p) => open(tab, p.clone()),
             None => {
-                ui.weak(t!("No conflicts."));
+                crate::ui::empty_state::show(
+                    ui,
+                    icons::CHECK_CIRCLE,
+                    &t!("No conflicts."),
+                    &t!(
+                        "Every conflicted file is resolved: continue the operation from the banner."
+                    ),
+                    |ui| {
+                        if ui
+                            .button(icons::text(icons::ARROW_LEFT, t!("Local changes")))
+                            .clicked()
+                        {
+                            cmds.push(Command::SetView(View::Changes));
+                        }
+                    },
+                );
             }
         }
         return;
@@ -325,6 +354,10 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         file,
         scroll_to,
         compare_theirs,
+        smart,
+        show_base,
+        compare,
+        current,
         ..
     } = &mut tab.conflicts;
     let Some(file) = file.as_mut() else {
@@ -386,6 +419,40 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         }
     }
 
+    match smart
+        .get(&path)
+        .filter(|_| !smart.dismissed.contains(&path))
+    {
+        Some(Outcome::Resolved(s)) => {
+            let applied = file.result == s.text;
+            let versions = [
+                file.versions[1].as_deref().unwrap_or(""),
+                file.versions[2].as_deref().unwrap_or(""),
+            ];
+            match smart_merge::card(ui, &s, applied, versions, &names, compare) {
+                Some(CardAction::Use) => {
+                    file.result = s.text.clone();
+                    file.edited = true;
+                    file.suggested = true;
+                }
+                Some(CardAction::Dismiss) => {
+                    smart.dismissed.insert(path.clone());
+                }
+                None => {}
+            }
+            ui.add_space(crate::theme::SPACE_S);
+        }
+        Some(Outcome::Failed(f)) => {
+            if let Some(why) = smart_merge::failure_text(&f) {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(icons::INFO).color(ui.visuals().weak_text_color()));
+                    ui.weak(t!("The semantic merge left this file to you: {}.", why));
+                });
+            }
+        }
+        None => {}
+    }
+
     egui::Panel::bottom("conflict-result")
         .resizable(true)
         .default_size(ui.available_height() * 0.42)
@@ -398,10 +465,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             review_view(ui, file, &names, compare_theirs);
             return;
         }
+        chunks_toolbar(ui, file, &names, show_base, current, scroll_to);
         let out = egui::ScrollArea::vertical()
             .id_salt(("conflicts", &path))
             .auto_shrink([false, false])
-            .show(ui, |ui| chunks_view(ui, file, &names, scroll_to));
+            .show(ui, |ui| {
+                chunks_view(ui, file, &names, *show_base, scroll_to)
+            });
         markers(
             ui,
             out.inner_rect,
@@ -423,7 +493,7 @@ fn top_bar(
 ) {
     ui.horizontal(|ui| {
         if ui
-            .button(t!("⬅ Local Changes"))
+            .button(icons::text(icons::ARROW_LEFT, t!("Local changes")))
             .on_hover_text(t!("Back to the list of local changes"))
             .clicked()
         {
@@ -441,8 +511,14 @@ fn top_bar(
             .width(280.0)
             .truncate()
             .show_ui(ui, |ui| {
+                let auto = tab.conflicts.smart.resolved(conflicted);
                 for p in conflicted {
-                    if ui.selectable_label(p == path, p).clicked() && p != path {
+                    let text = if auto.contains(&p) {
+                        icons::tinted(icons::MAGIC_WAND, crate::theme::accent(ui), p)
+                    } else {
+                        p.into()
+                    };
+                    if ui.selectable_label(p == path, text).clicked() && p != path {
                         cmds.push(Command::ResolveConflict(p.clone()));
                     }
                 }
@@ -762,6 +838,7 @@ fn chunks_view(
     ui: &mut egui::Ui,
     file: &mut FileState,
     names: &(String, String),
+    show_base: bool,
     scroll_to: &mut Option<usize>,
 ) -> Vec<f32> {
     let origin = ui.min_rect().top();
@@ -785,7 +862,7 @@ fn chunks_view(
             }
             Chunk::Conflict(c) => {
                 let choice = &mut file.choices[n];
-                let (ch, rect, go) = conflict_view(ui, c, n, total, choice, names);
+                let (ch, rect, go) = conflict_view(ui, c, n, total, choice, names, show_base);
                 changed |= ch;
                 nav = nav.or(go);
                 tops.push(rect.top() - origin);
@@ -804,6 +881,118 @@ fn chunks_view(
         file.result = conflict::render(&file.chunks, &file.choices);
     }
     tops
+}
+
+/// Above the conflicts: progress, navigation, base column and whole-file choices.
+fn chunks_toolbar(
+    ui: &mut egui::Ui,
+    file: &mut FileState,
+    names: &(String, String),
+    show_base: &mut bool,
+    current: &mut usize,
+    scroll_to: &mut Option<usize>,
+) {
+    let total = file.choices.len();
+    let open: Vec<usize> = (0..total).filter(|&i| file.choices[i].is_none()).collect();
+    let mut go = |n: usize, current: &mut usize| {
+        *current = n;
+        *scroll_to = Some(n);
+    };
+    // Next/previous unresolved conflict, also with the next/previous hunk keys.
+    let next = open
+        .iter()
+        .copied()
+        .find(|&i| i > *current)
+        .or(open.first().copied());
+    let prev = open
+        .iter()
+        .rev()
+        .copied()
+        .find(|&i| i < *current)
+        .or(open.last().copied());
+    let ctx = ui.ctx().clone();
+    if !ctx.text_edit_focused() {
+        use crate::keymap::{Action, pressed};
+        if pressed(&ctx, Action::NextHunk)
+            && let Some(n) = next
+        {
+            go(n, current);
+        }
+        if pressed(&ctx, Action::PrevHunk)
+            && let Some(n) = prev
+        {
+            go(n, current);
+        }
+    }
+    ui.horizontal(|ui| {
+        let done = total - open.len();
+        ui.add(
+            egui::ProgressBar::new(done as f32 / total.max(1) as f32)
+                .desired_width(90.0)
+                .desired_height(6.0),
+        );
+        ui.label(t!("{} of {} conflicts resolved", done, total));
+        let keys = |a| crate::keymap::text(a);
+        if ui
+            .add_enabled(prev.is_some(), icons::icon_button(icons::CARET_UP))
+            .on_hover_text(format!(
+                "{} ({})",
+                t!("Previous unresolved conflict"),
+                keys(crate::keymap::Action::PrevHunk)
+            ))
+            .clicked()
+            && let Some(n) = prev
+        {
+            go(n, current);
+        }
+        if ui
+            .add_enabled(next.is_some(), icons::icon_button(icons::CARET_DOWN))
+            .on_hover_text(format!(
+                "{} ({})",
+                t!("Next unresolved conflict"),
+                keys(crate::keymap::Action::NextHunk)
+            ))
+            .clicked()
+            && let Some(n) = next
+        {
+            go(n, current);
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let mut all = |choice: Choice| {
+                for c in file.choices.iter_mut().filter(|c| c.is_none()) {
+                    *c = Some(choice);
+                }
+                if !file.edited {
+                    file.result = conflict::render(&file.chunks, &file.choices);
+                }
+            };
+            ui.add_enabled_ui(!open.is_empty(), |ui| {
+                if ui
+                    .button(t!("All {}", names.1))
+                    .on_hover_text(t!("Take {} in every unresolved conflict", names.1))
+                    .clicked()
+                {
+                    all(Choice::Theirs);
+                }
+                if ui
+                    .button(t!("All {}", names.0))
+                    .on_hover_text(t!("Take {} in every unresolved conflict", names.0))
+                    .clicked()
+                {
+                    all(Choice::Ours);
+                }
+            });
+            let has_base = file
+                .chunks
+                .iter()
+                .any(|c| matches!(c, Chunk::Conflict(c) if c.base.is_some()));
+            if has_base {
+                ui.toggle_value(show_base, icons::text(icons::COLUMNS, t!("Show base")))
+                    .on_hover_text(t!("Show the common ancestor between both sides"));
+            }
+        });
+    });
+    ui.add_space(crate::theme::SPACE_S);
 }
 
 /// Marks each conflict next to the scroll bar (amber unresolved, green
@@ -889,26 +1078,28 @@ fn conflict_view(
     total: usize,
     choice: &mut Option<Choice>,
     names: &(String, String),
+    show_base: bool,
 ) -> (bool, egui::Rect, Option<usize>) {
     let before = *choice;
     let mut nav = None;
     let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
     let resp = egui::Frame::group(ui.style())
         .stroke(stroke)
+        .corner_radius(crate::theme::RADIUS)
         .inner_margin(8.0)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.strong(t!("Conflict {} of {}", n + 1, total));
                 if ui
-                    .add_enabled(n > 0, egui::Button::new("⬆").small())
+                    .add_enabled(n > 0, icons::icon_button(icons::CARET_UP).small())
                     .on_hover_text(t!("Previous conflict"))
                     .clicked()
                 {
                     nav = Some(n - 1);
                 }
                 if ui
-                    .add_enabled(n + 1 < total, egui::Button::new("⬇").small())
+                    .add_enabled(n + 1 < total, icons::icon_button(icons::CARET_DOWN).small())
                     .on_hover_text(t!("Next conflict"))
                     .clicked()
                 {
@@ -933,7 +1124,8 @@ fn conflict_view(
                     *choice = None;
                 }
             });
-            if let Some(base) = &c.base {
+            let base = c.base.as_ref().filter(|_| show_base);
+            if let Some(base) = c.base.as_ref().filter(|_| !show_base) {
                 egui::CollapsingHeader::new(RichText::new(t!("Base (common ancestor)")).weak())
                     .id_salt(("base", n))
                     .show(ui, |ui| side_text(ui, base, None));
@@ -944,9 +1136,10 @@ fn conflict_view(
                 Some(Choice::OursThenTheirs | Choice::TheirsThenOurs) => Some(true),
                 Some(ch) => Some(ch == side),
             };
-            ui.columns(2, |cols| {
+            ui.columns(if base.is_some() { 3 } else { 2 }, |cols| {
                 let ours = ours_color(&cols[0]);
-                let theirs = theirs_color(&cols[1]);
+                let last = cols.len() - 1;
+                let theirs = theirs_color(&cols[last]);
                 side_view(
                     &mut cols[0],
                     &names.0,
@@ -955,8 +1148,12 @@ fn conflict_view(
                     ours,
                     uses(Choice::Ours),
                 );
+                if let Some(base) = base {
+                    let weak = cols[1].visuals().weak_text_color();
+                    side_view(&mut cols[1], &t!("Base"), "", base, weak, Some(false));
+                }
                 side_view(
-                    &mut cols[1],
+                    &mut cols[last],
                     &names.1,
                     &c.theirs_label,
                     &c.theirs,
@@ -1040,7 +1237,20 @@ fn result_panel(
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.strong(t!("Result"));
-        if file.edited {
+        if file.suggested {
+            ui.weak(t!(
+                "The semantic merge result: check it, then mark the file as resolved."
+            ));
+            if ui
+                .small_button(t!("Discard"))
+                .on_hover_text(t!("Rebuild the result from the choices above"))
+                .clicked()
+            {
+                file.edited = false;
+                file.suggested = false;
+                file.result = conflict::render(&file.chunks, &file.choices);
+            }
+        } else if file.edited {
             ui.weak(t!("Edited by hand: choices above no longer change it."));
             if ui
                 .small_button(t!("Discard edits"))
@@ -1063,7 +1273,7 @@ fn result_panel(
             ui.weak(t!("You can still edit the text before saving."));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let save = ui.add_enabled(!busy, egui::Button::new(t!("Mark as resolved")));
+            let save = ui.add_enabled(!busy, crate::theme::primary(t!("Mark as resolved")));
             if save.clicked() {
                 let op = Op::SaveResolution {
                     path: path.to_owned(),
@@ -1121,6 +1331,7 @@ fn result_panel(
                 .min_size(egui::vec2(0.0, ui.available_height()));
             if ui.add(edit).changed() {
                 file.edited = true;
+                file.suggested = false;
             }
         });
 }

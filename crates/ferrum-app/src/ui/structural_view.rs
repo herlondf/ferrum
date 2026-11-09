@@ -153,7 +153,9 @@ fn tooltip() -> String {
     format!(
         "{}\n{}",
         t!("Structural diff"),
-        t!("Compare the code's syntax: formatting changes are ignored and moved code is marked. Remembered per repository.")
+        t!(
+            "Compare the code's syntax: formatting changes are ignored and moved code is marked. Remembered per repository."
+        )
     )
 }
 
@@ -252,7 +254,7 @@ impl Colors {
             add_bg: rgba(0x2e, 0xa0, 0x43, if dark { 28 } else { 32 }),
             del_bg: rgba(0xf8, 0x51, 0x49, if dark { 28 } else { 30 }),
             add_word: rgba(0x2e, 0xa0, 0x43, if dark { 120 } else { 130 }),
-            del_word: rgba(0xf8, 0x51, 0x49, if dark { 120 } else { 120 }),
+            del_word: rgba(0xf8, 0x51, 0x49, 120),
             moved_bg: moved.gamma_multiply(if dark { 0.45 } else { 0.35 }),
             moved_fg: moved,
             add_fg: added_color(ui),
@@ -329,9 +331,7 @@ pub fn body(
 
 fn unavailable_note(ui: &mut egui::Ui, why: &str) {
     ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(icons::INFO).color(ui.visuals().weak_text_color()),
-        );
+        ui.label(egui::RichText::new(icons::INFO).color(ui.visuals().weak_text_color()));
         ui.weak(t!(
             "Structural diff unavailable ({}): showing the line diff.",
             why
@@ -512,7 +512,13 @@ fn draw(
                 lines[first..last]
                     .iter()
                     .filter_map(|line| match *line {
-                        Line::Row(i, _) => if old { d.rows[i].old } else { d.rows[i].new },
+                        Line::Row(i, _) => {
+                            if old {
+                                d.rows[i].old
+                            } else {
+                                d.rows[i].new
+                            }
+                        }
                         Line::Gap(..) => None,
                     })
                     .max()
@@ -520,13 +526,21 @@ fn draw(
             };
             let (uo, un) = (upto(true), upto(false));
             let [ho, hn] = &mut *hl;
-            let done_o = ho.advance(|i| &l.old[d.old.lines[i].clone()], uo.min(d.old.lines.len()));
-            let done_n = hn.advance(|i| &l.new[d.new.lines[i].clone()], un.min(d.new.lines.len()));
+            let done_o = ho.advance(
+                |i| &l.old[d.old.lines[i].clone()],
+                uo.min(d.old.lines.len()),
+            );
+            let done_n = hn.advance(
+                |i| &l.new[d.new.lines[i].clone()],
+                un.min(d.new.lines.len()),
+            );
             if !(done_o && done_n) {
                 ui.ctx().request_repaint();
             }
         }
-        let guard = hl.as_ref().map(|h| h.lock().unwrap_or_else(|e| e.into_inner()));
+        let guard = hl
+            .as_ref()
+            .map(|h| h.lock().unwrap_or_else(|e| e.into_inner()));
         let spans = |old: bool, n: u32| {
             guard
                 .as_ref()
@@ -537,7 +551,11 @@ fn draw(
             let rect = full.translate(vec2(0.0, k as f32 * row_h));
             match *line {
                 Line::Gap(start, count) => {
-                    let resp = ui.interact(rect, Id::unique((id, "structural-gap", start)), Sense::click());
+                    let resp = ui.interact(
+                        rect,
+                        Id::unique((id, "structural-gap", start)),
+                        Sense::click(),
+                    );
                     let bg = if resp.hovered() {
                         ui.visuals().widgets.hovered.weak_bg_fill
                     } else {
@@ -545,13 +563,19 @@ fn draw(
                     };
                     ui.painter().rect_filled(rect, 0.0, bg);
                     ui.painter().text(
-                        pos2(ui.clip_rect().left().max(rect.left()) + 10.0, rect.center().y),
+                        pos2(
+                            ui.clip_rect().left().max(rect.left()) + 10.0,
+                            rect.center().y,
+                        ),
                         Align2::LEFT_CENTER,
                         format!("{}  {}", icons::DOTS_THREE, t!("{} unchanged lines", count)),
                         num_font.clone(),
                         c.weak,
                     );
-                    if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                    if resp
+                        .on_hover_cursor(egui::CursorIcon::PointingHand)
+                        .clicked()
+                    {
                         st.expanded.insert(start);
                     }
                 }
@@ -579,7 +603,10 @@ fn draw(
                     if split {
                         let half = (rect.width() / 2.0).floor();
                         let left = Rect::from_min_size(rect.min, vec2(half - 1.0, row_h));
-                        let right = Rect::from_min_size(rect.min + vec2(half + 1.0, 0.0), vec2(half - 1.0, row_h));
+                        let right = Rect::from_min_size(
+                            rect.min + vec2(half + 1.0, 0.0),
+                            vec2(half - 1.0, row_h),
+                        );
                         p.side(d, l, row.old, cell(true, left, (true, false)), &spans);
                         p.side(d, l, row.new, cell(false, right, (false, true)), &spans);
                         ui.painter().vline(
@@ -589,8 +616,12 @@ fn draw(
                         );
                     } else {
                         match only {
-                            Some(true) => p.side(d, l, row.old, cell(true, rect, (true, true)), &spans),
-                            Some(false) => p.side(d, l, row.new, cell(false, rect, (true, true)), &spans),
+                            Some(true) => {
+                                p.side(d, l, row.old, cell(true, rect, (true, true)), &spans)
+                            }
+                            Some(false) => {
+                                p.side(d, l, row.new, cell(false, rect, (true, true)), &spans)
+                            }
                             None => p.unchanged(d, l, row, rect, &spans),
                         }
                     }
@@ -806,7 +837,8 @@ impl Painter<'_> {
         let text_x = x + marker_w + 4.0;
         let clip = Rect::from_x_y_ranges(text_x..=cell.rect.right(), cell.rect.y_range())
             .intersect(self.ui.clip_rect());
-        let top = cell.rect.top() + (self.row_h - galley.rows.first().map_or(self.row_h, |r| r.height())) / 2.0;
+        let top = cell.rect.top()
+            + (self.row_h - galley.rows.first().map_or(self.row_h, |r| r.height())) / 2.0;
         painter
             .with_clip_rect(clip)
             .galley(pos2(text_x, top), galley, self.c.text);

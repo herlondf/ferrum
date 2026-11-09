@@ -22,6 +22,7 @@ mod preferences;
 mod refs;
 mod repos;
 mod sidebar;
+mod structural;
 mod sync;
 mod toolbar;
 mod ux;
@@ -53,5 +54,6 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     toolbar::T,
     views::T,
     ux::T,
+    structural::T,
     visual::T,
 ];

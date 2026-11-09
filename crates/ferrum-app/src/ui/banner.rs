@@ -60,6 +60,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         return crate::ui::bisect::banner(ui, tab, cmds);
     }
     let info = conflicts::in_progress(tab);
+    crate::ui::smart_merge::update(ui.ctx(), tab);
     let tab = &*tab;
     let conflicts = tab.status.conflicted.len();
     let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
@@ -129,6 +130,9 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                     ui.label(t!("fix {} conflicts and then continue.", conflicts));
                 } else if tab.state != RepoState::Bisect {
                     ui.label(t!("no conflicts left: continue when ready."));
+                }
+                if let Some(path) = crate::ui::smart_merge::banner_hint(ui, tab) {
+                    cmds.push(Command::ResolveConflict(path));
                 }
                 buttons(ui, tab, cmds, conflicts);
             });

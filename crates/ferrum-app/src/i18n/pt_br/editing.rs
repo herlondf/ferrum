@@ -280,7 +280,6 @@ pub static T: &[(&str, &str)] = &[
         "Check the result below and mark the file as resolved.",
         "Confira o resultado abaixo e marque o arquivo como resolvido.",
     ),
-    ("⬅ Local Changes", "⬅ Alterações locais"),
     (
         "Back to the list of local changes",
         "Voltar para a lista de alterações locais",

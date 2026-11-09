@@ -412,7 +412,10 @@ impl Differ<'_> {
             return 1.0;
         }
         if nx.atom || ny.atom {
-            let (lx, ly) = (&self.a.leaves[nx.leaves.start as usize], &self.b.leaves[ny.leaves.start as usize]);
+            let (lx, ly) = (
+                &self.a.leaves[nx.leaves.start as usize],
+                &self.b.leaves[ny.leaves.start as usize],
+            );
             if !(nx.atom && ny.atom && lx.prose && ly.prose) {
                 return 0.0;
             }
@@ -424,8 +427,16 @@ impl Differ<'_> {
         if nx.leaves.len() + ny.leaves.len() > MAX_COMPARED_TOKENS {
             return 0.0;
         }
-        let ha: Vec<u64> = nx.leaves.clone().map(|i| self.a.leaves[i as usize].hash).collect();
-        let hb: Vec<u64> = ny.leaves.clone().map(|i| self.b.leaves[i as usize].hash).collect();
+        let ha: Vec<u64> = nx
+            .leaves
+            .clone()
+            .map(|i| self.a.leaves[i as usize].hash)
+            .collect();
+        let hb: Vec<u64> = ny
+            .leaves
+            .clone()
+            .map(|i| self.b.leaves[i as usize].hash)
+            .collect();
         dice(&ha, &hb)
     }
 

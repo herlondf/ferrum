@@ -144,6 +144,7 @@ pub fn show(
                             Section::Tools => {
                                 heading(ui, &t!("External tools"));
                                 crate::ui::preferences::tools(ui, settings);
+                                crate::ui::smart_merge::settings_block(ui, &mut settings.diff);
                             }
                             Section::Profiles => profiles(ui, win, settings, cmds),
                             Section::Commit => super::commit_settings::commit(ui, settings),
