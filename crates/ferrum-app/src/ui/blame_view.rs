@@ -39,6 +39,8 @@ struct BlameRow {
     text: String,
     /// Line number in the commit that last changed it (1-based).
     orig_line: u32,
+    /// Age of the line's commit among the file's commits: 0 oldest, 1 newest.
+    heat: f32,
 }
 
 struct CommitMeta {
@@ -55,6 +57,8 @@ pub(crate) struct BlameData {
     commits: HashMap<Oid, CommitMeta>,
     /// Longest line in characters, for horizontal scrolling.
     longest: usize,
+    /// Dates of the oldest and newest commit, for the age legend.
+    age_range: Option<(String, String)>,
 }
 
 pub struct BlameState {
@@ -221,10 +225,23 @@ fn load_blame(repo: &Repo, path: &str, rev: &str) -> Result<BlameData, String> {
         });
     }
     let odd = odd_blocks(lines.iter().map(|l| l.block_start));
+    let times: Vec<i64> = lines.iter().map(|l| l.time).collect();
+    let heats = heat_ranks(&times);
+    let age_range = lines
+        .iter()
+        .min_by_key(|l| l.time)
+        .zip(lines.iter().max_by_key(|l| l.time))
+        .map(|(a, b)| {
+            (
+                format_day(a.time, a.offset_minutes),
+                format_day(b.time, b.offset_minutes),
+            )
+        });
     let rows: Vec<BlameRow> = lines
         .into_iter()
         .zip(odd)
-        .map(|(l, odd_block)| BlameRow {
+        .zip(heats)
+        .map(|((l, odd_block), heat)| BlameRow {
             commit: l.commit,
             block_start: l.block_start,
             odd_block,
@@ -234,6 +251,7 @@ fn load_blame(repo: &Repo, path: &str, rev: &str) -> Result<BlameData, String> {
             }),
             text: crate::util::expand_tabs(&l.text),
             orig_line: l.orig_line,
+            heat,
         })
         .collect();
     let longest = rows
@@ -245,7 +263,63 @@ fn load_blame(repo: &Repo, path: &str, rev: &str) -> Result<BlameData, String> {
         rows,
         commits,
         longest,
+        age_range,
     })
+}
+
+/// For each time, its rank among the distinct times, from 0 (oldest) to 1
+/// (newest). Ranks spread the colors evenly even when a few commits are
+/// much older than the rest.
+fn heat_ranks(times: &[i64]) -> Vec<f32> {
+    let mut distinct: Vec<i64> = times.to_vec();
+    distinct.sort_unstable();
+    distinct.dedup();
+    let last = distinct.len().saturating_sub(1).max(1) as f32;
+    times
+        .iter()
+        .map(|t| {
+            if distinct.len() < 2 {
+                1.0
+            } else {
+                distinct.binary_search(t).unwrap_or(0) as f32 / last
+            }
+        })
+        .collect()
+}
+
+/// The gutter color of a line by age: the accent, stronger for newer lines.
+fn heat_color(accent: egui::Color32, heat: f32) -> egui::Color32 {
+    accent.gamma_multiply(0.05 + 0.45 * heat.powf(1.6))
+}
+
+/// "Older ▮▮▮▮▮ Newer": what the gutter colors mean.
+fn age_legend(ui: &mut egui::Ui, range: &(String, String)) {
+    let accent = crate::theme::accent(ui);
+    let small = |s: &str| egui::RichText::new(s).small().weak();
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        ui.label(small(&range.1));
+        let (rect, _) = ui.allocate_exact_size(vec2(90.0, 10.0), Sense::hover());
+        let steps = 9;
+        let w = rect.width() / steps as f32;
+        for k in 0..steps {
+            let x0 = (rect.left() + k as f32 * w).round();
+            let x1 = (rect.left() + (k + 1) as f32 * w).round();
+            let r = Rect::from_x_y_ranges(x0..=x1, rect.y_range());
+            let heat = k as f32 / (steps - 1) as f32;
+            ui.painter().rect_filled(r, 0.0, heat_color(accent, heat));
+        }
+        ui.painter().rect_stroke(
+            rect,
+            2.0,
+            ui.visuals().widgets.noninteractive.bg_stroke,
+            egui::StrokeKind::Outside,
+        );
+        ui.label(small(&range.0));
+        ui.label(small(&t!("Line age"))).on_hover_text(t!(
+            "The gutter is colored by the age of each line: newer lines are stronger."
+        ));
+    });
 }
 
 /// For each line, whether it belongs to an odd-numbered block.
@@ -462,6 +536,10 @@ fn nav_bar(ui: &mut egui::Ui, view: &mut FileView, act: &mut Option<Act>) {
             {
                 *act = Some(Act::Lines(a, b));
             }
+            if let Some(r) = st.data.ok().and_then(|d| d.age_range.as_ref()) {
+                ui.add_space(crate::theme::SPACE_L);
+                age_legend(ui, r);
+            }
         });
     });
 }
@@ -595,6 +673,7 @@ fn rows(ui: &mut egui::Ui, st: &mut BlameState, rev: &str, cmds: &mut Commands) 
     let sel_bg = visuals.selection.bg_fill.gamma_multiply(0.55);
     let gutter_bg = visuals.extreme_bg_color;
     let accent = visuals.hyperlink_color;
+    let heat_base = crate::theme::accent(ui);
     let weak = visuals.weak_text_color();
     let separator = visuals.widgets.noninteractive.bg_stroke.color;
     let mut hovered = None;
@@ -642,6 +721,10 @@ fn rows(ui: &mut egui::Ui, st: &mut BlameState, rev: &str, cmds: &mut Commands) 
                 painter.rect_filled(rect, 0.0, block_bg);
             }
             painter.rect_filled(gutter, 0.0, gutter_bg.gamma_multiply(0.6));
+            painter.rect_filled(gutter, 0.0, heat_color(heat_base, row.heat));
+            // A bar on the left edge, full strength for the newest lines.
+            let bar = Rect::from_x_y_ranges(gutter.left()..=gutter.left() + 3.0, rect.y_range());
+            painter.rect_filled(bar, 0.0, heat_base.gamma_multiply(0.15 + 0.85 * row.heat));
             // Lines from the commit under the pointer light up in the gutter.
             if st.hovered == Some(row.commit) {
                 painter.rect_filled(gutter, 0.0, hover_bg);
@@ -815,6 +898,12 @@ fn line_menu(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ranks_line_ages() {
+        assert_eq!(heat_ranks(&[5, 1, 9, 5]), vec![0.5, 0.0, 1.0, 0.5]);
+        assert_eq!(heat_ranks(&[3, 3]), vec![1.0, 1.0]);
+    }
 
     #[test]
     fn alternates_blocks() {
