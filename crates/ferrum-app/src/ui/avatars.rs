@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-use eframe::egui::{self, Color32, FontId, Rect};
+use eframe::egui::{self, Color32, Rect};
 
 const WORKERS: usize = 4;
 
@@ -129,6 +129,18 @@ fn texture(ctx: &egui::Context, email: &str) -> Option<egui::TextureHandle> {
     })
 }
 
+static NETWORK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Remembers the "Download avatars" setting for views that do not get the
+/// settings (the commit details). Set by the commit list every frame.
+pub fn set_network(on: bool) {
+    NETWORK.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn network() -> bool {
+    NETWORK.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// A stable color for an author.
 pub fn author_color(email: &str) -> Color32 {
     let h = email
@@ -137,7 +149,8 @@ pub fn author_color(email: &str) -> Color32 {
         .bytes()
         .fold(5381u32, |h, b| h.wrapping_mul(33) ^ u32::from(b));
     let hue = (h % 360) as f32 / 360.0;
-    egui::ecolor::Hsva::new(hue, 0.45, 0.70, 1.0).into()
+    // Deep enough for white initials to stay readable.
+    egui::ecolor::Hsva::new(hue, 0.55, 0.62, 1.0).into()
 }
 
 /// Draws the avatar of an author in `rect` (a square).
@@ -166,7 +179,7 @@ pub fn paint(
         center,
         egui::Align2::CENTER_CENTER,
         ferrum_core::avatar::initials(name),
-        FontId::proportional(r * 0.95),
+        crate::theme::strong_font(r * 0.85),
         Color32::WHITE,
     );
 }

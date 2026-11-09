@@ -299,7 +299,7 @@ pub fn show(
     }
     egui::CentralPanel::default_margins().show(ui, |ui| {
         let Some(file) = &view.diff else {
-            ui.centered_and_justified(|ui| ui.weak(t!("No file selected.")));
+            crate::ui::details::no_file(ui);
             return;
         };
         ui.horizontal(|ui| {

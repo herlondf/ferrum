@@ -215,7 +215,7 @@ pub fn show(
         return;
     }
     if tab.commit_view.is_none() {
-        ui.centered_and_justified(|ui| ui.weak(t!("Select a commit to see its details.")));
+        no_commit(ui);
         return;
     }
     let mut open = None;
@@ -428,7 +428,7 @@ fn pane(
 
 fn diff(ui: &mut egui::Ui, env: &Env, view: &CommitView, cmds: &mut Commands) {
     let Some(file) = view.selected_file.and(view.diff.as_ref()) else {
-        ui.centered_and_justified(|ui| ui.weak(t!("No file selected.")));
+        no_file(ui);
         return;
     };
     ui.horizontal(|ui| {
@@ -461,6 +461,62 @@ fn diff(ui: &mut egui::Ui, env: &Env, view: &CommitView, cmds: &mut Commands) {
     if let Some(diff_view::DiffAction::Reveal(line)) = action {
         cmds.push(file_actions::reveal_line(env.repo.path(), file, line));
     }
+}
+
+/// The details panel with no commit selected.
+fn no_commit(ui: &mut egui::Ui) {
+    use crate::keymap::Action;
+    use crate::ui::empty_state;
+    empty_state::show(
+        ui,
+        crate::icons::GIT_COMMIT,
+        &t!("No commit selected"),
+        &t!("Select a commit to see its details."),
+        |ui| {
+            empty_state::shortcut(ui, "↑ ↓", &t!("Move between commits"), None);
+            empty_state::action(ui, Action::GoTo, &t!("Go to commit"));
+            empty_state::action(ui, Action::JumpToHead, &t!("Jump to HEAD"));
+            empty_state::action(ui, Action::Find, &t!("Search commits"));
+        },
+    );
+}
+
+/// The local changes diff with no file selected (`clean`: no changes at all).
+pub fn no_changes(ui: &mut egui::Ui, clean: bool) {
+    use crate::ui::empty_state;
+    if clean {
+        empty_state::show(
+            ui,
+            crate::icons::CHECK_CIRCLE,
+            &t!("No local changes."),
+            &t!("The working tree matches the last commit."),
+            |ui| {
+                empty_state::action(ui, crate::keymap::Action::ShowHistory, &t!("History"));
+                empty_state::action(ui, crate::keymap::Action::Refresh, &t!("Refresh"));
+            },
+        );
+    } else {
+        empty_state::show(
+            ui,
+            crate::icons::FILE_TEXT,
+            &t!("No file selected"),
+            &t!("Select a file to see its changes."),
+            |ui| {
+                empty_state::shortcut(ui, "↑ ↓", &t!("Move between files"), None);
+            },
+        );
+    }
+}
+
+/// The diff pane with no file selected.
+pub fn no_file(ui: &mut egui::Ui) {
+    crate::ui::empty_state::show(
+        ui,
+        crate::icons::FILE_TEXT,
+        &t!("No file selected"),
+        &t!("Pick a file in the list to see its changes."),
+        |_| {},
+    );
 }
 
 /// A link to a commit: shows it on hover, selects it on click.
@@ -509,12 +565,19 @@ fn info(
     message(ui, env.repo, d.message.trim_end(), &pane.links.found, cmds);
     ui.add_space(6.0);
     let person = |ui: &mut egui::Ui, name: &str, email: &str, time: i64, offset: i32| {
-        ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 1.0;
-            ui.add(egui::Label::new(format!("{name} <{email}>")).truncate());
-            ui.weak(format_date(time, offset));
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+            let network = crate::ui::avatars::network();
+            crate::ui::avatars::paint(ui, ui.painter(), rect, name, email, network);
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                ui.add(egui::Label::new(format!("{name} <{email}>")).truncate());
+                ui.weak(format_date(time, offset));
+            });
         });
     };
+    // Right edge of the panel, for wrapping inside the grid.
+    let right = ui.max_rect().right();
     egui::Grid::new(("commit-info", env.salt))
         .num_columns(2)
         .spacing([10.0, 3.0])
@@ -547,7 +610,7 @@ fn info(
                 ui.end_row();
             }
             if !view.is_stash {
-                contained_in(ui, env, c.id, pane);
+                contained_in(ui, env, c.id, pane, right);
             }
         });
     ui.horizontal_wrapped(|ui| {
@@ -580,8 +643,38 @@ fn info(
     });
 }
 
+/// A branch or tag name in a small rounded chip.
+/// Wraps to a new line itself: a truncated label never asks to wrap.
+fn ref_chip(ui: &mut egui::Ui, icon: &str, name: &str, right: f32) {
+    let text_w = ui
+        .painter()
+        .layout_no_wrap(
+            crate::icons::text(icon, name),
+            egui::TextStyle::Body.resolve(ui.style()),
+            egui::Color32::WHITE,
+        )
+        .size()
+        .x;
+    let full = right - ui.max_rect().left() - 12.0;
+    let width = text_w.min(260.0).min(full).max(40.0);
+    if ui.cursor().left() + width + 12.0 > right && ui.cursor().left() > ui.max_rect().left() {
+        ui.end_row();
+    }
+    let v = ui.visuals();
+    egui::Frame::new()
+        .fill(v.widgets.inactive.weak_bg_fill)
+        .corner_radius(5)
+        .inner_margin(egui::Margin::symmetric(6, 1))
+        .show(ui, |ui| {
+            ui.set_max_width(width);
+            let weak = ui.visuals().weak_text_color();
+            ui.add(egui::Label::new(crate::icons::tinted(icon, weak, name)).truncate())
+                .on_hover_text(name);
+        });
+}
+
 /// Branches and tags that contain the commit (two grid rows).
-fn contained_in(ui: &mut egui::Ui, env: &Env, id: Oid, pane: &mut PaneState) {
+fn contained_in(ui: &mut egui::Ui, env: &Env, id: Oid, pane: &mut PaneState, right: f32) {
     let ctx = ui.ctx().clone();
     match pane.contains.get(&ctx, env.git, id) {
         None => {
@@ -595,15 +688,26 @@ fn contained_in(ui: &mut egui::Ui, env: &Env, id: Oid, pane: &mut PaneState) {
             ui.end_row();
         }
         Some(Ok(c)) => {
-            for (label, list) in [(t!("Branches"), &c.branches), (t!("Tags"), &c.tags)] {
+            let kinds = [
+                (t!("Branches"), &c.branches, crate::icons::BRANCH),
+                (t!("Tags"), &c.tags, crate::icons::TAG),
+            ];
+            for (label, list, icon) in kinds {
                 ui.weak(label);
-                ui.horizontal_wrapped(|ui| {
-                    if list.is_empty() {
-                        ui.weak("—");
-                    }
-                    for name in list {
-                        ui.label(egui::RichText::new(name).monospace());
-                    }
+                // Grid cells do not limit the width: wrap at the panel's edge.
+                let width = (right - ui.cursor().left() - 4.0).max(120.0);
+                ui.vertical(|ui| {
+                    ui.set_max_width(width);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.set_max_width(width);
+                        ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
+                        if list.is_empty() {
+                            ui.weak("—");
+                        }
+                        for name in list {
+                            ref_chip(ui, icon, name, right);
+                        }
+                    });
                 });
                 ui.end_row();
             }

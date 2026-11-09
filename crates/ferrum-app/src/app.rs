@@ -118,6 +118,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
                 history_model::set_all_collapsed(t, true)
             })),
             "vertical" => out.push(history_options::cmd(|_, s| s.vertical_layout = true)),
+            "relative-dates" => out.push(history_options::cmd(|_, s| s.relative_dates = true)),
             "graph" => {
                 // graph:reflog, graph:first-parent, graph:only=refs/heads/x…
                 let arg = arg.to_owned();
@@ -1045,6 +1046,10 @@ thread_local! {
 }
 
 impl eframe::App for FerrumApp {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
+        crate::dev_hover::apply(raw);
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         CTX.with(|c| *c.borrow_mut() = Some(ctx.clone()));

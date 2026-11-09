@@ -14,8 +14,7 @@ use crate::tab::RepoTab;
 use crate::ui::dialogs::Dialog;
 use crate::ui::history_model::{self, HistorySettings, SearchMode, label_ref};
 use crate::ui::history_options::{self, cmd};
-use crate::ui::{avatars, history_flow, issue_links};
-use crate::util::format_date;
+use crate::ui::{avatars, history_flow, history_look, issue_links};
 
 const LANE_WIDTH: f32 = 14.0;
 /// Very wide graphs are clipped (Shift+wheel scrolls them) so the description stays readable.
@@ -296,6 +295,7 @@ pub(crate) enum Drop {
 pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmds: &mut Commands) {
     keyboard_navigation(ui, tab);
     let hs = &settings.history;
+    avatars::set_network(hs.show_avatars && hs.network_avatars);
     let tall = hs.vertical_layout && !hs.single_line_rows;
     let row_height = if tall {
         crate::theme::tall_row_height()
@@ -335,14 +335,7 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
         .as_ref()
         .map_or(tab.commits.len(), Vec::len);
     if count == 0 {
-        ui.add_space(20.0);
-        ui.vertical_centered(|ui| {
-            ui.weak(if filtered {
-                t!("No commits match the search.")
-            } else {
-                t!("No commits yet.")
-            });
-        });
+        no_commits(ui, tab, filtered);
         return;
     }
 
@@ -385,6 +378,7 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
     let mut near_end = false;
     let mut toggle: Option<Oid> = None;
     let mut open_url: Option<String> = None;
+    let mut hover_path: Option<usize> = None;
 
     // Rows must touch so graph lines are continuous.
     ui.spacing_mut().item_spacing.y = 0.0;
@@ -460,9 +454,22 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
                 paint_drop(ui, rect, target);
                 drop_target = Some(target);
             }
+            if resp.hovered() {
+                hover_path = Some(tab.graph.rows[idx].color);
+            }
             let is_merge = tab.commits[idx].parents.len() > 1;
-            let resp = if is_merge && pointer.is_some_and(|p| cols.graph.contains(p)) {
+            let in_col = |r: Rect| pointer.is_some_and(|p| r.contains(p));
+            let resp = if is_merge && in_col(cols.graph) {
                 resp.on_hover_ui(|ui| merge_tooltip(ui, tab, id))
+            } else if in_col(cols.date) {
+                let c = &tab.commits[idx];
+                resp.on_hover_text(crate::util::format_time(c.time, c.offset_minutes))
+            } else if (in_col(cols.graph) || in_col(cols.description))
+                && on_label.is_none()
+                && !on_toggle
+                && tab.history.ext.drag.is_none()
+            {
+                resp.on_hover_ui(|ui| history_look::preview_card(ui, tab, idx, hs.network_avatars))
             } else {
                 resp
             };
@@ -470,6 +477,10 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
         }
     });
 
+    if tab.history.ext.hover_path != hover_path {
+        tab.history.ext.hover_path = hover_path;
+        ui.ctx().request_repaint();
+    }
     if let Some(src) = tab.history.ext.drag {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         if ui.input(|i| i.pointer.any_released()) {
@@ -489,6 +500,38 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
     }
     if near_end && !filtered && tab.history.ext.truncated {
         history_model::load_more(tab);
+    }
+}
+
+/// The empty list: nothing matches the search, or no commit yet.
+fn no_commits(ui: &mut egui::Ui, tab: &mut RepoTab, filtered: bool) {
+    use crate::ui::empty_state;
+    if filtered {
+        empty_state::show(
+            ui,
+            crate::icons::SEARCH,
+            &t!("No commits match the search."),
+            &t!("Try other words, or search in the changes or file paths."),
+            |ui| {
+                if ui.button(t!("Clear search")).clicked() {
+                    tab.history.search.clear();
+                    tab.history.content_hits = None;
+                    tab.history.ext.path_hits.clear();
+                    tab.history.ext.searched = None;
+                    tab.apply_search();
+                }
+            },
+        );
+    } else {
+        empty_state::show(
+            ui,
+            crate::icons::GIT_COMMIT,
+            &t!("No commits yet."),
+            &t!("Your first commit will show up here."),
+            |ui| {
+                empty_state::action(ui, crate::keymap::Action::ShowChanges, &t!("Local changes"));
+            },
+        );
     }
 }
 
@@ -565,6 +608,7 @@ fn paint_row(
                 stash: ext.stashes.contains_key(&commit.id),
             },
             bg,
+            ext.hover_path,
         );
     }
 
@@ -651,21 +695,21 @@ fn paint_row(
             &desc,
             pos2(x, line1),
             &format!("📦 stash@{{{index}}}"),
-            Color32::from_gray(120),
-            Color32::WHITE,
+            visuals.widgets.inactive.weak_bg_fill,
+            visuals.text_color(),
             false,
         ) + 4.0;
     }
     let lane = lane_color(row.color);
     for label in visible_labels(tab, hs, commit.id) {
-        let (fill, fg) = match label.kind {
-            RefKind::Local => (lane, Color32::WHITE),
-            RefKind::Remote => (lane.gamma_multiply(0.45), Color32::WHITE),
-            RefKind::Tag => (Color32::from_rgb(0xd9, 0xb3, 0x4a), Color32::BLACK),
+        let badge = history_look::Badge {
+            text: &label.text,
+            kind: label.kind,
+            is_head: label.is_head,
+            tracked: label.tracked,
         };
-        let start = x;
-        x = draw_badge(&desc, pos2(x, line1), &label.text, fill, fg, label.is_head) + 4.0;
-        let r = Rect::from_x_y_ranges(start..=x - 4.0, line1 - 9.0..=line1 + 9.0);
+        let r = history_look::paint_badge(ui, &desc, pos2(x, line1), &badge, lane, dimmed);
+        x = r.right() + 4.0;
         hits.labels.push((r.intersect(desc_rect), label));
     }
 
@@ -727,7 +771,7 @@ fn paint_row(
     desc.galley(origin, galley, text);
     let mut tail = summary_end + 6.0;
     if ext.has_body.contains(&commit.id) {
-        tail = icon(&desc, pos2(tail, line1), "☰", weak);
+        tail = history_look::paint_body_mark(&desc, pos2(tail, line1), weak).right() + 4.0;
     }
     if let Some(files) = ext
         .path_hits
@@ -749,7 +793,7 @@ fn paint_row(
         );
     }
 
-    let date = format_date(commit.time, commit.offset_minutes);
+    let date = history_look::list_date(commit.time, commit.offset_minutes, hs.relative_dates);
     if tall {
         let y = rect.top() + 29.0;
         let line = format!("{}  ·  {}  ·  {}", commit.author, date, commit.short_id());
@@ -859,6 +903,8 @@ struct Label {
     name: String,
     kind: RefKind,
     is_head: bool,
+    /// Also stands for its remote branch (compact labels).
+    tracked: bool,
 }
 
 /// Branch and tag labels of a commit after the graph filters, merged into
@@ -876,25 +922,20 @@ fn visible_labels(tab: &RepoTab, hs: &HistorySettings, id: Oid) -> Vec<Label> {
     let mut out = Vec::new();
     let mut merged = Vec::new();
     for l in &shown {
-        let mut text = if l.is_head {
-            format!("✔ {}", l.name)
-        } else if l.kind == RefKind::Tag {
-            format!("🏷 {}", l.name)
-        } else {
-            l.name.clone()
-        };
+        let mut tracked = false;
         if hs.compact_labels && l.kind == RefKind::Local {
             let remote = shown.iter().find(|r| {
                 r.kind == RefKind::Remote
                     && r.name.split_once('/').is_some_and(|(_, b)| b == l.name)
             });
             if let Some(r) = remote {
-                text.push_str(" ☁");
+                tracked = true;
                 merged.push(r.name.clone());
             }
         }
         out.push(Label {
-            text,
+            text: l.name.clone(),
+            tracked,
             name: l.name.clone(),
             kind: l.kind,
             is_head: l.is_head,
@@ -930,7 +971,14 @@ fn draw_graph(
     offset: f32,
     dot: Dot,
     bg: Color32,
+    focus: Option<usize>,
 ) {
+    // The hovered branch path is drawn a bit thicker, the others fainter.
+    let look = |color: usize| match focus {
+        Some(f) if f == color => (lane_color(color), 2.6),
+        Some(_) => (lane_color(color).gamma_multiply(0.45), 2.0),
+        None => (lane_color(color), 2.0),
+    };
     let x = |lane: usize| rect.left() + 4.0 + LANE_WIDTH * (lane as f32 + 0.5) - offset;
     let (top, mid, bottom) = (rect.top(), rect.center().y, rect.bottom());
 
@@ -940,7 +988,8 @@ fn draw_graph(
             Half::Bottom => (mid, bottom),
         };
         let (p0, p1) = (pos2(x(line.from), y0), pos2(x(line.to), y1));
-        let stroke = Stroke::new(2.0, lane_color(line.color));
+        let (c, w) = look(line.color);
+        let stroke = Stroke::new(w, c);
         if line.from == line.to {
             painter.line_segment([p0, p1], stroke);
         } else {
@@ -958,7 +1007,7 @@ fn draw_graph(
     let color = if dot.grey {
         Color32::from_gray(128)
     } else {
-        lane_color(row.color)
+        look(row.color).0
     };
     if dot.stash {
         let r = Rect::from_center_size(center, vec2(9.0, 9.0));
@@ -1031,6 +1080,7 @@ fn merge_tooltip(ui: &mut egui::Ui, tab: &mut RepoTab, id: Oid) {
                 stash: false,
             },
             ui.visuals().panel_fill,
+            None,
         );
         let text = format!("{}  {}", c.short_id(), c.summary);
         ui.painter().with_clip_rect(rect).text(

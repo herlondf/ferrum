@@ -93,14 +93,17 @@ fn tabs_file_tree_and_containing_refs() {
     let mut found = false;
     for _ in 0..200 {
         h.step();
-        if h.query_by_label("v1").is_some() {
+        if h.query_by_label(&crate::icons::text(crate::icons::TAG, "v1"))
+            .is_some()
+        {
             found = true;
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(found, "tags containing the commit were not shown");
-    assert!(h.query_by_label("main").is_some());
+    let chip = crate::icons::text(crate::icons::BRANCH, "main");
+    assert!(h.query_by_label(&chip).is_some());
 
     // Files as a tree.
     h.get_by_label("Tree").click();

@@ -454,7 +454,13 @@ fn viewer(
     cmds: &mut Commands,
 ) {
     let Some(entry) = st.selected.clone() else {
-        ui.centered_and_justified(|ui| ui.weak(t!("Select a file to see its content.")));
+        crate::ui::empty_state::show(
+            ui,
+            crate::icons::FILE_CODE,
+            &t!("No file selected"),
+            &t!("Select a file to see its content."),
+            |_| {},
+        );
         return;
     };
     if st

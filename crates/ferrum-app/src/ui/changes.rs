@@ -990,13 +990,7 @@ fn ignore_menu(
 
 fn diff(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some((source, path)) = tab.changes.selected.clone() else {
-        ui.centered_and_justified(|ui| {
-            ui.weak(if tab.status.is_empty() {
-                t!("No local changes.")
-            } else {
-                t!("Select a file to see its changes.")
-            })
-        });
+        crate::ui::details::no_changes(ui, tab.status.is_empty());
         return;
     };
     let Some(file) = tab.changes.diff.clone() else {

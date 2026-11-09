@@ -12,6 +12,7 @@ mod custom_commands;
 mod desktop_notify;
 #[cfg(test)]
 mod details_tests;
+mod dev_hover;
 #[cfg(test)]
 mod diff_tests;
 mod external;

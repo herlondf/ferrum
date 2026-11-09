@@ -351,6 +351,13 @@ pub fn view_menu(ui: &mut egui::Ui, tab: &RepoTab, settings: &Settings, cmds: &m
             t!("Single-line rows"),
             |s, v| s.single_line_rows = v,
         );
+        setting(
+            ui,
+            h.relative_dates,
+            true,
+            t!("Relative dates (3 h ago)"),
+            |s, v| s.relative_dates = v,
+        );
         ui.separator();
         if ui.button(t!("Go to commit…  (Ctrl+G)")).clicked() {
             cmds.push(cmd(|tab, _| tab.history.ext.goto = Some(String::new())));

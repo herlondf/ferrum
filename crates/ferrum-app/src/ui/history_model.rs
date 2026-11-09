@@ -48,6 +48,8 @@ pub struct HistorySettings {
     pub vertical_layout: bool,
     /// In the side-by-side layout, keep one line per commit.
     pub single_line_rows: bool,
+    /// "3 h ago" in the date column (the full date shows on hover).
+    pub relative_dates: bool,
     pub recent_searches: Vec<String>,
     /// Keyed by repository path.
     pub repos: HashMap<String, RepoPrefs>,
@@ -61,6 +63,7 @@ impl Default for HistorySettings {
             compact_labels: false,
             vertical_layout: false,
             single_line_rows: false,
+            relative_dates: false,
             recent_searches: Vec::new(),
             repos: HashMap::new(),
         }
@@ -126,6 +129,10 @@ pub struct HistoryExt {
     pub hidden_under: HashMap<Oid, usize>,
     /// Commits each merge brought in, for its tooltip.
     pub merge_cache: HashMap<Oid, Vec<CommitInfo>>,
+    /// Message and file count of hovered commits, for the preview card.
+    pub previews: HashMap<Oid, crate::ui::history_look::Preview>,
+    /// Graph color of the hovered row: its branch path is highlighted.
+    pub hover_path: Option<usize>,
 
     pub mode: SearchMode,
     /// Search only the current branch.
@@ -180,6 +187,7 @@ impl HistoryExt {
         swap(&mut self.unpulled, &mut fresh.unpulled);
         swap(&mut self.hidden_under, &mut fresh.hidden_under);
         self.merge_cache.clear();
+        self.previews.clear();
     }
 
     pub fn any_collapsed(&self) -> bool {
