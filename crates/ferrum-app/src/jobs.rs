@@ -43,6 +43,15 @@ pub enum JobOutput {
     Clipboard(String),
     /// A commit or push stopped because secrets were found (see `safety.rs`).
     Secrets(Box<crate::safety::Held>),
+    /// Work on several repositories finished (see `batch.rs`): their open
+    /// tabs reload, and the message is shown.
+    Repositories {
+        paths: Vec<PathBuf>,
+        message: String,
+        failed: bool,
+    },
+    /// Finished with a message to show (e.g. the space `git gc` freed).
+    Message(String),
 }
 
 pub type JobResult = Result<JobOutput, String>;
