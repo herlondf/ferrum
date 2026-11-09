@@ -28,8 +28,10 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   worktree shows "repo (worktree)"), and a menu with Close Others/All, Rename,
   Color, Open in terminal, Show in file manager, Open in new window, Repository
   settings and Move to workspace; optionally a vertical tab list.
-- **Repository overview** (sidebar > Overview): the rendered README, remotes and
-  counts of commits, contributors, branches and tags, and the size on disk.
+- **Repository overview** (sidebar > Overview): the rendered README (with its
+  images read from the repository), a chart of commits per week over the last
+  year, remotes and counts of commits, contributors, branches and tags, and the
+  size on disk.
 - **Opening**: drop a folder on the window (`git init` is offered when it is not
   a repository); `ferrum PATH` and `ferrum log -- FILE` reuse the running window;
   "Open in Desktop" links (`x-github-client://openRepo/…`,
@@ -40,13 +42,18 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **History** with a colored branch graph, branch/tag labels, search by
   message/author/hash, inside changes (`git log -S`) or by file path (current
   branch or all, recent searches, Enter/F3 for the next match), keyboard
-  navigation, and more commits loaded as you scroll.
+  navigation, and more commits loaded as you scroll. Branch labels follow the
+  theme (current branch in the accent color, local branches in their lane's
+  color, remote ones outlined, tags gold); hovering a row highlights its branch
+  path and shows a card with the full message, refs and changed file count;
+  optional relative dates ("3 h ago", full date on hover); empty panels show
+  hints and shortcuts.
 - **Graph options**: collapse/expand merges (with a tooltip of what a merge
   brought in), topological order, first parent, reflog with unreachable commits
   greyed out, hide remote branches/tags/stashes, show only or hide branches,
   folders and remotes (saved per repository, shown in the status bar),
   unpushed/unpulled markers, author avatars (Gravatar/GitHub, can be turned
-  off) with `.mailmap`, author highlight, conventional commit prefixes, issue
+  off; colored initials otherwise) with `.mailmap`, author highlight, conventional commit prefixes, issue
   tracker links (regex rules and `#123`), compact labels, details beside the
   list, and Shift+wheel for wide graphs.
 - **Drag commits** on the current branch to reorder or squash them.
@@ -62,7 +69,8 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   text (with syntax colors), images and Git LFS pointers, save a file to disk.
 - **Compare**: Ctrl+click two commits, pick two branches in the sidebar, or
   compare a commit or stash with the working copy; swap the two sides.
-- **Diff viewer**: unified or side by side, syntax highlighting, changed words
+- **Diff viewer** (a one-line toolbar of icons, every option also in its
+  Options popover): unified or side by side, syntax highlighting, changed words
   highlighted, find (Ctrl+F), map of changes, next/previous change, ignore
   whitespace, word wrap, font size, whole file or N context lines, visible
   whitespace and tab width, optional `-`/`+` markers, a large window (Space),
@@ -160,7 +168,8 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **File history and blame** (follows renames): history of files and folders
   on any branch, compare two revisions (Ctrl+click), open them in the external
   diff tool, reset a file to a revision (with undo); blame at any revision with
-  back/forward, a timeline of the file's commits, "blame before this change"
+  back/forward, the gutter colored by line age (with a legend), a timeline of
+  the file's commits, "blame before this change"
   and Go to line; history of a range of lines (`git log -L`) from the blame or
   any diff line's menu; a separate window per file; "File history…" in the
   command palette finds files and folders by name.
@@ -354,7 +363,8 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   and quits (`FERRUM_SCREENSHOT_FRAMES=N` waits longer).
 - `FERRUM_START="changes;select:unstaged:src/main.rs"` opens a specific screen;
   the steps are listed in `startup_commands` in `app.rs` (diff options:
-  `diff:sbs,wrap,find=TEXT,large,...`, see `diff_prefs::dev_step`; details:
+  `diff:sbs,wrap,find=TEXT,large,options,...`, see `diff_prefs::dev_step`;
+  `relative-dates` in the commit list; details:
   `details:tree;details:open=src;details:select=src/main.rs`,
   `details:compare=0,3`, `details:workdir=1`, `details:popup`, `details:window`,
   see `details::dev_step`;
@@ -369,6 +379,8 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
   `app/hosted.rs`; look: `theme:dark|light|contrast`, `density:compact`).
 
+- `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
+  (tooltips, the commit preview card).
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
   graph layout, status…) and prints the best and average of each.

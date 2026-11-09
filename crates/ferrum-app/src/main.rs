@@ -59,6 +59,8 @@ mod ui;
 mod ui_tests;
 mod util;
 #[cfg(test)]
+mod views_tests;
+#[cfg(test)]
 mod visual_tests;
 mod watcher;
 
