@@ -80,7 +80,7 @@ fn dashboard_filters_fetches_and_pulls_all() {
     handle(&mut h, Command::Repos(RepoCmd::NewTab));
     wait(&mut h, "glances", |app| {
         let m = &app.repo_state().manager;
-        m.glance(&b).is_some_and(|g| g.dirty) && m.glance(&a).is_some()
+        m.glance_at(&b).is_some_and(|g| g.dirty) && m.glance_at(&a).is_some()
     });
 
     // The "Changes" filter shows only the dirty one (tabs keep their name).
@@ -103,7 +103,7 @@ fn dashboard_filters_fetches_and_pulls_all() {
     wait(&mut h, "behind", |app| {
         app.repo_state()
             .manager
-            .glance(&a)
+            .glance_at(&a)
             .is_some_and(|g| g.ahead_behind == Some((0, 2)))
     });
     h.get_by_label_contains("Fetch all finished");

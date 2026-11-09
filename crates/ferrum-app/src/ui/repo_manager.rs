@@ -65,6 +65,18 @@ impl Manager {
     pub fn glance(&self, path: &Path) -> Option<&Glance> {
         self.glances.get(path)
     }
+
+    /// Like `glance`, comparing real paths: tests use temp folders that are
+    /// links (macOS /var) or spelled differently (Windows) from the keys.
+    #[cfg(test)]
+    pub fn glance_at(&self, path: &Path) -> Option<&Glance> {
+        let real = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let want = real(path);
+        self.glances
+            .iter()
+            .find(|(k, _)| real(k) == want)
+            .map(|(_, g)| g)
+    }
 }
 
 /// Keyboard and context-menu actions on the selection.
