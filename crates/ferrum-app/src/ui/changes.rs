@@ -13,6 +13,8 @@ use crate::command::{Command, Commands, Op};
 use crate::commit_prefs::ListMode;
 use crate::settings::Settings;
 use crate::tab::RepoTab;
+use crate::theme;
+use crate::ui::changes_rows::{self as rows, RowLook};
 use crate::ui::changes_tools::{self, Tool};
 use crate::ui::commit_box;
 use crate::ui::dialogs::Dialog;
@@ -44,6 +46,8 @@ pub struct ChangesUi {
 struct DragFiles {
     source: DiffSource,
     paths: Vec<String>,
+    /// Status of the first file, for the preview.
+    kind: ChangeKind,
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &mut Commands) {
@@ -114,37 +118,14 @@ fn drag_preview(ctx: &egui::Context) {
     let Some(drag) = egui::DragAndDrop::payload::<DragFiles>(ctx) else {
         return;
     };
-    let Some(pos) = ctx.pointer_interact_pos() else {
-        return;
-    };
-    let text = match drag.paths.as_slice() {
-        [one] => one.rsplit('/').next().unwrap_or(one).to_owned(),
-        many => t!("{} files", many.len()),
-    };
-    let painter = ctx.layer_painter(egui::LayerId::new(
-        egui::Order::Tooltip,
-        egui::Id::unique("changes-drag"),
-    ));
-    let visuals = ctx.global_style().visuals.clone();
-    let galley = painter.layout_no_wrap(
-        text,
-        egui::FontId::proportional(13.0),
-        visuals.strong_text_color(),
-    );
-    let rect = egui::Rect::from_min_size(pos + egui::vec2(14.0, 8.0), galley.size())
-        .expand2(egui::vec2(6.0, 3.0));
-    painter.rect(
-        rect,
-        4.0,
-        visuals.window_fill,
-        visuals.window_stroke,
-        egui::StrokeKind::Outside,
-    );
-    painter.galley(
-        rect.min + egui::vec2(6.0, 3.0),
-        galley,
-        visuals.text_color(),
-    );
+    let first = drag.paths.first().map(String::as_str).unwrap_or_default();
+    let to_staged = drag.source != DiffSource::Staged;
+    rows::drag_preview(ctx, first, drag.paths.len(), drag.kind, to_staged);
+}
+
+/// The files of a drag in progress from `source`.
+fn dragged(ctx: &egui::Context, source: DiffSource) -> Option<std::sync::Arc<DragFiles>> {
+    egui::DragAndDrop::payload::<DragFiles>(ctx).filter(|d| d.source == source)
 }
 
 // ----- Acting on files -----
@@ -310,23 +291,29 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &m
     }
 
     let half = (ui.available_height() / 2.0 - 30.0).max(80.0);
-    ui.horizontal(|ui| {
-        ui.strong(t!("Unstaged ({})", tab.status.unstaged.len()));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_enabled_ui(!busy && !tab.status.unstaged.is_empty(), |ui| {
-                if ui.small_button(t!("Discard all…")).clicked() {
-                    cmds.push(Command::Dialog(Dialog::confirm(
-                        &t!("Discard all changes"),
-                        &t!("Throw away all unstaged changes, including new files? This cannot be undone."),
-                        Op::Discard(tab.status.unstaged.clone()),
-                        true,
-                    )));
-                }
-                if ui.small_button(t!("Stage all")).clicked() {
-                    stage(tab, settings, cmds, Vec::new());
-                }
-            });
+    let can_unstaged = !busy && !tab.status.unstaged.is_empty();
+    rows::header(ui, &t!("Unstaged"), tab.status.unstaged.len(), |ui| {
+        if rows::tool_button(ui, can_unstaged, crate::icons::TRASH, &t!("Discard all…")).clicked()
+        {
+            cmds.push(Command::Dialog(Dialog::confirm(
+                &t!("Discard all changes"),
+                &t!("Throw away all unstaged changes, including new files? This cannot be undone."),
+                Op::Discard(tab.status.unstaged.clone()),
+                true,
+            )));
+        }
+        let stage_all = egui::Button::new(crate::icons::text(
+            crate::icons::ARROW_DOWN,
+            t!("Stage all"),
+        ))
+        .small();
+        let resp = ui.add_enabled(can_unstaged, stage_all);
+        resp.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, can_unstaged, t!("Stage all"))
         });
+        if resp.clicked() {
+            stage(tab, settings, cmds, Vec::new());
+        }
     });
     let mut order = Vec::new();
     let top = ui.cursor().top();
@@ -359,30 +346,31 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &m
         DiffSource::Unstaged,
     );
 
-    ui.separator();
-    ui.horizontal(|ui| {
-        let title = if tab.changes.amend {
-            t!("Staged + last commit ({})", tab.status.staged.len())
-        } else {
-            t!("Staged ({})", tab.status.staged.len())
-        };
-        ui.strong(title);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .add_enabled(
-                    !busy && !tab.status.staged.is_empty(),
-                    egui::Button::new(t!("Unstage all")).small(),
-                )
-                .clicked()
-            {
-                if tab.changes.amend {
-                    let all = tab.status.staged.iter().map(|f| f.path.clone()).collect();
-                    cmds.run(Op::UnstageAmend(all));
-                } else {
-                    cmds.run(Op::UnstageAll);
-                }
-            }
+    ui.add_space(theme::SPACE_S);
+    let title = if tab.changes.amend {
+        t!("Staged + last commit")
+    } else {
+        t!("Staged")
+    };
+    let can_staged = !busy && !tab.status.staged.is_empty();
+    rows::header(ui, &title, tab.status.staged.len(), |ui| {
+        let unstage_all = egui::Button::new(crate::icons::text(
+            crate::icons::ARROW_UP,
+            t!("Unstage all"),
+        ))
+        .small();
+        let resp = ui.add_enabled(can_staged, unstage_all);
+        resp.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::Role::Button, can_staged, t!("Unstage all"))
         });
+        if resp.clicked() {
+            if tab.changes.amend {
+                let all = tab.status.staged.iter().map(|f| f.path.clone()).collect();
+                cmds.run(Op::UnstageAmend(all));
+            } else {
+                cmds.run(Op::UnstageAll);
+            }
+        }
     });
     let mut order = Vec::new();
     let top = ui.cursor().top();
@@ -524,15 +512,17 @@ fn drop_zone(
 ) {
     let id = ui.scope_id().with(("drop", onto == DiffSource::Staged));
     let resp = ui.interact(rect, id, egui::Sense::hover());
-    if let Some(drag) = resp.dnd_hover_payload::<DragFiles>()
+    // While files of the other list are dragged, this list shows it takes them.
+    if let Some(drag) = egui::DragAndDrop::payload::<DragFiles>(ui.ctx())
         && drag.source != onto
     {
-        ui.painter().rect_stroke(
-            rect,
-            4.0,
-            ui.visuals().selection.stroke,
-            egui::StrokeKind::Inside,
-        );
+        let hint = match (onto == DiffSource::Staged, drag.paths.len()) {
+            (true, 1) => t!("Drop to stage"),
+            (true, n) => t!("Drop to stage {} files", n),
+            (false, 1) => t!("Drop to unstage"),
+            (false, n) => t!("Drop to unstage {} files", n),
+        };
+        rows::drop_highlight(ui, rect, &hint, resp.contains_pointer());
     }
     // Only take the payload when it comes from the other list.
     let from_other = resp
@@ -552,6 +542,7 @@ fn file_list(
     source: DiffSource,
     order: &mut Vec<String>,
 ) {
+    ui.spacing_mut().item_spacing.y = 1.0;
     if settings.commit.list_mode == ListMode::Tree {
         let root = Node::build(files);
         tree(ui, tab, settings, cmds, &root, "", source, order);
@@ -693,15 +684,23 @@ fn combined(
     for f in staged {
         rows.entry(f.path.as_str()).or_default().1 = Some(f);
     }
-    ui.horizontal_wrapped(|ui| {
-        ui.strong(t!("Changes ({})", rows.len()));
+    rows::header(ui, &t!("Changes"), rows.len(), |ui| {
         ui.add_enabled_ui(!busy, |ui| {
-            if !tab.status.unstaged.is_empty() && ui.small_button(t!("Stage all")).clicked() {
-                stage(tab, settings, cmds, Vec::new());
-            }
-            if !tab.status.staged.is_empty() && ui.small_button(t!("Unstage all")).clicked() {
+            let icon = |i: &str, t: String| egui::Button::new(crate::icons::text(i, t)).small();
+            if !tab.status.staged.is_empty()
+                && ui
+                    .add(icon(crate::icons::ARROW_UP, t!("Unstage all")))
+                    .clicked()
+            {
                 let all = tab.status.staged.iter().map(|f| f.path.clone()).collect();
                 cmds.run(unstage_op(tab, all));
+            }
+            if !tab.status.unstaged.is_empty()
+                && ui
+                    .add(icon(crate::icons::ARROW_DOWN, t!("Stage all")))
+                    .clicked()
+            {
+                stage(tab, settings, cmds, Vec::new());
             }
         });
     });
@@ -756,35 +755,44 @@ fn file_row(
         || (tab.changes.ui.picked_source == Some(source)
             && tab.changes.ui.picked.len() > 1
             && tab.changes.ui.picked.contains(&f.path));
-    let shown = if name_only {
-        f.path.rsplit('/').next().unwrap_or(&f.path)
-    } else {
-        &f.path
+    // Rows of a drag in progress are drawn faded.
+    let dimmed = dragged(ui.ctx(), source).is_some_and(|d| d.paths.contains(&f.path));
+    let lead = if check.is_some() { 22.0 } else { 0.0 };
+    let look = RowLook {
+        kind: f.kind,
+        path: &f.path,
+        old_path: f.old_path.as_deref(),
+        name_only,
+        selected,
+        dimmed,
+        lead,
     };
-    let job = change_label(ui, f.kind, shown, f.old_path.as_deref());
-    let resp = ui
-        .horizontal(|ui| {
-            if let Some(state) = check {
-                let mut on = state.unwrap_or(false);
-                let resp = ui.add_enabled(
-                    !busy,
-                    egui::Checkbox::without_text(&mut on).indeterminate(state.is_none()),
-                );
-                if resp.clicked() {
-                    if state == Some(true) {
-                        cmds.run(unstage_op(tab, vec![f.path.clone()]));
-                    } else {
-                        stage(tab, settings, cmds, vec![f.path.clone()]);
-                    }
-                }
+    let resp = rows::row(ui, &look);
+    if let Some(state) = check {
+        let mut on = state.unwrap_or(false);
+        let r = egui::Rect::from_center_size(
+            egui::pos2(resp.rect.left() + 12.0, resp.rect.center().y),
+            egui::vec2(18.0, 18.0),
+        );
+        let boxed = ui.put(
+            r,
+            egui::Checkbox::without_text(&mut on).indeterminate(state.is_none()),
+        );
+        if boxed.clicked() && !busy {
+            if state == Some(true) {
+                cmds.run(unstage_op(tab, vec![f.path.clone()]));
+            } else {
+                stage(tab, settings, cmds, vec![f.path.clone()]);
             }
-            ui.add(egui::Button::selectable(selected, job).truncate())
-        })
-        .inner
-        .interact(egui::Sense::drag());
+        }
+    }
     if check.is_none() && resp.drag_started() {
         let paths = targets(tab, source, &f.path);
-        resp.dnd_set_drag_payload(DragFiles { source, paths });
+        resp.dnd_set_drag_payload(DragFiles {
+            source,
+            paths,
+            kind: f.kind,
+        });
     }
     if resp.clicked() {
         let mods = ui.input(|i| i.modifiers);
@@ -797,6 +805,7 @@ fn file_row(
             stage(tab, settings, cmds, vec![f.path.clone()]);
         }
     }
+    let what = rows::kind_name(f.kind);
     let hover = if check.is_some() {
         t!(
             "{}\nClick the box or press Enter to stage or unstage",
@@ -813,7 +822,7 @@ fn file_row(
             f.path
         )
     };
-    resp.on_hover_text(hover)
+    resp.on_hover_text(format!("{what}: {hover}"))
         .context_menu(|ui| file_menu(ui, tab, settings, cmds, f, source));
 }
 

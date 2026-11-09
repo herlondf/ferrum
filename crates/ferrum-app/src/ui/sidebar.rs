@@ -6,12 +6,13 @@ use ferrum_core::{BranchInfo, BranchKind, TagInfo};
 
 use crate::command::{Command, Commands, Op};
 use crate::tab::{RepoTab, View};
+use crate::ui::branch_dnd;
 use crate::ui::dialogs::Dialog;
 use crate::ui::forge as forge_ui;
 use crate::ui::history_options;
 use crate::ui::ref_dialogs;
 use crate::ui::sidebar_model::{
-    DragBranch, DropMenu, NavAction, Node, SidebarState, SortOrder, folder_paths, sort_by, tree,
+    DragBranch, NavAction, Node, SidebarState, SortOrder, folder_paths, sort_by, tree,
 };
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
@@ -46,8 +47,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 st.end();
             });
         });
-    drop_menu(ui.ctx(), tab, &mut st, cmds);
-    drag_ghost(ui.ctx());
+    branch_dnd::overlays(ui.ctx(), tab, &mut st.drop_menu, cmds);
     tab.sidebar = st;
 }
 
@@ -136,12 +136,7 @@ fn mark_cursor(ui: &egui::Ui, st: &mut SidebarState, key: &str, resp: &egui::Res
 
 /// Highlights a row while something can be dropped on it.
 fn mark_drop(ui: &egui::Ui, resp: &egui::Response) {
-    ui.painter().rect_stroke(
-        resp.rect,
-        2.0,
-        egui::Stroke::new(1.5, ui.visuals().selection.bg_fill),
-        egui::StrokeKind::Inside,
-    );
+    branch_dnd::highlight(ui, resp.rect);
 }
 
 /// A row that is not a folder. Returns its response and a keyboard action.
@@ -677,35 +672,13 @@ fn drag_and_drop(
     b: &BranchInfo,
     remote: bool,
 ) {
-    resp.dnd_set_drag_payload(DragBranch {
-        name: b.name.clone(),
-        remote,
-    });
-    let target = DragBranch {
+    let branch = DragBranch {
         name: b.name.clone(),
         remote,
     };
-    // Merge needs a local target, rebase a local source.
-    let accepts = |s: &DragBranch| s.name != target.name && (!target.remote || !s.remote);
-    if resp
-        .dnd_hover_payload::<DragBranch>()
-        .is_some_and(|s| accepts(&s))
-    {
-        mark_drop(ui, resp);
-    }
-    if let Some(src) = resp.dnd_release_payload::<DragBranch>()
-        && accepts(&src)
-    {
-        let pos = ui
-            .ctx()
-            .pointer_interact_pos()
-            .unwrap_or(resp.rect.left_bottom());
-        st.drop_menu = Some(DropMenu {
-            source: (*src).clone(),
-            target,
-            pos,
-            just_opened: true,
-        });
+    branch_dnd::source(resp, branch.clone());
+    if let Some(menu) = branch_dnd::target(ui, resp, branch_dnd::Target::Branch(branch)) {
+        st.drop_menu = Some(menu);
     }
 }
 
@@ -829,114 +802,6 @@ fn move_to_folder_menu(ui: &mut egui::Ui, tab: &RepoTab, name: &str, cmds: &mut 
     });
 }
 
-// ----- Drag and drop -----
-
-/// Merge X into Y: checks Y out first when it is not the current branch.
-fn merge_into(tab: &RepoTab, src: &str, dst: &str, cmds: &mut Commands) {
-    if tab.head.as_deref() == Some(dst) {
-        cmds.push(Command::Dialog(Dialog::merge(src, src)));
-        return;
-    }
-    let ops = vec![
-        Op::Checkout(dst.to_owned()),
-        Op::Merge {
-            rev: src.to_owned(),
-            mode: ferrum_core::ops::MergeMode::Default,
-        },
-    ];
-    cmds.push(Command::Dialog(Dialog::confirm(
-        &t!("Merge"),
-        &t!("Check out {} and merge {} into it?", dst, src),
-        Op::Sequence(t!("Merge {} into {}", src, dst), ops),
-        false,
-    )));
-}
-
-/// Rebase X onto Y: checks X out first when it is not the current branch.
-fn rebase_onto(tab: &RepoTab, src: &str, dst: &str, cmds: &mut Commands) {
-    #[rustfmt::skip]
-    let text = t!("Rebase {} onto {}? The commits of {} will be rewritten.", src, dst, src);
-    let rebase = Op::Rebase {
-        onto: dst.to_owned(),
-    };
-    let op = if tab.head.as_deref() == Some(src) {
-        rebase
-    } else {
-        Op::Sequence(
-            t!("Rebase {} onto {}", src, dst),
-            vec![Op::Checkout(src.to_owned()), rebase],
-        )
-    };
-    cmds.push(Command::Dialog(Dialog::confirm(
-        &t!("Rebase"),
-        &text,
-        op,
-        false,
-    )));
-}
-
-fn drop_menu(ctx: &egui::Context, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Commands) {
-    let Some(m) = &mut st.drop_menu else {
-        return;
-    };
-    let (src, dst) = (m.source.clone(), m.target.clone());
-    let mut close = false;
-    let area = egui::Area::new(egui::Id::unique("sidebar-drop-menu"))
-        .order(egui::Order::Foreground)
-        .fixed_pos(m.pos)
-        .show(ctx, |ui| {
-            egui::Frame::menu(ui.style()).show(ui, |ui| {
-                ui.set_min_width(200.0);
-                ui.add_enabled_ui(!tab.busy(), |ui| {
-                    if !dst.remote
-                        && ui
-                            .button(t!("Merge {} into {}…", src.name, dst.name))
-                            .clicked()
-                    {
-                        merge_into(tab, &src.name, &dst.name, cmds);
-                        close = true;
-                    }
-                    if !src.remote
-                        && ui
-                            .button(t!("Rebase {} onto {}…", src.name, dst.name))
-                            .clicked()
-                    {
-                        rebase_onto(tab, &src.name, &dst.name, cmds);
-                        close = true;
-                    }
-                });
-                if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
-                    close = true;
-                }
-            });
-        });
-    let (pressed, esc) = ctx.input(|i| (i.pointer.any_pressed(), i.key_pressed(egui::Key::Escape)));
-    if esc || (pressed && !m.just_opened && !area.response.contains_pointer()) {
-        close = true;
-    }
-    m.just_opened = false;
-    if close {
-        st.drop_menu = None;
-    }
-}
-
-/// The name of the dragged branch, next to the pointer.
-fn drag_ghost(ctx: &egui::Context) {
-    let Some(p) = egui::DragAndDrop::payload::<DragBranch>(ctx) else {
-        return;
-    };
-    let Some(pos) = ctx.pointer_interact_pos() else {
-        return;
-    };
-    egui::Area::new(egui::Id::unique("sidebar-drag"))
-        .order(egui::Order::Tooltip)
-        .fixed_pos(pos + egui::vec2(14.0, 8.0))
-        .interactable(false)
-        .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(&p.name));
-        });
-}
-
 // ----- Remotes -----
 
 fn remotes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Commands) {
@@ -993,6 +858,10 @@ fn remotes(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut C
             let key = format!("dir:remote:{}", remote.name);
             let label = RichText::new(format!("☁ {}", remote.name));
             let h = header(ui, st, &key, true, label, Some(list.len()), None);
+            let target = branch_dnd::Target::Remote(remote.name.clone());
+            if let Some(menu) = branch_dnd::target(ui, &h.resp, target) {
+                st.drop_menu = Some(menu);
+            }
             h.resp.on_hover_text(&remote.url).context_menu(|ui| {
                 ui.add_enabled_ui(!tab.busy(), |ui| {
                     if ui.button(t!("Fetch {}", remote.name)).clicked() {
@@ -1328,6 +1197,11 @@ pub fn dev_step(tab: &mut RepoTab, arg: &str) {
         "focus" => {
             tab.pane.pane = crate::ui::focus::Pane::Sidebar;
             tab.pane.ring = true;
+        }
+        // `drop:SRC>DST`: the menu shown after dropping branch SRC on DST.
+        "drop" => {
+            let menu = branch_dnd::dev_menu(tab, rest);
+            tab.sidebar.drop_menu = menu;
         }
         _ => eprintln!("FERRUM_START: unknown sidebar step {arg}"),
     }

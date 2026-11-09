@@ -166,7 +166,6 @@ pub static T: &[(&str, &str)] = &[
         "Open the conflict resolver",
         "Abrir o resolvedor de conflitos",
     ),
-    ("Unstaged ({})", "Não preparadas ({})"),
     ("Discard all…", "Descartar tudo…"),
     ("Discard all changes", "Descartar todas as alterações"),
     (
@@ -175,7 +174,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Stage all", "Preparar tudo"),
     ("No unstaged changes.", "Nenhuma alteração não preparada."),
-    ("Staged ({})", "Preparadas ({})"),
     ("Unstage all", "Remover tudo da preparação"),
     ("Nothing staged yet.", "Nada preparado ainda."),
     ("Unstage", "Remover da preparação"),
@@ -231,10 +229,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Stage all & commit", "Preparar tudo e fazer commit"),
     ("as {} <{}>", "como {} <{}>"),
-    (
-        "Change in the identity menu at the bottom right",
-        "Altere no menu de identidade, no canto inferior direito",
-    ),
     (
         "⚠ No author identity set — click to choose one",
         "⚠ Nenhuma identidade de autor definida — clique para escolher uma",

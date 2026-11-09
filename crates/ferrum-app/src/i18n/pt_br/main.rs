@@ -68,10 +68,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     // app.rs: welcome screen
     ("A fast Git client", "Um cliente Git rápido"),
-    ("📂 Open…", "📂 Abrir…"),
-    ("⬇ Clone…", "⬇ Clonar…"),
-    ("✚ New…", "✚ Novo…"),
-    ("Recent repositories", "Repositórios recentes"),
     // util.rs: operations in progress
     ("Merge in progress", "Merge em andamento"),
     ("Rebase in progress", "Rebase em andamento"),

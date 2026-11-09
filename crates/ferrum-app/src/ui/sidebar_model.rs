@@ -249,20 +249,31 @@ pub enum NavKey {
     Space,
 }
 
-/// A branch being dragged in the sidebar.
+/// A branch being dragged (sidebar row or graph label).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DragBranch {
     pub name: String,
     pub remote: bool,
 }
 
-/// The Merge / Rebase menu shown after dropping a branch onto another.
+/// The Merge / Rebase / Cherry-pick / Push menu shown after a drop.
 #[derive(Debug, Clone)]
 pub struct DropMenu {
     pub source: DragBranch,
-    pub target: DragBranch,
+    pub target: crate::ui::branch_dnd::Target,
     pub pos: egui::Pos2,
     pub just_opened: bool,
+}
+
+impl DropMenu {
+    pub fn new(source: DragBranch, target: crate::ui::branch_dnd::Target, pos: egui::Pos2) -> Self {
+        Self {
+            source,
+            target,
+            pos,
+            just_opened: true,
+        }
+    }
 }
 
 #[derive(Default)]

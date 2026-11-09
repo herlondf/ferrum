@@ -16,7 +16,6 @@ pub static T: &[(&str, &str)] = &[
     ("📌 Pinned", "📌 Fixados"),
     ("📌 Pin to the top", "📌 Fixar no topo"),
     ("Unpin", "Desafixar"),
-    ("📌 Show {}", "📌 Mostrar {}"),
     // ----- Branches -----
     ("Local branch: {}", "Branch local: {}"),
     ("Remote branch: {}", "Branch remota: {}"),

@@ -184,7 +184,7 @@ fn drag_branch_onto_another_to_merge() {
     }
     h.drop_at(to);
     frames(&mut h);
-    h.get_by_label("Merge main into solo…").click();
+    h.get_by_label_contains("Merge main into solo…").click();
     frames(&mut h);
     h.get_by_label("OK").click();
     settle(&mut h);

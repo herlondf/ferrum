@@ -198,6 +198,24 @@ pub fn push(tab: &RepoTab, branch: &str) -> SyncDialog {
     SyncDialog::Push(form)
 }
 
+/// Push `branch` to `remote`, to `remote_branch` when given (drag and drop).
+pub fn push_to(
+    tab: &RepoTab,
+    branch: &str,
+    remote: &str,
+    remote_branch: Option<&str>,
+) -> SyncDialog {
+    let mut d = push(tab, branch);
+    if let SyncDialog::Push(form) = &mut d {
+        form.remote = remote.into();
+        form.retarget(tab);
+        if let Some(b) = remote_branch {
+            form.remote_branch = b.into();
+        }
+    }
+    d
+}
+
 pub fn push_many(tab: &RepoTab, branches: Vec<String>) -> SyncDialog {
     let remote = branches
         .iter()

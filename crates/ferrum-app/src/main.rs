@@ -17,6 +17,8 @@ mod details_tests;
 mod dev_hover;
 #[cfg(test)]
 mod diff_tests;
+#[cfg(test)]
+mod dnd_tests;
 mod external;
 #[cfg(test)]
 mod file_history_tests;

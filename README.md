@@ -15,7 +15,11 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   item's shortcut (from Settings > Shortcuts). F10 opens the first menu,
   Alt + the underlined letter opens a menu, Left / Right switch menus. It can be
   hidden in Settings > Appearance > Window.
-- **Repository Manager** (start screen, and Ctrl+T in a new tab): known
+- **Repository Manager** (start screen, and Ctrl+T in a new tab): large Open /
+  Clone / New actions, a search field with the focus (arrows and Enter open the
+  match), repository cards (color, name, a dot for uncommitted changes, current
+  branch, last commit time; recently opened first), a friendly empty state and
+  a "drop the folder" area while a folder is dragged over the window; known
   repositories in groups, rename (F2), remove from the list (Delete), open
   (Enter or double-click), Ctrl/Shift+click to select several, missing folders
   flagged with "Remove missing"; **source folders** scanned for repositories to
@@ -88,12 +92,16 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   LFS pointers with a download/preview; commits between two submodule
   revisions; large untracked files load on request.
 - **Local changes**: stage/unstage/discard whole files, hunks or single lines;
-  flat, tree or single-list view; filter; drag files between lists; hide
+  flat, tree or single-list view; file status as colored badges; filter; drag
+  files (also several selected ones) between lists, the target list lights up; hide
   untracked / show ignored files; `.gitignore` by file, folder, extension or
   pattern (optionally untracking) and built-in templates; large-file warning for
   files outside Git LFS; copy or save changes as a patch; reset a file to a revision.
-- **Commit box**: subject and description fields with length limits and a
-  ruler (wrap at ruler), recent messages, drafts kept per worktree,
+- **Commit box**: large subject and description fields, a subject counter
+  (gray up to 50, orange up to 72, red beyond), a primary button that says what
+  is committed ("Commit 3 files", or "Stage and commit…" when nothing is
+  staged) with the branch and author under it, more ways to commit in its
+  menu, a ruler (wrap at ruler), recent messages, drafts kept per worktree,
   `commit.template`, `Co-authored-by:` completion, sign-off, amend (shows the
   last commit's changes, warns if already pushed), commit and push, live hook
   output with "commit without hooks", detached HEAD warning, and an optional
@@ -103,8 +111,10 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 - **Sidebar**: branch folders by `/` (with counts, drag a branch onto a folder to
   move it), pinned branches and tags (also in the palette), quick filter, sorting
   (alphabetical, most recent commit, folders first; `v2` before `v10`), upstream
-  icons (○ local only, ☁ published, ⚠ upstream gone), drag a branch onto another
-  to merge or rebase, double-click to check out / track / open, "Select stale
+  icons (○ local only, ☁ published, ⚠ upstream gone), **drag a branch** (a
+  sidebar row or a label in the graph) onto another branch to merge, rebase or
+  cherry-pick its commits, or onto a remote to push it (a menu asks first, then
+  the usual dialog confirms), double-click to check out / track / open, "Select stale
   local branches" for bulk delete, annotated tag messages in tooltips, and a "+"
   per section. Open folders and sort order are kept per worktree; pins and
   issue link rules are shared by all worktrees of a repository.
@@ -213,8 +223,9 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   color, toolbar buttons, branch name space replacement, default merge type.
 - **Command palette** (Ctrl+P): commands, branches to check out (local and
   remote), pinned refs, files (opens their history), tabs, "Create pull
-  request", "Add worktree" and custom commands, grouped by kind with their
-  shortcuts. Light/dark theme, zoom, tabs that reopen with the app.
+  request", "Add worktree" and custom commands, grouped by kind with an icon
+  and their shortcuts, matched characters highlighted, recently used entries
+  first. Light/dark theme, zoom, tabs that reopen with the app.
 - **Customizable keyboard shortcuts** (Settings > Shortcuts): click a shortcut
   and press the new keys, several keys per action, reset one or all, conflicts
   flagged.
@@ -394,7 +405,8 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   hosted services: `issues`, `settings:accounts`, `settings:ssh`,
   `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
-  `app/hosted.rs`; look: `theme:dark|light|contrast`, `density:compact`;
+  `app/hosted.rs`; branch drag and drop menu: `sidebar:drop:SRC>DST` (DST a
+  branch or a remote); look: `theme:dark|light|contrast`, `density:compact`;
   sample toasts: `toast:success|info|error`).
 - `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 - `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
