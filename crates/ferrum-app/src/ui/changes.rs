@@ -319,6 +319,13 @@ fn lists(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &m
         if rows::tool_button(ui, can_absorb, crate::icons::ARROWS_IN_SIMPLE, &label).clicked() {
             cmds.push(Command::Dialog(crate::ui::absorb::open(tab)));
         }
+        let label = t!(
+            "Split into commits… ({})",
+            crate::ui::ai_common::menu_hint(ui.ctx())
+        );
+        if rows::tool_button(ui, can_absorb, crate::icons::AI, &label).clicked() {
+            cmds.push(Command::Ai(crate::ai::AiCmd::Split));
+        }
     });
     let mut order = Vec::new();
     let top = ui.cursor().top();
@@ -861,6 +868,13 @@ fn file_menu(
         .collect();
     if many {
         ui.weak(t!("{} files selected", paths.len()));
+    } else if crate::ui::ai_common::menu_item(ui, &t!("Explain this diff")) {
+        cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+            crate::ai::Subject::Diff(ferrum_core::ai::prompts::DiffOf::Local {
+                path: f.path.clone(),
+                staged: source == DiffSource::Staged,
+            }),
+        )));
     }
     ui.add_enabled_ui(!tab.busy(), |ui| {
         let label = if source == DiffSource::Staged {

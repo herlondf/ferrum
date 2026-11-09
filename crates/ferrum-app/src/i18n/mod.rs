@@ -62,6 +62,11 @@ pub fn set_language(lang: Language) {
     CURRENT.store(code, Ordering::Relaxed);
 }
 
+/// Whether `t!` translates to Brazilian Portuguese.
+pub fn portuguese() -> bool {
+    CURRENT.load(Ordering::Relaxed) == 1
+}
+
 static PT_BR: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     pt_br::TABLES
         .iter()

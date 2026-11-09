@@ -89,6 +89,7 @@ fn search_hint(mode: SearchMode) -> String {
         SearchMode::Text => t!("Filter by message, author or hash"),
         SearchMode::Changes => t!("Search changes (git log -S), press Enter"),
         SearchMode::Paths => t!("Search file paths, press Enter"),
+        SearchMode::Ask => crate::ui::ai_search::search_hint(),
     }
 }
 
@@ -97,6 +98,7 @@ fn mode_label(mode: SearchMode) -> String {
         SearchMode::Text => t!("Message"),
         SearchMode::Changes => t!("In changes"),
         SearchMode::Paths => t!("File path"),
+        SearchMode::Ask => crate::icons::text(crate::icons::AI, t!("Ask")),
     }
 }
 
@@ -122,7 +124,12 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmd
             .selected_text(mode_label(mode))
             .width(90.0)
             .show_ui(ui, |ui| {
-                for m in [SearchMode::Text, SearchMode::Changes, SearchMode::Paths] {
+                for m in [
+                    SearchMode::Text,
+                    SearchMode::Changes,
+                    SearchMode::Paths,
+                    SearchMode::Ask,
+                ] {
                     ui.selectable_value(&mut new_mode, m, mode_label(m));
                 }
             });
@@ -142,8 +149,13 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmd
             changed = true;
         }
         let term = tab.history.search.trim().to_owned();
-        let job_mode = new_mode != SearchMode::Text;
-        if job_mode {
+        let job_mode = matches!(new_mode, SearchMode::Changes | SearchMode::Paths);
+        if new_mode == SearchMode::Ask {
+            crate::ui::ai_search::bar(ui, tab, enter);
+            if enter {
+                cmds.push(Command::FocusSearch);
+            }
+        } else if job_mode {
             if changed && tab.history.ext.searched.as_deref() != Some(term.as_str()) {
                 tab.history.content_hits = None;
             }
@@ -193,6 +205,9 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmd
         if changed {
             tab.apply_search();
         }
+        if tab.history.ext.mode == SearchMode::Ask && tab.history.search.is_empty() {
+            tab.history.ext.ask = Default::default();
+        }
         if let Some(v) = &tab.history.visible {
             ui.weak(t!("{} of {} commits", v.len(), tab.commits.len()))
                 .on_hover_text(t!("Enter / F3: next match, Shift+Enter: previous"));
@@ -203,6 +218,9 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmd
             ));
         }
     });
+    if tab.history.ext.mode == SearchMode::Ask {
+        crate::ui::ai_search::chips(ui, tab);
+    }
 }
 
 fn remember(q: &str) -> Command {
@@ -1239,6 +1257,12 @@ fn commit_menu(ui: &mut egui::Ui, tab: &RepoTab, i: usize, cmds: &mut Commands) 
     let busy = tab.busy();
 
     ui.set_min_width(240.0);
+    if crate::ui::ai_common::menu_item(ui, &t!("Explain this commit")) {
+        cmds.push(Command::Ai(crate::ai::AiCmd::Explain(
+            crate::ai::Subject::Commit(id),
+        )));
+    }
+    ui.separator();
     crate::ui::custom_commands::commit_menu(ui, tab, id, cmds);
     ui.add_enabled_ui(!busy, |ui| {
         for l in labels.iter().filter(|l| l.kind == RefKind::Local && !l.is_head) {

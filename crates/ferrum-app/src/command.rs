@@ -81,6 +81,8 @@ pub enum Command {
     Hosted(crate::hosted::HostedCmd),
     /// Timeline, secrets warning and learning mode (see `safety.rs`).
     Safety(crate::safety::SafetyCmd),
+    /// Explain, split into commits, AI settings (see `ai.rs`).
+    Ai(crate::ai::AiCmd),
 }
 
 pub enum DevStep {
@@ -299,6 +301,8 @@ pub enum Op {
     SecretCheck(crate::safety::SecretCheck),
     /// Stacked branches, absorb and moving hunks (see `stack_ops.rs`).
     Stack(crate::stack_ops::StackOp),
+    /// Split into commits (see `ai.rs`).
+    Ai(crate::ai::AiOp),
 }
 
 impl Op {
@@ -404,6 +408,7 @@ impl Op {
             Op::Timeline(t) => t.label(),
             Op::SecretCheck(c) => c.op.label(),
             Op::Stack(s) => s.label(),
+            Op::Ai(a) => a.label(),
         }
     }
 
@@ -431,6 +436,7 @@ impl Op {
             Op::Custom(r) => r.refresh(),
             Op::SecretCheck(c) => c.op.refresh(),
             Op::Stack(s) => s.refresh(),
+            Op::Ai(a) => a.refresh(),
             _ => Refresh::All,
         }
     }
@@ -445,6 +451,7 @@ impl Op {
             Op::Patch(p) => return p.execute(git),
             Op::SecretCheck(c) => return c.execute(git, progress),
             Op::Stack(s) => return s.execute(git, progress),
+            Op::Ai(a) => return a.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -561,6 +568,7 @@ impl Op {
             Op::Timeline(t) => t.run(git),
             Op::SecretCheck(c) => c.op.run(git, progress),
             Op::Stack(s) => s.run(git, progress),
+            Op::Ai(a) => a.run(git, progress),
         }
     }
 }

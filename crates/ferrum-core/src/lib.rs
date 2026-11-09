@@ -5,6 +5,7 @@
 //! and LFS behave exactly as in the terminal.
 
 pub mod absorb;
+pub mod ai;
 pub mod askpass;
 pub mod avatar;
 pub mod backup;

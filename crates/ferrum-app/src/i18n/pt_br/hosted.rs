@@ -237,10 +237,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Base", "Base"),
     ("Changes of", "Mudanças de"),
-    (
-        "Reviews git diff {}...{} with: {}",
-        "Revisa git diff {}...{} com: {}",
-    ),
     ("Save as default prompt", "Salvar como prompt padrão"),
     ("Reviewing…", "Revisando…"),
     ("Start review", "Iniciar revisão"),

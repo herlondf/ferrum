@@ -108,6 +108,8 @@ pub enum SearchMode {
     Changes,
     /// Changed file paths.
     Paths,
+    /// A request in plain words, read into filters (see `ai_search.rs`).
+    Ask,
 }
 
 /// History state beyond the basic selection and search text.
@@ -138,6 +140,8 @@ pub struct HistoryExt {
     /// Search only the current branch.
     pub scope_branch: bool,
     pub path_hits: HashMap<Oid, Vec<String>>,
+    /// The filters of the "Ask" search mode.
+    pub ask: crate::ui::ai_search::AskState,
     /// Text of the last search run as a job, to tell when Enter should run it again.
     pub searched: Option<String>,
 
@@ -403,13 +407,20 @@ pub fn apply_search(tab: &mut RepoTab) {
     let ext = &tab.history.ext;
     let scope = ext.scope_branch.then(|| head_set(tab));
     let in_scope = |c: &CommitInfo| scope.as_ref().is_none_or(|s| s.contains(&c.id));
+    // Ask: everything shows until the filters are run.
+    if ext.mode == SearchMode::Ask && tab.history.content_hits.is_none() {
+        tab.history.visible = None;
+        return;
+    }
     let visible = match ext.mode {
-        SearchMode::Changes | SearchMode::Paths => match &tab.history.content_hits {
-            Some(hits) => (0..tab.commits.len())
-                .filter(|&i| hits.contains(&tab.commits[i].id) && in_scope(&tab.commits[i]))
-                .collect(),
-            None => Vec::new(),
-        },
+        SearchMode::Changes | SearchMode::Paths | SearchMode::Ask => {
+            match &tab.history.content_hits {
+                Some(hits) => (0..tab.commits.len())
+                    .filter(|&i| hits.contains(&tab.commits[i].id) && in_scope(&tab.commits[i]))
+                    .collect(),
+                None => Vec::new(),
+            }
+        }
         SearchMode::Text => tab
             .commits
             .iter()

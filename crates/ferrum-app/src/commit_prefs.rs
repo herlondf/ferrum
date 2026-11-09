@@ -80,7 +80,22 @@ Use the imperative mood. First line: a summary of at most 50 characters. Then a 
 and a short description of what changed and why, wrapped at 72 columns. Reply with the \
 message only, no quotes or Markdown.\n\n{diff}";
 
-/// Settings for writing commit messages with an AI command line tool.
+/// Which kind of AI provider is used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum AiProvider {
+    /// A local Ollama server.
+    #[default]
+    Ollama,
+    /// An OpenAI-compatible server (LM Studio, llama.cpp, vLLM…).
+    OpenAi,
+    /// A command line tool (Claude Code, Codex…).
+    Command,
+}
+
+pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
+pub const DEFAULT_OPENAI_URL: &str = "http://localhost:1234/v1";
+
+/// AI settings (Settings > AI): the provider and the commit message prompt.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AiPrefs {
@@ -88,6 +103,17 @@ pub struct AiPrefs {
     pub command: String,
     /// Prompt template; `{diff}` is replaced by the staged diff.
     pub prompt: String,
+    /// Nothing is sent to any provider until this is on.
+    pub enabled: bool,
+    pub provider: AiProvider,
+    pub ollama_url: String,
+    pub ollama_model: String,
+    pub openai_url: String,
+    /// Optional; most local servers need none.
+    pub openai_key: String,
+    pub openai_model: String,
+    /// Most context sent with one request, in KB.
+    pub max_kb: u32,
 }
 
 impl Default for AiPrefs {
@@ -95,6 +121,14 @@ impl Default for AiPrefs {
         Self {
             command: DEFAULT_AI_COMMAND.into(),
             prompt: DEFAULT_AI_PROMPT.into(),
+            enabled: false,
+            provider: AiProvider::default(),
+            ollama_url: DEFAULT_OLLAMA_URL.into(),
+            ollama_model: String::new(),
+            openai_url: DEFAULT_OPENAI_URL.into(),
+            openai_key: String::new(),
+            openai_model: String::new(),
+            max_kb: 48,
         }
     }
 }

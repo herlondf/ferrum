@@ -45,6 +45,8 @@ pub struct ConflictState {
     compare: Option<bool>,
     /// The conflict last navigated to.
     current: usize,
+    /// "Suggest resolution" by the AI provider.
+    ai: crate::ui::ai_conflict::AiHelp,
 }
 
 /// What the stopped operation is doing, re-read when the repository changes.
@@ -358,6 +360,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
         show_base,
         compare,
         current,
+        ai,
         ..
     } = &mut tab.conflicts;
     let Some(file) = file.as_mut() else {
@@ -451,6 +454,13 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             }
         }
         None => {}
+    }
+    if let Some(text) =
+        crate::ui::ai_conflict::show(ui, ai, &path, &file.versions, &names, &file.result)
+    {
+        file.result = text;
+        file.edited = true;
+        file.suggested = false;
     }
 
     egui::Panel::bottom("conflict-result")

@@ -57,32 +57,11 @@ pub fn commit(ui: &mut egui::Ui, settings: &mut Settings) {
     }
 }
 
+/// The commit message prompt (in Settings > AI).
 pub fn ai(ui: &mut egui::Ui, settings: &mut Settings) {
-    ui.label(
-        egui::RichText::new(t!("AI commit messages"))
-            .size(16.0)
-            .strong(),
-    );
-    ui.add_space(6.0);
-    ui.label(t!(
-        "The AI button of the commit box runs this command with the prompt on standard input and uses its answer as the message."
-    ));
-    ui.add_space(6.0);
+    ui.label(crate::theme::strong(t!("AI commit messages")).size(14.0));
+    ui.add_space(4.0);
     let p: &mut AiPrefs = &mut settings.ai;
-    ui.label(t!("Command"));
-    ui.add(
-        egui::TextEdit::singleline(&mut p.command)
-            .font(egui::TextStyle::Monospace)
-            .desired_width(f32::INFINITY),
-    );
-    ui.horizontal(|ui| {
-        ui.weak(t!("Examples:"));
-        for example in ["claude -p", "codex exec -"] {
-            if ui.small_button(example).clicked() {
-                p.command = example.into();
-            }
-        }
-    });
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.label(t!("Prompt"));

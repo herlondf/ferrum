@@ -1,8 +1,15 @@
 pub mod absorb;
 pub mod accounts;
 pub mod activity;
+pub mod ai_common;
+pub mod ai_conflict;
 pub mod ai_message;
+pub mod ai_panel;
+pub mod ai_pr;
 pub mod ai_review;
+pub mod ai_search;
+pub mod ai_settings;
+pub mod ai_split;
 pub mod askpass;
 pub mod avatars;
 pub mod background;

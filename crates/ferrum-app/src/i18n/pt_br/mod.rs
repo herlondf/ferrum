@@ -3,6 +3,7 @@
 //! then have the same translation (checked by a test).
 
 mod activity;
+mod ai;
 mod commands;
 mod common;
 mod details;
@@ -34,6 +35,7 @@ mod visual;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
     activity::T,
+    ai::T,
     commands::T,
     common::T,
     details::T,

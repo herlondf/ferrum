@@ -137,10 +137,6 @@ pub static T: &[(&str, &str)] = &[
     ("Stop writing the message", "Parar de escrever a mensagem"),
     ("AI", "IA"),
     (
-        "Write the message from the staged changes with {}",
-        "Escrever a mensagem a partir das alterações preparadas com {}",
-    ),
-    (
         "Committed, but there is no branch or remote to push to.",
         "Commit feito, mas não há branch ou remoto para enviar.",
     ),
@@ -156,10 +152,6 @@ pub static T: &[(&str, &str)] = &[
         "Fazer o commit de novo, pulando os hooks pre-commit e commit-msg (--no-verify)",
     ),
     // ----- AI -----
-    (
-        "The AI tool stopped unexpectedly.",
-        "A ferramenta de IA parou inesperadamente.",
-    ),
     ("Nothing is staged.", "Nada está preparado."),
     (
         "Set the AI command in Settings first.",
@@ -203,10 +195,6 @@ pub static T: &[(&str, &str)] = &[
         "Esquecer mensagens recentes ({})",
     ),
     ("AI commit messages", "Mensagens de commit com IA"),
-    (
-        "The AI button of the commit box runs this command with the prompt on standard input and uses its answer as the message.",
-        "O botão IA da caixa de commit executa este comando com o prompt na entrada padrão e usa a resposta como mensagem.",
-    ),
     ("Command", "Comando"),
     ("Examples:", "Exemplos:"),
     ("Prompt", "Prompt"),
