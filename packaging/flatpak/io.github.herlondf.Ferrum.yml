@@ -24,6 +24,11 @@ modules:
   # The runtime has no git command line; Ferrum writes through it.
   - name: git
     buildsystem: simple
+    # Git 2.5x builds part of itself in Rust (no crates to download).
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_NET_OFFLINE: 'true'
     build-commands:
       - make -j${FLATPAK_BUILDER_N_JOBS} prefix=/app NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1 INSTALL_SYMLINKS=1
       - make prefix=/app NO_TCLTK=1 NO_GETTEXT=1 NO_PERL=1 NO_PYTHON=1 INSTALL_SYMLINKS=1 install

@@ -281,11 +281,12 @@ fn absorb_previews_and_squashes_into_the_commit() {
     assert!(h.query_by_label_contains("new file").is_some());
     h.get_by_role_and_label(Role::Button, "Absorb 1 change")
         .click();
+    // Wait for the result first: git is slow on Windows, and a failure shows its message.
+    wait_for(&mut h, "Absorbed 1 change into 1 commit");
     settle(&mut h);
     assert_eq!(log(p, "HEAD"), "B\nA\nbase f\nfirst");
     assert!(git(p, &["show", "HEAD~1:f.txt"]).contains("TWO"));
     assert_eq!(git(p, &["status", "--porcelain"]), "?? new.txt");
-    wait_for(&mut h, "Absorbed 1 change into 1 commit");
     // Undo brings the change back as a local change.
     h.get_by_role_and_label(Role::Button, "Undo").click();
     settle(&mut h);
