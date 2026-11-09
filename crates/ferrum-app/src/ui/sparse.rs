@@ -138,7 +138,10 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             let label = icons::text(icons::CHECK, t!("Check out {} folders", chosen.len()));
             let changed = chosen != sparse::outermost(&state.folders) || !state.enabled;
             if ui
-                .add_enabled(!busy && changed, theme::primary(label))
+                .add_enabled(
+                    !busy && changed && !chosen.is_empty(),
+                    theme::primary(label),
+                )
                 .on_hover_text("git sparse-checkout set --cone")
                 .clicked()
             {
