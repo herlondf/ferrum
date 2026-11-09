@@ -11,6 +11,43 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 ureq = { version = "3.5.1", features = ["json"] }
+# Structural diff and merge. Each grammar is a feature so packagers can trim the binary.
+tree-sitter = "0.27"
+tree-sitter-language = "0.1"
+similar = "3.2.1"
+tree-sitter-rust = { version = "0.24", optional = true }
+tree-sitter-javascript = { version = "0.25", optional = true }
+tree-sitter-typescript = { version = "0.23", optional = true }
+tree-sitter-python = { version = "0.25", optional = true }
+tree-sitter-go = { version = "0.25", optional = true }
+tree-sitter-java = { version = "0.23", optional = true }
+tree-sitter-c = { version = "0.24", optional = true }
+tree-sitter-cpp = { version = "0.23", optional = true }
+tree-sitter-c-sharp = { version = "0.23", optional = true }
+tree-sitter-json = { version = "0.24", optional = true }
+tree-sitter-yaml = { version = "0.7", optional = true }
+tree-sitter-toml-ng = { version = "0.7", optional = true }
+tree-sitter-html = { version = "0.23", optional = true }
+tree-sitter-css = { version = "0.25", optional = true }
+tree-sitter-md = { version = "0.5", optional = true }
+
+[features]
+default = ["lang-rust", "lang-js", "lang-ts", "lang-python", "lang-go", "lang-java", "lang-c", "lang-cpp", "lang-csharp", "lang-json", "lang-yaml", "lang-toml", "lang-html", "lang-css", "lang-markdown"]
+lang-rust = ["dep:tree-sitter-rust"]
+lang-js = ["dep:tree-sitter-javascript"]
+lang-ts = ["dep:tree-sitter-typescript"]
+lang-python = ["dep:tree-sitter-python"]
+lang-go = ["dep:tree-sitter-go"]
+lang-java = ["dep:tree-sitter-java"]
+lang-c = ["dep:tree-sitter-c"]
+lang-cpp = ["dep:tree-sitter-cpp"]
+lang-csharp = ["dep:tree-sitter-c-sharp"]
+lang-json = ["dep:tree-sitter-json"]
+lang-yaml = ["dep:tree-sitter-yaml"]
+lang-toml = ["dep:tree-sitter-toml-ng"]
+lang-html = ["dep:tree-sitter-html"]
+lang-css = ["dep:tree-sitter-css"]
+lang-markdown = ["dep:tree-sitter-md"]
 
 [dev-dependencies]
 tempfile = "3.27.0"

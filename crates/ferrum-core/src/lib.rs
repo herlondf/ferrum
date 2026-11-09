@@ -30,11 +30,14 @@ pub mod patch;
 pub mod rebase;
 pub mod refs;
 mod repo;
+pub mod semantic_merge;
 pub mod shell;
 pub mod ssh;
 pub mod stats;
+pub mod structural;
 pub mod submodule;
 pub mod sync;
+pub mod syntax;
 pub mod update;
 
 pub use git2::Oid;
