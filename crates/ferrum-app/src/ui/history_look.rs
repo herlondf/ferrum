@@ -193,6 +193,7 @@ fn preview_of(tab: &mut RepoTab, id: Oid) -> Preview {
 pub fn preview_card(ui: &mut egui::Ui, tab: &mut RepoTab, idx: usize, network_avatars: bool) {
     let c = tab.commits[idx].clone();
     let p = preview_of(tab, c.id);
+    let lane_index = tab.graph.rows.get(idx).map_or(0, |r| r.color);
     ui.set_max_width(440.0);
     ui.spacing_mut().item_spacing.y = 6.0;
     ui.horizontal(|ui| {
@@ -214,10 +215,16 @@ pub fn preview_card(ui: &mut egui::Ui, tab: &mut RepoTab, idx: usize, network_av
     let body = body.trim();
     if !body.is_empty() {
         const MAX_LINES: usize = 12;
+        let body = reflow(body);
         let lines: Vec<&str> = body.lines().collect();
+        const MAX_CHARS: usize = 700;
         let mut shown = lines[..lines.len().min(MAX_LINES)].join("\n");
-        if lines.len() > MAX_LINES {
-            shown.push_str("\n…");
+        let cut = shown.chars().count() > MAX_CHARS;
+        if cut {
+            shown = shown.chars().take(MAX_CHARS).collect();
+        }
+        if cut || lines.len() > MAX_LINES {
+            shown = shown.trim_end().to_owned() + " …";
         }
         ui.add(
             egui::Label::new(egui::RichText::new(shown).color(ui.visuals().weak_text_color()))
@@ -244,7 +251,7 @@ pub fn preview_card(ui: &mut egui::Ui, tab: &mut RepoTab, idx: usize, network_av
                     .x;
                 let (rect, _) = ui
                     .allocate_exact_size(vec2(galley_w + 32.0, BADGE_HEIGHT), egui::Sense::hover());
-                let lane = crate::ui::history::lane_color(0);
+                let lane = crate::ui::history::lane_color(lane_index);
                 paint_badge(ui, ui.painter(), rect.left_center(), &b, lane, false);
             }
         });
@@ -267,9 +274,53 @@ pub fn preview_card(ui: &mut egui::Ui, tab: &mut RepoTab, idx: usize, network_av
     });
 }
 
+/// Joins the hard-wrapped lines of a commit message into paragraphs, so the
+/// card wraps them at its own width. List items and blank lines are kept.
+pub fn reflow(text: &str) -> String {
+    let is_item = |l: &str| {
+        let t = l.trim_start();
+        t.starts_with("- ")
+            || t.starts_with("* ")
+            || t.starts_with("+ ")
+            || t.split_once(". ")
+                .is_some_and(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    };
+    let mut out = String::new();
+    let mut prev_blank = true;
+    for line in text.lines() {
+        let blank = line.trim().is_empty();
+        if blank {
+            out.push_str("\n\n");
+        } else if prev_blank || is_item(line) {
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str(line.trim_end());
+        } else {
+            out.push(' ');
+            out.push_str(line.trim());
+        }
+        prev_blank = blank;
+    }
+    // Several blank lines read as one paragraph break.
+    while out.contains("\n\n\n") {
+        out = out.replace("\n\n\n", "\n\n");
+    }
+    out.trim().to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reflows_messages() {
+        let text = "First line\nwrapped here.\n\n- item one\n  continues\n- item two\n\n\nEnd";
+        assert_eq!(
+            reflow(text),
+            "First line wrapped here.\n\n- item one continues\n- item two\n\nEnd"
+        );
+    }
 
     #[test]
     fn short_relative_dates() {
