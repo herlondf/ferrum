@@ -100,10 +100,15 @@ impl FerrumApp {
     }
 
     /// "Version X available" in the toolbar, linking to the release page.
-    pub(super) fn update_link(&self, ui: &mut egui::Ui) {
+    pub(super) fn update_link(&self, ui: &mut egui::Ui, labels: bool) {
         if let Some((version, url)) = &self.settings.background.update_available {
-            ui.hyperlink_to(t!("Version {} available", version), url)
-                .on_hover_text(url);
+            let tool = crate::ui::toolbar::Tool::new(crate::icons::ARROW_CIRCLE_UP, t!("Update"))
+                .accent()
+                .label_shown(labels);
+            let tip = format!("{}\n{url}", t!("Version {} available", version));
+            if tool.show(ui).main.on_hover_text(tip).clicked() {
+                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+            }
         }
     }
 

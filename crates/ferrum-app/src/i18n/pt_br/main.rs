@@ -41,7 +41,6 @@ pub static T: &[(&str, &str)] = &[
     ("Add remote…", "Adicionar remoto…"),
     ("Update submodules", "Atualizar submódulos"),
     ("New branch (Ctrl+Shift+B)", "Nova branch (Ctrl+Shift+B)"),
-    ("📤 Pop", "📤 Pop"),
     (
         "Apply and delete the latest stash: {}",
         "Aplicar e remover o stash mais recente: {}",

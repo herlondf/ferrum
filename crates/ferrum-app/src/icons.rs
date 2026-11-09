@@ -27,6 +27,7 @@ use eframe::egui::{self, Color32, RichText, WidgetText, text::LayoutJob};
 pub const ARCHIVE: &str = "\u{e00c}";
 pub const ARCHIVE_BOX: &str = "\u{e00e}";
 pub const ARROW_BEND_LEFT_UP: &str = "\u{e01e}";
+pub const ARROW_CIRCLE_UP: &str = "\u{e030}";
 pub const ARROW_CLOCKWISE: &str = "\u{e036}";
 pub const ARROW_COUNTER_CLOCKWISE: &str = "\u{e038}";
 pub const ARROW_DOWN: &str = "\u{e03e}";
@@ -64,6 +65,7 @@ pub const CLOCK_COUNTER_CLOCKWISE: &str = "\u{e1a0}";
 pub const CLOUD: &str = "\u{e1aa}";
 pub const CLOUD_ARROW_DOWN: &str = "\u{e1ac}";
 pub const CLOUD_ARROW_UP: &str = "\u{e1ae}";
+pub const CLOUD_CHECK: &str = "\u{e1b0}";
 pub const CODE: &str = "\u{e1bc}";
 pub const COLUMNS: &str = "\u{e546}";
 pub const COMMAND: &str = "\u{e1c4}";
@@ -130,6 +132,7 @@ pub const PLAY: &str = "\u{e3d0}";
 pub const PLUS: &str = "\u{e3d4}";
 pub const PLUS_CIRCLE: &str = "\u{e3d6}";
 pub const PROHIBIT: &str = "\u{e3de}";
+pub const PULSE: &str = "\u{e000}";
 pub const PUSH_PIN: &str = "\u{e3e2}";
 pub const PUSH_PIN_SLASH: &str = "\u{e3e4}";
 pub const QUESTION: &str = "\u{e3e8}";
@@ -241,6 +244,7 @@ pub const ALL: &[&str] = &[
     ARCHIVE,
     ARCHIVE_BOX,
     ARROW_BEND_LEFT_UP,
+    ARROW_CIRCLE_UP,
     ARROW_CLOCKWISE,
     ARROW_COUNTER_CLOCKWISE,
     ARROW_DOWN,
@@ -278,6 +282,7 @@ pub const ALL: &[&str] = &[
     CLOUD,
     CLOUD_ARROW_DOWN,
     CLOUD_ARROW_UP,
+    CLOUD_CHECK,
     CODE,
     COLUMNS,
     COMMAND,
@@ -344,6 +349,7 @@ pub const ALL: &[&str] = &[
     PLUS,
     PLUS_CIRCLE,
     PROHIBIT,
+    PULSE,
     PUSH_PIN,
     PUSH_PIN_SLASH,
     QUESTION,

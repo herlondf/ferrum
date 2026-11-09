@@ -133,6 +133,10 @@ pub const SOURCES: &[&str] = &[
     include_str!("fonts.rs"),
     include_str!("icons.rs"),
     include_str!("i18n/pt_br/visual.rs"),
+    include_str!("ui/toolbar.rs"),
+    include_str!("ui/status_bar.rs"),
+    include_str!("ui/toasts.rs"),
+    include_str!("i18n/pt_br/toolbar.rs"),
 ];
 
 pub fn git(dir: &Path, args: &[&str]) -> String {
@@ -660,7 +664,10 @@ fn toolbar_buttons_can_be_hidden() {
         h.query_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
             .is_some()
     );
-    assert!(h.query_by_label(crate::icons::TERMINAL).is_some());
+    assert!(
+        h.query_by_label(&crate::icons::text(crate::icons::TERMINAL, "Terminal"))
+            .is_some()
+    );
     h.state_mut().settings.prefs.hidden_toolbar = vec![
         crate::prefs::ToolbarButton::Branch,
         crate::prefs::ToolbarButton::Terminal,
@@ -670,8 +677,14 @@ fn toolbar_buttons_can_be_hidden() {
         h.query_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
             .is_none()
     );
-    assert!(h.query_by_label(crate::icons::TERMINAL).is_none());
-    assert!(h.query_by_label(crate::icons::FILE_MANAGER).is_some());
+    assert!(
+        h.query_by_label(&crate::icons::text(crate::icons::TERMINAL, "Terminal"))
+            .is_none()
+    );
+    assert!(
+        h.query_by_label(&crate::icons::text(crate::icons::FILE_MANAGER, "Folder"))
+            .is_some()
+    );
 }
 
 #[cfg(unix)]

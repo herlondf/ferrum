@@ -197,6 +197,16 @@ impl FerrumApp {
                     }
                 }
             }
+            RepoCmd::MoveTab(from, to) => {
+                if from != to && from < self.tabs.len() && to < self.tabs.len() {
+                    let active = self.tabs.get(self.active).map(|t| t.path().to_path_buf());
+                    let tab = self.tabs.remove(from);
+                    self.tabs.insert(to, tab);
+                    if let Some(p) = active {
+                        self.active = self.tabs.iter().position(|t| t.path() == p).unwrap_or(0);
+                    }
+                }
+            }
             RepoCmd::TrustFolder(path) => {
                 let git = ferrum_core::cli::Git::new(std::env::temp_dir());
                 match library::add_safe_directory(&git, &path) {
@@ -453,6 +463,10 @@ impl FerrumApp {
             in_window: &self.repos.windows,
         };
         egui::Panel::left("tab-list")
+            .frame(crate::ui::toolbar::chrome_frame(
+                ui,
+                egui::Margin::symmetric(4, 6),
+            ))
             .resizable(true)
             .default_size(190.0)
             .show(ui, |ui| {

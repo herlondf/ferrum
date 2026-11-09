@@ -1,4 +1,4 @@
-//! Fetch, pull and push in the toolbar and the sidebar menus, and their
+//! Fetch, pull and push from the toolbar (see `toolbar.rs`) and the sidebar menus, and their
 //! settings.
 
 use eframe::egui::{self, RichText};
@@ -6,7 +6,6 @@ use ferrum_core::sync::PushRequest;
 use ferrum_core::{BranchInfo, BranchKind, RemoteInfo};
 
 use crate::command::{Command, Commands, Op};
-use crate::icons;
 use crate::prefs::ToolbarButton as Tb;
 use crate::settings::Settings;
 use crate::sync::SyncSettings;
@@ -16,31 +15,6 @@ use crate::ui::sync_dialogs as sd;
 
 fn dialog(d: sd::SyncDialog) -> Command {
     Command::Dialog(Dialog::Sync(d))
-}
-
-/// A plain click runs; Alt/Ctrl+click, right-click or the ⏷ opens the dialog.
-fn sync_button(
-    ui: &mut egui::Ui,
-    enabled: bool,
-    text: &str,
-    badge: usize,
-    tip: String,
-    menu_tip: String,
-) -> (bool, bool) {
-    let button = if badge > 0 {
-        egui::Button::new(text).right_text(RichText::new(badge.to_string()).strong())
-    } else {
-        egui::Button::new(text)
-    };
-    let resp = ui.add_enabled(enabled, button).on_hover_text(tip);
-    let more = ui
-        .add_enabled(enabled, egui::Button::new("⏷").small().frame(false))
-        .on_hover_text(menu_tip)
-        .clicked();
-    let mods = ui.input(|i| i.modifiers);
-    let options = resp.secondary_clicked() || (resp.clicked() && (mods.alt || mods.command));
-    let run = resp.clicked() && !options;
-    (run, options || more)
 }
 
 /// Push the current branch to its upstream, or publish it to the default remote.
@@ -64,65 +38,42 @@ pub fn quick_push(tab: &RepoTab, s: &SyncSettings) -> Option<Op> {
     }))
 }
 
-/// The Fetch, Pull and Push buttons of the toolbar.
-pub fn toolbar(ui: &mut egui::Ui, tab: &RepoTab, settings: &Settings, cmds: &mut Commands) {
-    let has_remote = !tab.remotes.is_empty();
-    let (ahead, behind) = tab
-        .current_branch()
-        .and_then(|b| b.ahead_behind)
-        .unwrap_or((0, 0));
-    let more = t!("Options… (or Alt+click)");
-    let show = |b| settings.prefs.shows(b);
-    if show(Tb::Fetch) {
-        let tip = t!("Fetch all remotes (Ctrl+Shift+F)");
-        let (run, open) = sync_button(
-            ui,
-            has_remote,
-            &icons::text(icons::FETCH, "Fetch"),
-            0,
-            tip,
-            more.clone(),
-        );
-        if run {
-            cmds.run(Op::Fetch { remote: None });
+/// What a click on the toolbar's Fetch, Pull or Push button does: `run`
+/// right away, or `open` the options dialog.
+pub fn toolbar_action(
+    tab: &RepoTab,
+    settings: &Settings,
+    button: Tb,
+    run: bool,
+    open: bool,
+    cmds: &mut Commands,
+) {
+    match button {
+        Tb::Fetch => {
+            if run {
+                cmds.run(Op::Fetch { remote: None });
+            }
+            if open {
+                cmds.push(dialog(sd::fetch(tab, None)));
+            }
         }
-        if open {
-            cmds.push(dialog(sd::fetch(tab, None)));
+        Tb::Pull => {
+            if run {
+                cmds.run(Op::Pull(settings.pull.mode()));
+            }
+            if open {
+                cmds.push(dialog(sd::pull(tab)));
+            }
         }
-    }
-    let can = has_remote && tab.head.is_some();
-    if show(Tb::Pull) {
-        let mut tip = t!("Pull — {} (Ctrl+Shift+D)", settings.pull.label());
-        if behind > 0 {
-            tip = format!("{tip}\n{}", t!("{} commits to pull", behind));
+        Tb::Push => {
+            if run && let Some(op) = quick_push(tab, &settings.sync) {
+                cmds.run(op);
+            }
+            if open && let Some(b) = &tab.head {
+                cmds.push(dialog(sd::push(tab, b)));
+            }
         }
-        let (run, open) = sync_button(
-            ui,
-            can,
-            &icons::text(icons::PULL, "Pull"),
-            behind,
-            tip,
-            more.clone(),
-        );
-        if run {
-            cmds.run(Op::Pull(settings.pull.mode()));
-        }
-        if open {
-            cmds.push(dialog(sd::pull(tab)));
-        }
-    }
-    if show(Tb::Push) {
-        let mut tip = t!("Push (Ctrl+Shift+U for options)");
-        if ahead > 0 {
-            tip = format!("{tip}\n{}", t!("{} commits to push", ahead));
-        }
-        let (run, open) = sync_button(ui, can, &icons::text(icons::PUSH, "Push"), ahead, tip, more);
-        if run && let Some(op) = quick_push(tab, &settings.sync) {
-            cmds.run(op);
-        }
-        if open && let Some(b) = &tab.head {
-            cmds.push(dialog(sd::push(tab, b)));
-        }
+        _ => {}
     }
 }
 

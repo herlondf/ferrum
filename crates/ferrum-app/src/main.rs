@@ -4,6 +4,8 @@ mod i18n;
 mod accent;
 mod app;
 mod benchmark;
+#[cfg(test)]
+mod chrome_tests;
 mod command;
 #[cfg(test)]
 mod commands_tests;
@@ -114,7 +116,7 @@ fn main() -> eframe::Result {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Ferrum")
             .with_app_id("ferrum")
-            .with_inner_size([1360.0, 860.0])
+            .with_inner_size(window_size())
             .with_min_inner_size([900.0, 560.0])
             .with_icon(std::sync::Arc::new(eframe::egui::IconData {
                 rgba: icon::rgba(128),
@@ -154,4 +156,15 @@ fn data_dir() -> Option<std::path::PathBuf> {
         })?;
     let _ = std::fs::create_dir_all(&dir);
     Some(dir.join("app.ron"))
+}
+
+/// The first window size; dev aid: `FERRUM_WINDOW_SIZE=1000x700`.
+fn window_size() -> [f32; 2] {
+    std::env::var("FERRUM_WINDOW_SIZE")
+        .ok()
+        .and_then(|s| {
+            let (w, h) = s.split_once('x')?;
+            Some([w.parse().ok()?, h.parse().ok()?])
+        })
+        .unwrap_or([1360.0, 860.0])
 }

@@ -189,18 +189,15 @@ impl FerrumApp {
         }
         let n = &self.hosted.notifications;
         let count = n.list.len();
-        let text = if count > 0 {
-            egui::RichText::new(format!("✉ {count}")).strong()
-        } else {
-            egui::RichText::new("✉")
-        };
         let tip = match (&n.error, count) {
             (Some(e), _) => t!("Notifications could not be loaded: {}", e),
             (None, 0) => t!("No unread notifications"),
             (None, 1) => t!("1 unread notification"),
             (None, c) => t!("{} unread notifications", c),
         };
-        if ui.button(text).on_hover_text(tip).clicked() {
+        let badge = (count > 0).then(|| count.to_string());
+        let button = crate::ui::toolbar::Tool::icon(crate::icons::BELL, "✉").badge_text(badge);
+        if button.show(ui).main.on_hover_text(tip).clicked() {
             cmds.push(Command::Hosted(HostedCmd::ToggleNotifications));
         }
     }
