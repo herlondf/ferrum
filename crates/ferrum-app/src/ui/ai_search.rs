@@ -254,7 +254,11 @@ fn chip(ui: &mut egui::Ui, f: Field, value: &mut String) -> bool {
                     .color(ui.visuals().weak_text_color())
                     .size(12.0),
             );
-            let shown = if value.is_empty() { hint(f) } else { value.as_str() };
+            let shown = if value.is_empty() {
+                hint(f)
+            } else {
+                value.as_str()
+            };
             let text = egui::WidgetText::from(shown).into_galley(
                 ui,
                 Some(egui::TextWrapMode::Extend),

@@ -263,7 +263,9 @@ fn groups(ui: &mut egui::Ui, w: &mut SplitWindow) {
                         }
                         ui.add_enabled_ui(i + 1 < n, |ui| {
                             if ui
-                                .add(egui::Button::new(icons::ARROW_DOWN).frame_when_inactive(false))
+                                .add(
+                                    egui::Button::new(icons::ARROW_DOWN).frame_when_inactive(false),
+                                )
                                 .on_hover_text(t!("Move down"))
                                 .clicked()
                             {

@@ -105,7 +105,7 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   `commit.template`, `Co-authored-by:` completion, sign-off, amend (shows the
   last commit's changes, warns if already pushed), commit and push, live hook
   output with "commit without hooks", detached HEAD warning, and an optional
-  AI-written message from a configurable CLI (`claude -p`, `codex exec -`).
+  AI-written message (see Private AI below).
 - **Branches, remotes, tags, stashes, submodules and worktrees** in the sidebar,
   each with a context menu (checkout, merge, rebase, rename, delete, push, track…).
 - **Sidebar**: branch folders by `/` (with counts, drag a branch onto a folder to
@@ -249,7 +249,23 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   ssh-agent (which remembers the passphrase) or to a GitHub/GitLab/Gitea
   account; a first-time SSH assistant does it in one go.
 - **AI code review** of a branch (branch menus) or of two compared commits,
-  with the AI command from Settings > AI and an editable prompt.
+  with the AI provider from Settings > AI and an editable prompt.
+- **Private AI** (Settings > AI, off until you turn it on): local models
+  through Ollama or any OpenAI-compatible server (LM Studio, llama.cpp,
+  vLLM), or a command line tool (Claude Code, Codex), with a model picker and
+  a connection test. Every AI button says where the data goes ("Local ·
+  model" or "Cloud · service"); lines the secret detector flags are masked
+  and the context is capped before anything is sent. Features: **Explain**
+  a commit, a diff or a file's history (context menus, streamed into a side
+  panel); **Suggest resolution** in the conflict editor (a merged file with
+  an explanation, shown as a review card, never applied by itself);
+  **natural-language search** (history search mode "Ask": "by Ana last month
+  in src/" becomes editable filter chips; simple phrases in English and
+  Portuguese are read offline when AI is off); **Split into commits** (local
+  changes toolbar: the model groups hunks with messages, you edit and move
+  them, then one job commits group by group after a restore point); **Write
+  with AI** for pull request descriptions (also for stacked requests) and
+  commit messages.
 - **Profiles**: per-repository name, email, SSH key and commit signing.
 - **External tools**: open the repository in a terminal, the file manager or
   your editor/IDE (VS Code, Zed, Sublime, JetBrains, Neovim, Cursor or a custom
@@ -482,7 +498,10 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   sample toasts: `toast:success|info|error`; safety: `timeline`, `restore:N`
   (restore question for the N-th point), `learning`, `secrets:scan` (the
   warning for the staged changes), see `app/safety.rs`; structural diff in every
-  repository: `diff:structural`; conflict editor: `conflict:PATH`).
+  repository: `diff:structural`; conflict editor: `conflict:PATH`; AI:
+  `ai:ollama=URL,MODEL` (turns AI on with that server), `ai:explain=N`,
+  `ai:diff=PATH`, `ai:history=PATH`, `ai:split`, `ai:suggest`,
+  `ai:search=TEXT`, `settings:ai`, see `app/ai.rs`).
 - `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 - `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
   (tooltips, the commit preview card).

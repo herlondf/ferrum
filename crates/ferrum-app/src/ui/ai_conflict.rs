@@ -106,7 +106,12 @@ pub fn show(
     }
     let mut taken = None;
     let enabled = ai_common::config(ui.ctx()).enabled;
-    if enabled && ui.ctx().data_mut(|d| d.remove_temp::<bool>(auto_id())).unwrap_or(false) {
+    if enabled
+        && ui
+            .ctx()
+            .data_mut(|d| d.remove_temp::<bool>(auto_id()))
+            .unwrap_or(false)
+    {
         help.start(ui.ctx(), versions, names);
     }
     match (&help.stream, &help.result) {

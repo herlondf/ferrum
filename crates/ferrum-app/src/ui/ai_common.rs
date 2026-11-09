@@ -74,7 +74,11 @@ pub fn badge(ui: &mut egui::Ui) -> egui::Response {
     frame
         .show(ui, |ui| {
             // One label, so it reads left to right in right-aligned bars too.
-            ui.label(RichText::new(format!("{icon} {text}")).color(color).size(11.0));
+            ui.label(
+                RichText::new(format!("{icon} {text}"))
+                    .color(color)
+                    .size(11.0),
+            );
         })
         .response
         .on_hover_text(hover)
