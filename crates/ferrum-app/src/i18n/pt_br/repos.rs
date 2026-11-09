@@ -7,20 +7,10 @@ pub static T: &[(&str, &str)] = &[
     ("Repository Manager", "Gerenciador de repositórios"),
     ("Filter repositories", "Filtrar repositórios"),
     (
-        "Drop a folder on the window to open it. Enter opens, F2 renames, Delete removes from the list.",
-        "Solte uma pasta na janela para abri-la. Enter abre, F2 renomeia, Delete remove da lista.",
-    ),
-    (
-        "No repositories yet. Open, clone or create one, or add a source folder to scan.",
-        "Nenhum repositório ainda. Abra, clone ou crie um, ou adicione uma pasta de origem para examinar.",
-    ),
-    (
         "⚠ {} repositories no longer exist.",
         "⚠ {} repositórios não existem mais.",
     ),
     ("Remove missing", "Remover ausentes"),
-    ("⚠ missing", "⚠ ausente"),
-    ("(open)", "(aberto)"),
     ("Open", "Abrir"),
     ("Rename (F2)", "Renomear (F2)"),
     ("Move to group", "Mover para o grupo"),
@@ -35,10 +25,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Add to workspace", "Adicionar ao espaço de trabalho"),
     ("Remove from list (Delete)", "Remover da lista (Delete)"),
-    (
-        "Found in source folders ({})",
-        "Encontrados nas pastas de origem ({})",
-    ),
     ("Add all to the list", "Adicionar todos à lista"),
     ("Add to the list", "Adicionar à lista"),
     ("Double-click to open", "Clique duas vezes para abrir"),
@@ -87,7 +73,6 @@ pub static T: &[(&str, &str)] = &[
     // ----- Open Quickly -----
     ("Open Quickly", "Abrir rapidamente"),
     ("Open Quickly…", "Abrir rapidamente…"),
-    ("🔍 Open Quickly…", "🔍 Abrir rapidamente…"),
     (
         "Type a repository name…",
         "Digite o nome de um repositório…",

@@ -8,10 +8,6 @@ pub static T: &[(&str, &str)] = &[
         "These files are bigger than {} MB and are not tracked by Git LFS:\n\n{}\n\nStage them anyway?",
         "Estes arquivos têm mais de {} MB e não são rastreados pelo Git LFS:\n\n{}\n\nPreparar mesmo assim?",
     ),
-    (
-        "Staged + last commit ({})",
-        "Preparadas + último commit ({})",
-    ),
     ("Show files as", "Mostrar arquivos como"),
     ("Flat list", "Lista simples"),
     ("Tree", "Árvore"),
@@ -30,7 +26,6 @@ pub static T: &[(&str, &str)] = &[
     ("Unstage folder", "Remover pasta da preparação"),
     ("Stage folder", "Preparar pasta"),
     ("Ignore folder", "Ignorar pasta"),
-    ("Changes ({})", "Alterações ({})"),
     (
         "{}\nClick the box or press Enter to stage or unstage",
         "{}\nClique na caixa ou pressione Enter para preparar ou remover da preparação",
@@ -151,7 +146,6 @@ pub static T: &[(&str, &str)] = &[
     ),
     ("Ctrl+Enter", "Ctrl+Enter"),
     ("Commit and push", "Fazer commit e push"),
-    ("Ctrl+Shift+Enter", "Ctrl+Shift+Enter"),
     ("Push after every commit", "Fazer push após cada commit"),
     ("Running hooks…", "Executando hooks…"),
     ("The commit failed", "O commit falhou"),

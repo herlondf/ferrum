@@ -66,6 +66,9 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/stats.rs"),
     include_str!("ui/image_diff.rs"),
     include_str!("ui/palette.rs"),
+    include_str!("ui/branch_dnd.rs"),
+    include_str!("ui/changes_rows.rs"),
+    include_str!("i18n/pt_br/ux.rs"),
     include_str!("ui/preferences.rs"),
     include_str!("ui/rebase.rs"),
     include_str!("ui/settings.rs"),
@@ -214,7 +217,7 @@ fn stage_all_and_commit() {
     type_into(&mut h, "Description (optional)", "More about it");
     h.get_by_label("Sign off").click();
     frames(&mut h);
-    h.get_by_label("Commit 1 file").click();
+    h.get_by_label_contains("Commit 1 file").click();
     settle(&mut h);
     assert_eq!(
         git(dir.path(), &["log", "-1", "--format=%s"]),
@@ -274,7 +277,7 @@ fn enter_toggles_stage_and_amend_shows_last_commit() {
     // Amending lists the files of the last commit as staged.
     h.get_by_label("Amend last commit").click();
     frames(&mut h);
-    h.get_by_label_contains("Staged + last commit (1)");
+    h.get_by_label("Staged + last commit");
     assert_eq!(h.state().tabs[0].changes.message, "first");
 }
 
@@ -346,7 +349,7 @@ fn failing_hook_offers_commit_without_hooks() {
     h.get_by_label_contains("Local Changes").click();
     frames(&mut h);
     type_into(&mut h, "Summary", "Change");
-    h.get_by_label("Commit 1 file").click();
+    h.get_by_label_contains("Commit 1 file").click();
     settle(&mut h);
     h.get_by_label("The commit failed");
     assert!(h.query_all_by_label_contains("lint found problems").count() > 0);
