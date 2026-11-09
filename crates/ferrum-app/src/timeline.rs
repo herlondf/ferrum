@@ -148,6 +148,7 @@ fn needs_point(op: &Op) -> Option<Vec<String>> {
             mode: LocalChanges::Discard,
             ..
         }) => Vec::new(),
+        Op::Cleanup(c) if c.rewrites() => Vec::new(),
         Op::SecretCheck(c) => return needs_point(&c.op),
         _ => return None,
     })

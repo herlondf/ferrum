@@ -181,6 +181,10 @@ pub const WARNING_CIRCLE: &str = "\u{e4e2}";
 pub const WRENCH: &str = "\u{e5d4}";
 pub const X: &str = "\u{e4f6}";
 pub const X_CIRCLE: &str = "\u{e4f8}";
+pub const BROOM: &str = "\u{ec54}";
+pub const FIRE: &str = "\u{e242}";
+pub const USERS_THREE: &str = "\u{e68e}";
+pub const TREE_VIEW: &str = "\u{ee48}";
 
 // ----- What each icon means in Ferrum -----
 
@@ -217,6 +221,8 @@ pub const IDENTITY: &str = USER;
 pub const REPOSITORIES: &str = SQUARES_FOUR;
 pub const CURRENT: &str = CHECK;
 pub const AI: &str = SPARKLE;
+pub const INSIGHTS: &str = CHART_LINE;
+pub const CLEANUP: &str = BROOM;
 
 /// Size of icon-only buttons.
 pub const ICON_SIZE: f32 = 15.0;
@@ -258,6 +264,10 @@ pub fn tinted(icon: &str, color: Color32, label: impl AsRef<str>) -> WidgetText 
 /// Every named icon, for the glyph test.
 #[cfg(test)]
 pub const ALL: &[&str] = &[
+    BROOM,
+    FIRE,
+    USERS_THREE,
+    TREE_VIEW,
     ARCHIVE,
     ARCHIVE_BOX,
     ARROWS_OUT_LINE_VERTICAL,

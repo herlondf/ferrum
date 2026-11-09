@@ -22,6 +22,7 @@ pub type Provider = fn(&Settings, Option<&RepoTab>, &mut Vec<Entry>);
 const PROVIDERS: &[Provider] = &[
     crate::ui::custom_commands::palette_entries,
     crate::ui::repo_manager::palette_entries,
+    crate::ui::insights::palette_entries,
 ];
 
 /// File matches shown at most.

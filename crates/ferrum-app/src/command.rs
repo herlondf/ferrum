@@ -297,6 +297,8 @@ pub enum Op {
     SecretCheck(crate::safety::SecretCheck),
     /// Stacked branches, absorb and moving hunks (see `stack_ops.rs`).
     Stack(crate::stack_ops::StackOp),
+    /// Cleanup assistant and sparse checkout (see `cleanup_ops.rs`).
+    Cleanup(crate::cleanup_ops::CleanupOp),
 }
 
 impl Op {
@@ -402,6 +404,7 @@ impl Op {
             Op::Timeline(t) => t.label(),
             Op::SecretCheck(c) => c.op.label(),
             Op::Stack(s) => s.label(),
+            Op::Cleanup(c) => c.label(),
         }
     }
 
@@ -429,6 +432,7 @@ impl Op {
             Op::Custom(r) => r.refresh(),
             Op::SecretCheck(c) => c.op.refresh(),
             Op::Stack(s) => s.refresh(),
+            Op::Cleanup(c) => c.refresh(),
             _ => Refresh::All,
         }
     }
@@ -443,6 +447,7 @@ impl Op {
             Op::Patch(p) => return p.execute(git),
             Op::SecretCheck(c) => return c.execute(git, progress),
             Op::Stack(s) => return s.execute(git, progress),
+            Op::Cleanup(c) => return c.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -559,6 +564,7 @@ impl Op {
             Op::Timeline(t) => t.run(git),
             Op::SecretCheck(c) => c.op.run(git, progress),
             Op::Stack(s) => s.run(git, progress),
+            Op::Cleanup(c) => c.run(git, progress),
         }
     }
 }
