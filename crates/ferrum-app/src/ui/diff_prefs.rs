@@ -178,7 +178,7 @@ pub fn load_large(tab: &mut RepoTab, path: &str) {
 /// `FERRUM_START` step `diff:OPTS`, a comma-separated list of `sbs`, `wrap`,
 /// `ws` (show whitespace), `full`, `nomarkers`, `nosyntax`, `font=N`,
 /// `context=N`, `image=swipe|onion|difference`, `find=TEXT` (opens the find bar),
-/// `large` (opens the large window).
+/// `large` (opens the large window), `options` (opens the Options popover).
 pub fn dev_step(ctx: &egui::Context, prefs: &mut DiffPrefs, arg: &str) {
     for opt in arg.split(',').map(str::trim) {
         let (key, value) = opt.split_once('=').unwrap_or((opt, ""));
@@ -199,6 +199,7 @@ pub fn dev_step(ctx: &egui::Context, prefs: &mut DiffPrefs, arg: &str) {
                     _ => ImageMode::SideBySide,
                 }
             }
+            "options" => crate::ui::diff_view::dev_open_options(ctx),
             "find" | "large" => {
                 for view in ["changes-diff", "commit-diff", "file-history-diff"] {
                     crate::ui::diff_view::dev_open(ctx, view, (key == "find").then_some(value));

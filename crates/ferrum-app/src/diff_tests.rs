@@ -130,7 +130,7 @@ fn diff_options_reload_the_diff() {
         h.state().tabs[0].changes.diff.as_ref().unwrap().additions,
         2
     );
-    h.get_by_label("Ignore whitespace").click();
+    h.get_by_label(crate::icons::PARAGRAPH).click();
     frames(&mut h);
     assert_eq!(
         h.state().tabs[0].changes.diff.as_ref().unwrap().additions,

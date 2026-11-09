@@ -26,6 +26,7 @@ use eframe::egui::{self, Color32, RichText, WidgetText, text::LayoutJob};
 
 pub const ARCHIVE: &str = "\u{e00c}";
 pub const ARCHIVE_BOX: &str = "\u{e00e}";
+pub const ARROWS_OUT_LINE_VERTICAL: &str = "\u{e536}";
 pub const ARROW_BEND_LEFT_UP: &str = "\u{e01e}";
 pub const ARROW_CLOCKWISE: &str = "\u{e036}";
 pub const ARROW_COUNTER_CLOCKWISE: &str = "\u{e038}";
@@ -47,12 +48,15 @@ pub const ARROWS_OUT_SIMPLE: &str = "\u{e0a6}";
 pub const BELL: &str = "\u{e0ce}";
 pub const BOOKMARK_SIMPLE: &str = "\u{e0ea}";
 pub const BUG: &str = "\u{e5f4}";
+pub const CALENDAR: &str = "\u{e108}";
 pub const CARET_DOWN: &str = "\u{e136}";
 pub const CARET_LEFT: &str = "\u{e138}";
 pub const CARET_RIGHT: &str = "\u{e13a}";
 pub const CARET_UP: &str = "\u{e13c}";
 pub const CARET_UP_DOWN: &str = "\u{e140}";
 pub const CHART_BAR: &str = "\u{e150}";
+pub const CHART_LINE: &str = "\u{e154}";
+pub const CHAT_TEXT: &str = "\u{e17a}";
 pub const CHECK: &str = "\u{e182}";
 pub const CHECK_CIRCLE: &str = "\u{e184}";
 pub const CHECK_SQUARE: &str = "\u{e186}";
@@ -71,6 +75,7 @@ pub const COPY: &str = "\u{e1ca}";
 pub const CORNERS_IN: &str = "\u{e1ce}";
 pub const CORNERS_OUT: &str = "\u{e1d0}";
 pub const CUBE: &str = "\u{e1da}";
+pub const CURSOR_CLICK: &str = "\u{e7c8}";
 pub const DATABASE: &str = "\u{e1de}";
 pub const DESKTOP: &str = "\u{e560}";
 pub const DOT_OUTLINE: &str = "\u{ece0}";
@@ -89,6 +94,7 @@ pub const FILE_PLUS: &str = "\u{e236}";
 pub const FILE_TEXT: &str = "\u{e23a}";
 pub const FILES: &str = "\u{e710}";
 pub const FLAG: &str = "\u{e244}";
+pub const FLAME: &str = "\u{e624}";
 pub const FOLDER: &str = "\u{e24a}";
 pub const FOLDER_OPEN: &str = "\u{e256}";
 pub const FOLDER_PLUS: &str = "\u{e258}";
@@ -109,6 +115,7 @@ pub const HASH: &str = "\u{e2a2}";
 pub const HOURGLASS: &str = "\u{e2b2}";
 pub const HOUSE: &str = "\u{e2c2}";
 pub const IMAGE: &str = "\u{e2ca}";
+pub const IMAGE_BROKEN: &str = "\u{e7a8}";
 pub const INFO: &str = "\u{e2ce}";
 pub const KEY: &str = "\u{e2d6}";
 pub const KEYBOARD: &str = "\u{e2d8}";
@@ -124,6 +131,7 @@ pub const MOON: &str = "\u{e330}";
 pub const NOTE_PENCIL: &str = "\u{e34c}";
 pub const PACKAGE: &str = "\u{e390}";
 pub const PALETTE: &str = "\u{e6c8}";
+pub const PARAGRAPH: &str = "\u{e960}";
 pub const PAUSE: &str = "\u{e39e}";
 pub const PENCIL_SIMPLE: &str = "\u{e3b4}";
 pub const PLAY: &str = "\u{e3d0}";
@@ -147,6 +155,7 @@ pub const STAR: &str = "\u{e46a}";
 pub const SUN: &str = "\u{e472}";
 pub const TAG: &str = "\u{e478}";
 pub const TERMINAL_WINDOW: &str = "\u{eae8}";
+pub const TEXT_AA: &str = "\u{e6ee}";
 pub const TEXT_ALIGN_LEFT: &str = "\u{e484}";
 pub const TOOLBOX: &str = "\u{eca0}";
 pub const TRASH: &str = "\u{e4a6}";
@@ -240,6 +249,7 @@ pub fn tinted(icon: &str, color: Color32, label: impl AsRef<str>) -> WidgetText 
 pub const ALL: &[&str] = &[
     ARCHIVE,
     ARCHIVE_BOX,
+    ARROWS_OUT_LINE_VERTICAL,
     ARROW_BEND_LEFT_UP,
     ARROW_CLOCKWISE,
     ARROW_COUNTER_CLOCKWISE,
@@ -261,12 +271,15 @@ pub const ALL: &[&str] = &[
     BELL,
     BOOKMARK_SIMPLE,
     BUG,
+    CALENDAR,
     CARET_DOWN,
     CARET_LEFT,
     CARET_RIGHT,
     CARET_UP,
     CARET_UP_DOWN,
     CHART_BAR,
+    CHART_LINE,
+    CHAT_TEXT,
     CHECK,
     CHECK_CIRCLE,
     CHECK_SQUARE,
@@ -285,6 +298,7 @@ pub const ALL: &[&str] = &[
     CORNERS_IN,
     CORNERS_OUT,
     CUBE,
+    CURSOR_CLICK,
     DATABASE,
     DESKTOP,
     DOT_OUTLINE,
@@ -303,6 +317,7 @@ pub const ALL: &[&str] = &[
     FILE_TEXT,
     FILES,
     FLAG,
+    FLAME,
     FOLDER,
     FOLDER_OPEN,
     FOLDER_PLUS,
@@ -323,6 +338,7 @@ pub const ALL: &[&str] = &[
     HOURGLASS,
     HOUSE,
     IMAGE,
+    IMAGE_BROKEN,
     INFO,
     KEY,
     KEYBOARD,
@@ -338,6 +354,7 @@ pub const ALL: &[&str] = &[
     NOTE_PENCIL,
     PACKAGE,
     PALETTE,
+    PARAGRAPH,
     PAUSE,
     PENCIL_SIMPLE,
     PLAY,
@@ -361,6 +378,7 @@ pub const ALL: &[&str] = &[
     SUN,
     TAG,
     TERMINAL_WINDOW,
+    TEXT_AA,
     TEXT_ALIGN_LEFT,
     TOOLBOX,
     TRASH,

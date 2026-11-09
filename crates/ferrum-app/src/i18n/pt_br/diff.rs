@@ -3,10 +3,6 @@
 pub static T: &[(&str, &str)] = &[
     // ----- Toolbar -----
     ("Side by side", "Lado a lado"),
-    (
-        "Show the old and new version next to each other",
-        "Mostra a versão antiga e a nova uma ao lado da outra",
-    ),
     ("Wrap", "Quebrar linhas"),
     ("Wrap long lines", "Quebra as linhas longas"),
     ("Ignore whitespace", "Ignorar espaços"),
@@ -19,7 +15,6 @@ pub static T: &[(&str, &str)] = &[
         "Show the whole file, not just the changed parts",
         "Mostra o arquivo todo, não só as partes alteradas",
     ),
-    ("Context: {}", "Contexto: {}"),
     ("{} lines", "{} linhas"),
     (
         "Unchanged lines shown around each change",

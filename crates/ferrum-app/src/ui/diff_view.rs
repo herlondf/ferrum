@@ -13,6 +13,7 @@ use eframe::egui::{
 use ferrum_core::diff::{FILEMODE_LINK, FILEMODE_SUBMODULE};
 use ferrum_core::{ChangeKind, DiffLine, FileDiff, LineKind};
 
+use crate::icons;
 use crate::tab::LineSelection;
 use crate::ui::diff_prefs::{self, CONTEXT_CHOICES, DiffPrefs, FONT_SIZES};
 use crate::ui::diff_text::{self, LineStyle, SideHighlighter};
@@ -129,6 +130,11 @@ pub fn dev_open(ctx: &egui::Context, id: &str, find: Option<&str>) {
         None => st.large = true,
     }
     store_state(ctx, id, st);
+}
+
+/// `FERRUM_START` `diff:options`: opens the next Options popover drawn.
+pub fn dev_open_options(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(Id::unique("diff-dev-open-options"), true));
 }
 
 pub fn large_open(ctx: &egui::Context, id: &str) -> bool {
@@ -578,16 +584,48 @@ enum Nav {
     Found,
 }
 
-fn toggle(ui: &mut egui::Ui, value: &mut bool, label: String, tip: String) {
-    if ui
-        .selectable_label(*value, label)
-        .on_hover_text(tip)
-        .clicked()
-    {
+/// An icon toggle of the toolbar; the tooltip names it and says what it does.
+fn toggle(ui: &mut egui::Ui, value: &mut bool, icon: &str, name: String, what: String) {
+    if icon_toggle(ui, *value, icon, format!("{name}\n{what}")).clicked() {
         *value = !*value;
     }
 }
 
+fn icon_toggle(ui: &mut egui::Ui, on: bool, icon: &str, tip: String) -> egui::Response {
+    let text = egui::RichText::new(icon).size(icons::ICON_SIZE);
+    let text = if on {
+        text.color(ui.visuals().selection.stroke.color)
+    } else {
+        text
+    };
+    ui.add(egui::Button::selectable(on, text).min_size(vec2(26.0, 24.0)))
+        .on_hover_text(tip)
+}
+
+fn icon_click(ui: &mut egui::Ui, enabled: bool, icon: &str, tip: String) -> bool {
+    ui.add_enabled(
+        enabled,
+        egui::Button::new(egui::RichText::new(icon).size(icons::ICON_SIZE))
+            .frame_when_inactive(false)
+            .min_size(vec2(26.0, 24.0)),
+    )
+    .on_hover_text(tip)
+    .clicked()
+}
+
+/// A thin vertical divider between groups of the toolbar.
+fn divider(ui: &mut egui::Ui) {
+    let (rect, _) = ui.allocate_exact_size(vec2(9.0, 16.0), Sense::hover());
+    ui.painter().vline(
+        rect.center().x,
+        rect.y_range(),
+        ui.visuals().widgets.noninteractive.bg_stroke,
+    );
+}
+
+/// The diff toolbar, on one line: the size of the change (or the line
+/// selection) on the left, the view options as icons on the right; the
+/// rarer options are in the Options popover.
 #[allow(clippy::too_many_arguments)]
 fn toolbar(
     ui: &mut egui::Ui,
@@ -600,121 +638,197 @@ fn toolbar(
     nav: &mut Option<Nav>,
     large_window: bool,
 ) {
-    ui.horizontal_wrapped(|ui| {
-        ui.colored_label(added_color(ui), format!("+{}", file.additions));
-        ui.colored_label(removed_color(ui), format!("−{}", file.deletions));
-        let selected = selection.as_ref().map_or(0, |s| s.lines.len());
-        if selected > 0 && line_staging {
-            ui.separator();
-            ui.label(if selected == 1 {
-                t!("1 line selected")
-            } else {
-                t!("{} lines selected", selected)
-            });
-            selection_buttons(ui, mode, action);
-            if ui.small_button(t!("Clear")).clicked()
-                && let Some(s) = selection
+    let height = 26.0;
+    let width = ui.available_width();
+    // Narrow panes drop the view toggles first (the Options popover has
+    // them all), then the change navigation (Ctrl+Up/Down still work).
+    let selecting = selection.as_ref().is_some_and(|s| !s.lines.is_empty()) && line_staging;
+    let left_w = if selecting { 330.0 } else { 90.0 };
+    let show_toggles = width >= left_w + 330.0;
+    let show_nav = width >= left_w + 150.0;
+    ui.allocate_ui_with_layout(
+        vec2(width, height),
+        Layout::right_to_left(Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            if !large_window
+                && icon_click(
+                    ui,
+                    true,
+                    icons::CORNERS_OUT,
+                    t!("Open in a large window (Space)"),
+                )
             {
-                s.clear();
+                st.large = true;
             }
-        } else if line_staging && mode != DiffMode::ReadOnly {
-            ui.weak(t!("Click lines to select them, Shift+click for a range."));
-        }
-        ui.separator();
+            options_menu(ui, prefs);
+            if icon_toggle(ui, st.find_open, icons::SEARCH, t!("Find in diff (Ctrl+F)")).clicked() {
+                st.find_open = !st.find_open;
+                st.find_focus = st.find_open;
+            }
+            if show_nav {
+                divider(ui);
+                if icon_click(ui, true, icons::CARET_DOWN, t!("Next change")) {
+                    *nav = Some(Nav::NextChange);
+                }
+                if icon_click(ui, true, icons::CARET_UP, t!("Previous change")) {
+                    *nav = Some(Nav::PrevChange);
+                }
+            }
+            if show_toggles {
+                view_toggles(ui, prefs);
+            }
 
-        toggle(
-            ui,
-            &mut prefs.side_by_side,
-            t!("Side by side"),
-            t!("Show the old and new version next to each other"),
-        );
-        toggle(ui, &mut prefs.wrap, t!("Wrap"), t!("Wrap long lines"));
-        toggle(
-            ui,
-            &mut prefs.ignore_whitespace,
-            t!("Ignore whitespace"),
-            t!("Hide changes that only touch whitespace"),
-        );
-        toggle(
-            ui,
-            &mut prefs.full_file,
-            t!("Entire file"),
-            t!("Show the whole file, not just the changed parts"),
-        );
-        ui.add_enabled_ui(!prefs.full_file, |ui| {
-            egui::ComboBox::from_id_salt("diff-context")
-                .selected_text(t!("Context: {}", prefs.context_lines))
-                .show_ui(ui, |ui| {
-                    for n in CONTEXT_CHOICES {
-                        ui.selectable_value(&mut prefs.context_lines, n, t!("{} lines", n));
+            // What is left of the line: the size of the change and the selection.
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.colored_label(added_color(ui), format!("+{}", file.additions));
+                ui.colored_label(removed_color(ui), format!("−{}", file.deletions));
+                let selected = selection.as_ref().map_or(0, |s| s.lines.len());
+                if selected > 0 && line_staging {
+                    divider(ui);
+                    ui.label(if selected == 1 {
+                        t!("1 line selected")
+                    } else {
+                        t!("{} lines selected", selected)
+                    });
+                    selection_buttons(ui, mode, action);
+                    if ui
+                        .add(egui::Button::new(icons::X).frame_when_inactive(false))
+                        .on_hover_text(t!("Clear"))
+                        .clicked()
+                        && let Some(s) = selection
+                    {
+                        s.clear();
                     }
-                })
-                .response
-                .on_hover_text(t!("Unchanged lines shown around each change"));
-        });
-        ui.separator();
-        let size = prefs.font_size();
-        if ui
-            .add_enabled(size > *FONT_SIZES.start(), egui::Button::new("A−").small())
-            .on_hover_text(t!("Smaller text"))
-            .clicked()
-        {
-            prefs.font_size = size - 1.0;
-        }
-        if ui
-            .add_enabled(size < *FONT_SIZES.end(), egui::Button::new("A+").small())
-            .on_hover_text(t!("Larger text"))
-            .clicked()
-        {
-            prefs.font_size = size + 1.0;
-        }
-        ui.separator();
-        if ui
-            .small_button("⏶")
-            .on_hover_text(t!("Previous change"))
-            .clicked()
-        {
-            *nav = Some(Nav::PrevChange);
-        }
-        if ui
-            .small_button("⏷")
-            .on_hover_text(t!("Next change"))
-            .clicked()
-        {
-            *nav = Some(Nav::NextChange);
-        }
-        if ui
-            .selectable_label(st.find_open, "🔍")
-            .on_hover_text(t!("Find in diff (Ctrl+F)"))
-            .clicked()
-        {
-            st.find_open = !st.find_open;
-            st.find_focus = st.find_open;
-        }
-        ui.menu_button("⚙", |ui| {
-            ui.checkbox(&mut prefs.show_whitespace, t!("Show whitespace"));
+                } else if line_staging && mode != DiffMode::ReadOnly {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(t!(
+                                "Click lines to select them, Shift+click for a range."
+                            ))
+                            .weak()
+                            .small(),
+                        )
+                        .truncate(),
+                    );
+                }
+            });
+        },
+    );
+}
+
+/// Layout and content toggles, right to left.
+fn view_toggles(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
+    divider(ui);
+    toggle(
+        ui,
+        &mut prefs.full_file,
+        icons::ARROWS_OUT_LINE_VERTICAL,
+        t!("Entire file"),
+        t!("Show the whole file, not just the changed parts"),
+    );
+    toggle(
+        ui,
+        &mut prefs.ignore_whitespace,
+        icons::PARAGRAPH,
+        t!("Ignore whitespace"),
+        t!("Hide changes that only touch whitespace"),
+    );
+    toggle(
+        ui,
+        &mut prefs.wrap,
+        icons::ARROW_ELBOW_DOWN_LEFT,
+        t!("Wrap"),
+        t!("Wrap long lines"),
+    );
+    divider(ui);
+    // Unified / side by side, as a pair.
+    if icon_toggle(ui, prefs.side_by_side, icons::COLUMNS, t!("Side by side")).clicked() {
+        prefs.side_by_side = true;
+    }
+    if icon_toggle(ui, !prefs.side_by_side, icons::ROWS, t!("Unified")).clicked() {
+        prefs.side_by_side = false;
+    }
+}
+
+/// The Options popover: every diff option, with labels.
+fn options_menu(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
+    let changed = prefs.context_lines != DiffPrefs::default().context_lines;
+    let icon = egui::RichText::new(icons::SLIDERS_HORIZONTAL).size(icons::ICON_SIZE);
+    let button = egui::Button::new(icon)
+        .frame_when_inactive(false)
+        .min_size(vec2(26.0, 24.0));
+    let resp = egui::containers::menu::MenuButton::from_button(button)
+        .config(
+            egui::containers::menu::MenuConfig::new()
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+        )
+        .ui(ui, |ui| {
+            ui.set_min_width(230.0);
+            ui.label(crate::theme::strong(t!("View")));
+            ui.checkbox(&mut prefs.side_by_side, t!("Side by side"));
+            ui.checkbox(&mut prefs.wrap, t!("Wrap"));
+            ui.checkbox(&mut prefs.ignore_whitespace, t!("Ignore whitespace"));
+            ui.checkbox(&mut prefs.full_file, t!("Entire file"));
+            ui.add_enabled_ui(!prefs.full_file, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(t!("Context"));
+                    egui::ComboBox::from_id_salt("diff-context")
+                        .selected_text(t!("{} lines", prefs.context_lines))
+                        .show_ui(ui, |ui| {
+                            for n in CONTEXT_CHOICES {
+                                ui.selectable_value(&mut prefs.context_lines, n, t!("{} lines", n));
+                            }
+                        })
+                        .response
+                        .on_hover_text(t!("Unchanged lines shown around each change"));
+                });
+            });
+            ui.separator();
+            ui.label(crate::theme::strong(t!("Text")));
+            ui.horizontal(|ui| {
+                ui.label(t!("Size"));
+                let size = prefs.font_size();
+                if ui
+                    .add_enabled(size > *FONT_SIZES.start(), egui::Button::new("A−"))
+                    .on_hover_text(t!("Smaller text"))
+                    .clicked()
+                {
+                    prefs.font_size = size - 1.0;
+                }
+                ui.monospace(format!("{size:.0}"));
+                if ui
+                    .add_enabled(size < *FONT_SIZES.end(), egui::Button::new("A+"))
+                    .on_hover_text(t!("Larger text"))
+                    .clicked()
+                {
+                    prefs.font_size = size + 1.0;
+                }
+            });
             ui.horizontal(|ui| {
                 ui.label(t!("Tab width"));
                 let mut w = prefs.tab_width();
                 ui.add(egui::DragValue::new(&mut w).range(1..=16));
                 prefs.tab_width = w as u8;
             });
+            ui.checkbox(&mut prefs.show_whitespace, t!("Show whitespace"));
             ui.checkbox(&mut prefs.markers, t!("Show -/+ markers"));
             ui.checkbox(&mut prefs.syntax, t!("Syntax highlighting"));
             ui.checkbox(&mut prefs.word_diff, t!("Highlight changed words"));
             ui.checkbox(&mut prefs.minimap, t!("Map of changes"));
         })
-        .response
-        .on_hover_text(t!("Diff options"));
-        if !large_window
-            && ui
-                .small_button("⛶")
-                .on_hover_text(t!("Open in a large window (Space)"))
-                .clicked()
-        {
-            st.large = true;
-        }
-    });
+        .0;
+    let resp = resp.on_hover_text(t!("Diff options"));
+    let dev = Id::unique("diff-dev-open-options");
+    if ui.ctx().data_mut(|d| d.remove_temp::<bool>(dev)).is_some() {
+        egui::Popup::open_id(ui.ctx(), egui::Popup::default_response_id(&resp));
+    }
+    if changed && !prefs.full_file {
+        // A dot: the context differs from the default.
+        let c = resp.rect.right_top() + vec2(-5.0, 5.0);
+        ui.painter().circle_filled(c, 2.5, crate::theme::accent(ui));
+    }
 }
 
 fn selection_buttons(ui: &mut egui::Ui, mode: DiffMode, action: &mut Option<DiffAction>) {
