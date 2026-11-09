@@ -9,8 +9,10 @@ use ferrum_core::ops::PushOptions;
 use ferrum_core::{ChangeKind, Oid, RepoState};
 
 use crate::command::{Command, Commands, Op};
+use crate::icons;
 use crate::settings::Settings;
 use crate::tab::RepoTab;
+use crate::theme;
 use crate::ui::ai_message::AiTask;
 use crate::ui::dialogs::Dialog;
 
@@ -53,7 +55,7 @@ fn draft_key(tab: &RepoTab) -> String {
 }
 
 pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds: &mut Commands) {
-    ui.add_space(4.0);
+    ui.add_space(theme::SPACE_M);
     load_message(tab, settings);
     track_commit(tab);
     poll_ai(tab);
@@ -74,7 +76,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cmds:
     hook_output(ui, tab, settings, cmds);
     identity(ui, tab, cmds);
     save_draft(tab, settings);
-    ui.add_space(4.0);
+    ui.add_space(theme::SPACE_S);
 }
 
 /// Fills an empty message: the saved draft, a prepared merge/revert message,
@@ -245,55 +247,44 @@ fn message_fields(
     let count = subject.chars().count();
     let (soft, hard) = (prefs.subject_soft_limit, prefs.subject_hard_limit.max(1));
 
-    let subject_resp = ui
-        .horizontal(|ui| {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let color = if count > hard {
-                    ui.visuals().error_fg_color
-                } else if soft > 0 && count > soft {
-                    ui.visuals().warn_fg_color
-                } else {
-                    ui.visuals().weak_text_color()
-                };
-                ui.colored_label(color, count.to_string()).on_hover_text(t!(
-                    "Subject length (up to {} recommended, {} at most)",
-                    soft,
-                    hard
-                ));
-                let (normal, over) = (ui.visuals().text_color(), ui.visuals().error_fg_color);
-                let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap: f32| {
-                    let text = buf.as_str();
-                    let cut = text.char_indices().nth(hard).map_or(text.len(), |(i, _)| i);
-                    let font = egui::TextStyle::Body.resolve(ui.style());
-                    let mut job = egui::text::LayoutJob::default();
-                    job.append(
-                        &text[..cut],
-                        0.0,
-                        egui::TextFormat::simple(font.clone(), normal),
-                    );
-                    job.append(
-                        &text[cut..],
-                        0.0,
-                        egui::TextFormat {
-                            font_id: font,
-                            color: over,
-                            background: over.gamma_multiply(0.15),
-                            ..Default::default()
-                        },
-                    );
-                    ui.fonts_mut(|f| f.layout_job(job))
-                };
-                ui.add(
-                    egui::TextEdit::singleline(&mut subject)
-                        .id(subject_id)
-                        .hint_text(t!("Summary"))
-                        .layouter(&mut layouter)
-                        .desired_width(f32::INFINITY),
-                )
+    let (normal, over) = (ui.visuals().text_color(), ui.visuals().error_fg_color);
+    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap: f32| {
+        let text = buf.as_str();
+        let cut = text.char_indices().nth(hard).map_or(text.len(), |(i, _)| i);
+        let font = egui::FontId::proportional(SUBJECT_SIZE);
+        let mut job = egui::text::LayoutJob::default();
+        job.append(
+            &text[..cut],
+            0.0,
+            egui::TextFormat::simple(font.clone(), normal),
+        );
+        job.append(
+            &text[cut..],
+            0.0,
+            egui::TextFormat {
+                font_id: font,
+                color: over,
+                background: over.gamma_multiply(0.15),
+                ..Default::default()
+            },
+        );
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    let subject_resp = ui.add(
+        egui::TextEdit::singleline(&mut subject)
+            .id(subject_id)
+            .hint_text(t!("Summary"))
+            .font(egui::FontId::proportional(SUBJECT_SIZE))
+            .margin(egui::Margin {
+                left: 8,
+                right: 64,
+                top: 7,
+                bottom: 7,
             })
-            .inner
-        })
-        .inner;
+            .layouter(&mut layouter)
+            .desired_width(f32::INFINITY),
+    );
+    counter(ui, subject_resp.rect, count, soft, hard);
     // Enter in the subject moves on to the description.
     if subject_resp.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter) && i.modifiers.is_none())
     {
@@ -305,7 +296,7 @@ fn message_fields(
     let font = egui::FontId::monospace(12.5);
     let out = egui::ScrollArea::vertical()
         .id_salt("commit-body-scroll")
-        .max_height(220.0)
+        .max_height(240.0)
         .auto_shrink([false, true])
         .show(ui, |ui| {
             egui::CompletionPopup::new(body_id)
@@ -315,7 +306,8 @@ fn message_fields(
                     egui::TextEdit::multiline(&mut body)
                         .hint_text(t!("Description (optional)"))
                         .font(font.clone())
-                        .desired_rows(3)
+                        .margin(egui::vec2(8.0, 6.0))
+                        .desired_rows(5)
                         .desired_width(f32::INFINITY),
                     |q| {
                         let Some(query) = message::co_author_query(q.word) else {
@@ -355,8 +347,50 @@ fn message_fields(
     }
 }
 
+/// Font size of the summary field.
+const SUBJECT_SIZE: f32 = 14.5;
+
+/// The summary length, in a pill at the right end of the field: weak up to
+/// `soft` characters, warning color up to `hard`, error color beyond.
+fn counter(ui: &egui::Ui, field: egui::Rect, count: usize, soft: usize, hard: usize) {
+    let v = ui.visuals();
+    let (color, limit) = if count > hard {
+        (v.error_fg_color, hard)
+    } else if soft > 0 && count > soft {
+        (v.warn_fg_color, hard)
+    } else {
+        (v.weak_text_color(), if soft > 0 { soft } else { hard })
+    };
+    let text = format!("{count}/{limit}");
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text, theme::strong_font(11.0), color);
+    let size = galley.size() + egui::vec2(12.0, 6.0);
+    let pill = egui::Rect::from_min_size(
+        egui::pos2(
+            field.right() - size.x - 6.0,
+            field.center().y - size.y / 2.0,
+        ),
+        size,
+    );
+    if count > soft && soft > 0 {
+        let fill = egui::Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 36);
+        ui.painter().rect_filled(pill, theme::RADIUS, fill);
+    }
+    ui.painter()
+        .galley(pill.center() - galley.size() / 2.0, galley, color);
+    let tip = t!(
+        "Subject length (up to {} recommended, {} at most)",
+        soft,
+        hard
+    );
+    let id = egui::Id::unique("commit-subject-counter");
+    ui.interact(pill, id, egui::Sense::hover())
+        .on_hover_text(tip);
+}
+
 fn options(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         let was = tab.changes.amend;
         ui.add_enabled_ui(tab.head_oid.is_some(), |ui| {
             ui.checkbox(&mut tab.changes.amend, t!("Amend last commit"))
@@ -373,19 +407,27 @@ fn options(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
         }
         ui.checkbox(&mut settings.commit.signoff, t!("Sign off"))
             .on_hover_text(t!("Add a Signed-off-by line (--signoff)"));
+        ui.checkbox(
+            &mut settings.commit.push_after_commit,
+            t!("Push after every commit"),
+        );
     });
 }
 
 /// The header over the message: recent messages, wrap and AI.
 fn tools(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
     ui.horizontal(|ui| {
-        ui.weak(t!("Commit message"));
+        ui.label(theme::strong(t!("Commit message")));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ai_button(ui, tab, settings);
             let column = settings.commit.ruler_column;
             if column > 0
                 && ui
-                    .small_button(t!("Wrap"))
+                    .add(
+                        egui::Button::new(icons::TEXT_ALIGN_LEFT)
+                            .small()
+                            .frame_when_inactive(false),
+                    )
                     .on_hover_text(t!("Wrap the description at column {}", column))
                     .clicked()
             {
@@ -394,22 +436,26 @@ fn tools(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings) {
             }
             let recent = &settings.commit.recent_messages;
             ui.add_enabled_ui(!recent.is_empty(), |ui| {
-                ui.menu_button("🕓", |ui| {
-                    ui.set_max_width(360.0);
-                    for m in recent {
-                        let first = m.lines().next().unwrap_or_default();
-                        if ui
-                            .add(egui::Button::new(first).truncate())
-                            .on_hover_text(m)
-                            .clicked()
-                        {
-                            tab.changes.message = m.clone();
-                            ui.close();
+                let button = egui::Button::new(icons::HISTORY)
+                    .small()
+                    .frame_when_inactive(false);
+                egui::containers::menu::MenuButton::from_button(button)
+                    .ui(ui, |ui| {
+                        ui.set_max_width(360.0);
+                        for m in recent {
+                            let first = m.lines().next().unwrap_or_default();
+                            if ui
+                                .add(egui::Button::new(first).truncate())
+                                .on_hover_text(m)
+                                .clicked()
+                            {
+                                tab.changes.message = m.clone();
+                                ui.close();
+                            }
                         }
-                    }
-                })
-                .response
-                .on_hover_text(t!("Recent messages"));
+                    })
+                    .0
+                    .on_hover_text(t!("Recent messages"));
             });
         });
     });
@@ -429,7 +475,12 @@ fn ai_button(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings) {
     }
     let can = !tab.status.staged.is_empty();
     let resp = ui
-        .add_enabled(can, egui::Button::new(t!("AI")).small())
+        .add_enabled(
+            can,
+            icons::button(icons::AI, t!("AI"))
+                .small()
+                .frame_when_inactive(false),
+        )
         .on_hover_text(t!(
             "Write the message from the staged changes with {}",
             settings.ai.command
@@ -519,49 +570,88 @@ fn buttons(
         (false, 1) => t!("Commit 1 file"),
         (false, n) => t!("Commit {} files", n),
     };
-    let why = if !has_message {
+    let why = if !tab.status.conflicted.is_empty() {
+        t!("Resolve the conflicts first")
+    } else if !has_message {
         t!("Write a commit message first")
     } else if staged == 0 && !tab.changes.amend {
         t!("Stage some changes first")
     } else {
         String::new()
     };
+    let stage_first = staged == 0
+        && !tab.status.unstaged.is_empty()
+        && !tab.changes.amend
+        && tab.status.conflicted.is_empty();
+    let height = 32.0;
+    let can_push = can_commit && tab.head.is_some();
+    ui.add_space(theme::SPACE_XS);
     ui.horizontal(|ui| {
-        let resp = ui
-            .add_enabled(
-                can_commit,
-                crate::theme::primary(label).min_size(egui::vec2(140.0, 26.0)),
-            )
-            .on_hover_text(t!("Ctrl+Enter"))
-            .on_disabled_hover_text(&why);
-        if resp.clicked() || (commit_key && can_commit) {
-            commit(tab, settings, cmds, false, false, false);
-        }
-        let push = ui
-            .add_enabled(
-                can_commit && tab.head.is_some(),
-                egui::Button::new(t!("Commit and push")).min_size(egui::vec2(0.0, 26.0)),
-            )
-            .on_hover_text(t!("Ctrl+Shift+Enter"))
-            .on_disabled_hover_text(&why);
-        if push.clicked() || (commit_push && can_commit && tab.head.is_some()) {
-            commit(tab, settings, cmds, false, true, false);
-        }
-        if staged == 0
-            && !tab.status.unstaged.is_empty()
-            && has_message
-            && !tab.changes.amend
-            && ui
-                .add_enabled(!tab.busy(), egui::Button::new(t!("Stage all & commit")))
-                .clicked()
-        {
-            commit(tab, settings, cmds, true, false, false);
-        }
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            // More ways to commit, in a menu next to the main button.
+            let more = egui::Button::new(egui::RichText::new(icons::DROPDOWN).size(14.0))
+                .min_size(egui::vec2(30.0, height));
+            let menu = egui::containers::menu::MenuButton::from_button(more).ui(ui, |ui| {
+                ui.set_min_width(220.0);
+                let push = egui::Button::new(icons::text(icons::PUSH, t!("Commit and push")))
+                    .shortcut_text(crate::keymap::text(crate::keymap::Action::CommitPush));
+                if ui
+                    .add_enabled(can_push, push)
+                    .on_disabled_hover_text(&why)
+                    .clicked()
+                {
+                    commit(tab, settings, cmds, false, true, false);
+                    ui.close();
+                }
+                let all = egui::Button::new(icons::text(icons::CHECK, t!("Stage all & commit")));
+                let can_all = has_message
+                    && !tab.busy()
+                    && !tab.changes.amend
+                    && tab.status.conflicted.is_empty()
+                    && !tab.status.unstaged.is_empty();
+                if ui.add_enabled(can_all, all).clicked() {
+                    commit(tab, settings, cmds, true, false, false);
+                    ui.close();
+                }
+            });
+            menu.0.on_hover_text(t!("More ways to commit"));
+            if commit_push && can_push {
+                commit(tab, settings, cmds, false, true, false);
+            }
+            let size = egui::vec2(ui.available_width(), height);
+            if stage_first {
+                // Nothing staged yet: the main action stages everything first.
+                let n = tab.status.unstaged.len();
+                let text = if n == 1 {
+                    t!("Stage and commit 1 file")
+                } else {
+                    t!("Stage and commit {} files", n)
+                };
+                let resp = ui
+                    .add_enabled(
+                        has_message && !tab.busy(),
+                        theme::primary(icons::text(icons::CHECK, text)).min_size(size),
+                    )
+                    .on_hover_text(t!("Stage every change, then commit"))
+                    .on_disabled_hover_text(&why);
+                if resp.clicked() {
+                    commit(tab, settings, cmds, true, false, false);
+                }
+            } else {
+                let resp = ui
+                    .add_enabled(
+                        can_commit,
+                        theme::primary(icons::text(icons::CHECK, label)).min_size(size),
+                    )
+                    .on_hover_text(t!("Ctrl+Enter"))
+                    .on_disabled_hover_text(&why);
+                if resp.clicked() || (commit_key && can_commit) {
+                    commit(tab, settings, cmds, false, false, false);
+                }
+            }
+        });
     });
-    ui.checkbox(
-        &mut settings.commit.push_after_commit,
-        t!("Push after every commit"),
-    );
 }
 
 /// Live output of the commit hooks, and a way to skip them after a failure.
@@ -624,18 +714,33 @@ fn hook_output(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cm
 }
 
 fn identity(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
-    match (&tab.identity.name, &tab.identity.email) {
-        (Some(n), Some(e)) => {
-            ui.weak(t!("as {} <{}>", n, e))
-                .on_hover_text(t!("Change in the identity menu at the bottom right"));
-        }
-        _ => {
-            if ui
-                .link(t!("⚠ No author identity set — click to choose one"))
-                .clicked()
-            {
-                cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
+    let weak = ui.visuals().weak_text_color();
+    let small = |t: String| egui::RichText::new(t).size(12.0).color(weak);
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            match (&tab.identity.name, &tab.identity.email) {
+                (Some(n), Some(e)) => {
+                    ui.label(small(icons::text(icons::IDENTITY, n)))
+                        .on_hover_text(t!("as {} <{}>", n, e));
+                }
+                _ => {
+                    if ui
+                        .link(t!("⚠ No author identity set — click to choose one"))
+                        .clicked()
+                    {
+                        cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
+                    }
+                }
             }
-        }
-    }
+            let branch = match &tab.head {
+                Some(b) => b.clone(),
+                None if tab.head_oid.is_some() => t!("detached HEAD"),
+                None => return,
+            };
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.add(egui::Label::new(small(icons::text(icons::BRANCH, &branch))).truncate())
+                    .on_hover_text(t!("The commit goes on {}", branch));
+            });
+        });
+    });
 }
