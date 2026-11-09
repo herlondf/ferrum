@@ -90,6 +90,10 @@ pub static T: &[(&str, &str)] = &[
     ("Drafts", "Rascunhos"),
     ("Push the stack first", "Enviar a pilha antes"),
     ("Log in to {} first.", "Entre no {} primeiro."),
+    (
+        "Some branches are not based on the latest commit of the one below: restack first, or the requests will show extra commits.",
+        "Algumas branches não partem do último commit da branch abaixo: reempilhe antes, senão os pedidos mostram commits a mais.",
+    ),
     ("Create {}s", "Criar {}s"),
     // ----- New branch in a stack -----
     ("New branch on top of {}", "Nova branch sobre {}"),

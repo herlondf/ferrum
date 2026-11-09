@@ -390,6 +390,16 @@ fn requests_ui(
         ui.checkbox(&mut f.draft, t!("Drafts"));
         ui.checkbox(&mut f.push_first, t!("Push the stack first"));
     });
+    if f.stack.needs_restack() {
+        note(
+            ui,
+            icons::WARNING,
+            &t!(
+                "Some branches are not based on the latest commit of the one below: restack first, or the requests will show extra commits."
+            ),
+            Some(ui.visuals().warn_fg_color),
+        );
+    }
     let token = settings.token_for(hosted.kind, &hosted.host);
     if token.is_none() {
         ui.horizontal(|ui| {
@@ -886,7 +896,7 @@ pub fn paint_graph_mark(
 /// `FERRUM_START` steps: `stack:restack`, `stack:push`, `stack:prs`,
 /// `stack:add=BRANCH`, `stack:insert=BRANCH` (for the stack of HEAD, else
 /// the first one), `stack:absorb`, `stack:move=PATH[>REV]` (see
-/// `move_hunks::dev_step`).
+/// `move_hunks::dev_step`), `stack:pick` (select the lines of the commit diff).
 pub fn dev_step(arg: &str, tab: Option<&RepoTab>) -> Vec<Command> {
     let Some(t) = tab else { return Vec::new() };
     let (what, rest) = arg.split_once('=').unwrap_or((arg, ""));
@@ -903,6 +913,11 @@ pub fn dev_step(arg: &str, tab: Option<&RepoTab>) -> Vec<Command> {
         ("insert", _) => add_branch(Insert::Below(rest.to_owned())),
         ("absorb", _) => crate::ui::absorb::open(t),
         ("move", _) => return crate::ui::move_hunks::dev_step(rest, t),
+        ("pick", _) => {
+            let all = &crate::ui::move_hunks::PICK_ALL;
+            all.store(true, std::sync::atomic::Ordering::Relaxed);
+            return Vec::new();
+        }
         _ => {
             eprintln!("FERRUM_START: no stack for stack:{arg}");
             return Vec::new();

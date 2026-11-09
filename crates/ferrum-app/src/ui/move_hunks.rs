@@ -62,6 +62,9 @@ struct BranchCache {
     commits: Arc<Vec<CommitInfo>>,
 }
 
+/// Set by the `stack:pick` dev step.
+pub static PICK_ALL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn picked_id() -> egui::Id {
     egui::Id::unique("move-hunks-selection")
 }
@@ -142,7 +145,10 @@ pub fn bar(
         what: what.clone(),
     };
     let mut clear = false;
-    let mut select: Option<Option<usize>> = None;
+    // `stack:pick` (FERRUM_START) selects every changed line once.
+    let mut select: Option<Option<usize>> = PICK_ALL
+        .swap(false, std::sync::atomic::Ordering::Relaxed)
+        .then_some(None);
     let frame = egui::Frame::new()
         .fill(ui.visuals().faint_bg_color)
         .corner_radius(theme::RADIUS)
@@ -167,7 +173,7 @@ pub fn bar(
             ui.label(RichText::new(icons::ARROWS_LEFT_RIGHT).color(theme::accent(ui)));
             ui.label(theme::strong(t!("Move {}", what)).size(12.5));
             ui.add_enabled_ui(!busy, |ui| {
-                ui.menu_button(icons::text(icons::CARET_DOWN, t!("to…")), |ui| {
+                ui.menu_button(format!("{} {}", t!("to…"), icons::CARET_DOWN), |ui| {
                     ui.set_min_width(300.0);
                     let new = icons::text(icons::PLUS, t!("A new commit right after it…"));
                     if ui.button(new).clicked() {
@@ -397,10 +403,15 @@ pub fn show(
             None,
         );
     }
-    let mine: Vec<Oid> = branch_commits(ui.ctx(), &tab.repo)
-        .iter()
-        .map(|c| c.id)
-        .collect();
+    // The commits the rebase rewrites: from the older of the two up.
+    let all = branch_commits(ui.ctx(), &tab.repo);
+    let oldest = [Some(f.source), f.target]
+        .into_iter()
+        .flatten()
+        .filter_map(|id| all.iter().position(|c| c.id == id))
+        .max()
+        .map_or(0, |i| i + 1);
+    let mine: Vec<Oid> = all.iter().take(oldest).map(|c| c.id).collect();
     let branches = stack_ops::branches_at(tab, &mine);
     let update_refs = ferrum_core::stack::git_supports_update_refs();
     if branches.len() > 1 {

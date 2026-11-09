@@ -140,7 +140,7 @@ pub fn show(
         .on_hover_text(t!(
             "Otherwise the fixup! commits stay on top, to squash later with an interactive rebase"
         ));
-        let in_range: Vec<Oid> = plan.commits.iter().map(|c| c.id).collect();
+        let in_range = rewritten(&plan);
         let branches = stack_ops::branches_at(tab, &in_range);
         if f.autosquash && branches.len() > 1 {
             let others = branches[1..].join(", ");
@@ -177,7 +177,7 @@ pub fn show(
     let label = t!("Absorb {}", stack_ops::hunks(n));
     let r = buttons(ui, &label, ok, false, enter && ok);
     if r == Some(true) {
-        let in_range: Vec<Oid> = plan.commits.iter().map(|c| c.id).collect();
+        let in_range = rewritten(&plan);
         let update_refs = f.autosquash && ferrum_core::stack::git_supports_update_refs();
         cmds.run(Op::Stack(StackOp::Absorb {
             opts: absorb::Options {
@@ -264,34 +264,66 @@ fn hunk(ui: &mut egui::Ui, h: &AbsorbHunk) {
         .map(|l| ('−', l))
         .chain(h.added_text().into_iter().map(|l| ('+', l)))
         .collect();
+    if lines.is_empty() {
+        return;
+    }
     let more = lines.len().saturating_sub(4);
-    for (sign, text) in lines.into_iter().take(4) {
-        let color = if sign == '+' {
-            crate::util::added_color(ui)
-        } else {
-            crate::util::removed_color(ui)
-        };
-        ui.horizontal(|ui| {
-            ui.add_space(theme::SPACE_L);
-            let shown: String = text.chars().take(90).collect();
-            ui.add(
-                egui::Label::new(
-                    RichText::new(format!("{sign} {}", crate::util::expand_tabs(&shown)))
-                        .font(font.clone())
-                        .color(color),
-                )
-                .truncate(),
-            );
+    // Shown without the indentation the lines share.
+    let lines: Vec<(char, String)> = lines
+        .into_iter()
+        .take(4)
+        .map(|(s, l)| (s, crate::util::expand_tabs(&l)))
+        .collect();
+    let indent = lines
+        .iter()
+        .filter(|(_, l)| !l.trim().is_empty())
+        .map(|(_, l)| l.len() - l.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    ui.horizontal(|ui| {
+        ui.add_space(theme::SPACE_L);
+        let frame = egui::Frame::new()
+            .fill(ui.visuals().extreme_bg_color)
+            .corner_radius(theme::RADIUS)
+            .inner_margin(egui::Margin::symmetric(8, 4));
+        let width = ui.available_width();
+        frame.show(ui, |ui| {
+            ui.set_width(width - 16.0);
+            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                for (sign, text) in &lines {
+                    let color = if *sign == '+' {
+                        crate::util::added_color(ui)
+                    } else {
+                        crate::util::removed_color(ui)
+                    };
+                    let shown: String = text.chars().skip(indent).take(100).collect();
+                    ui.add(
+                        egui::Label::new(
+                            RichText::new(format!("{sign} {shown}"))
+                                .font(font.clone())
+                                .color(color),
+                        )
+                        .truncate(),
+                    );
+                }
+                if more > 0 {
+                    ui.label(
+                        RichText::new(t!("{} more lines", more))
+                            .size(11.5)
+                            .color(weak),
+                    );
+                }
+            });
         });
-    }
-    if more > 0 {
-        ui.horizontal(|ui| {
-            ui.add_space(theme::SPACE_L);
-            ui.label(
-                RichText::new(t!("{} more lines", more))
-                    .size(11.5)
-                    .color(weak),
-            );
-        });
-    }
+    });
+}
+
+/// The commits the autosquash rewrites: from the oldest target up.
+fn rewritten(plan: &Plan) -> Vec<Oid> {
+    let oldest = plan.targets().first().copied();
+    let end = oldest
+        .and_then(|o| plan.commits.iter().position(|c| c.id == o))
+        .map_or(0, |i| i + 1);
+    plan.commits.iter().take(end).map(|c| c.id).collect()
 }
