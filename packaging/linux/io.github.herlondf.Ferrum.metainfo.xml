@@ -66,7 +66,7 @@
   </supports>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0" date="2026-11-06">
+    <release version="0.1.0" date="2026-11-09">
       <description>
         <p>First release.</p>
         <ul>
@@ -74,6 +74,10 @@
           <li>Staging of files, hunks and lines; commit, amend and push</li>
           <li>Interactive rebase, three-way conflict resolver and undo</li>
           <li>GitHub, GitLab, Bitbucket, Azure DevOps and Gitea pull requests and issues</li>
+          <li>Structural (syntax-aware) diff and semantic merge</li>
+          <li>Stacked branches, absorb and moving changes between commits</li>
+          <li>Operation timeline with restore points and a secret detector</li>
+          <li>Optional private AI with local models</li>
           <li>Dark, light and high-contrast themes; English and Brazilian Portuguese</li>
         </ul>
       </description>

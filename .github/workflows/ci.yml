@@ -1,10 +1,11 @@
 name: CI
 
+# Every push to main that passes the tests and builds becomes a release when
+# the version in Cargo.toml has no tag yet: bump the version to publish
+# (scripts/bump-version.sh). Same flow as github.com/herlondf/duck.
 on:
   push:
     branches: [main]
-    # A version tag (v0.2.0) also publishes a GitHub release with the installers.
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -131,13 +132,39 @@ jobs:
           manifest-path: packaging/flatpak/io.github.herlondf.Ferrum.yml
           cache-key: flatpak-builder-${{ hashFiles('Cargo.lock') }}
 
+  # Is the version in Cargo.toml already released?
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      new: ${{ steps.v.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          [ -n "$v" ] || { echo "::error::no version in Cargo.toml"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "::notice::v$v is already released. Bump the version (scripts/bump-version.sh) to publish a new one."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, version]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.version.outputs.new == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -150,13 +177,40 @@ jobs:
       - name: Checksums and package manager manifests
         run: |
           scripts/checksums.sh dist
-          python3 scripts/release-manifests.py "${GITHUB_REF_NAME#v}" dist "$RUNNER_TEMP/manifests"
+          python3 scripts/release-manifests.py "${{ needs.version.outputs.version }}" dist "$RUNNER_TEMP/manifests"
       # winget, Scoop, Homebrew and Flathub files, to submit by hand (docs/RELEASING.md).
       - uses: actions/upload-artifact@v4
         with:
           name: manifests
           path: ${{ runner.temp }}/manifests
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          generate_release_notes: true
+      - name: Release notes
+        run: |
+          prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          raw="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"
+          {
+            echo "## Instalar / Install"
+            echo
+            echo "Linux:"
+            echo
+            echo '```sh'
+            echo "curl -fsSL $raw/get.sh | sh"
+            echo '```'
+            echo
+            echo "Windows (PowerShell):"
+            echo
+            echo '```powershell'
+            echo "irm $raw/get.ps1 | iex"
+            echo '```'
+            echo
+            echo "Também / Also: AppImage, .deb, .rpm, instalador do Windows / Windows installer (\`-setup.exe\`), macOS (.dmg). Confira com / verify with \`SHA256SUMS\`."
+            echo
+            echo "## Mudanças / Changes"
+            echo
+            git log --no-merges --format='- %s' ${prev:+$prev..}HEAD
+          } > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="v${{ needs.version.outputs.version }}"
+          gh release create "$v" dist/* --target "$GITHUB_SHA" --title "Ferrum $v" --notes-file notes.md

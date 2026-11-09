@@ -36,12 +36,13 @@ The packaging scripts are the building blocks; any release workflow calls them.
 - CI (`.github/workflows/ci.yml`) runs every script on each push and uploads
   the files as workflow artifacts. It also builds the Flatpak in the
   `flathub-infra` container and validates the desktop file and metainfo.
-  A `v*` tag publishes a GitHub release with the files, `SHA256SUMS` and a
-  `manifests` artifact.
+  When the version in `Cargo.toml` has no tag yet, a push to main publishes
+  release `vX.Y.Z` (after the tests and builds pass) with the files,
+  `SHA256SUMS`, install commands in the notes and a `manifests` artifact.
 
 ## Before each release
 
-1. Bump `version` in the root `Cargo.toml` (and `Cargo.lock`, via `cargo build`).
+1. Bump the version: `scripts/bump-version.sh X.Y.Z` (root `Cargo.toml` and `Cargo.lock`).
 2. Add a `<release version="X.Y.Z" date="YYYY-MM-DD">` entry with a short
    description at the top of `<releases>` in
    `packaging/linux/io.github.herlondf.Ferrum.metainfo.xml` (Flathub and GNOME
@@ -50,10 +51,9 @@ The packaging scripts are the building blocks; any release workflow calls them.
    metainfo points at `site/assets/screenshots/*.png` on `main`.
 4. Run `scripts/benchmark.sh` and update `site/benchmarks.md` (and the numbers
    on the site) if performance changed.
-5. Publish. Today a pushed `vX.Y.Z` tag makes `ci.yml` publish the release.
-   A push-to-main release workflow (version from `Cargo.toml`, like the
-   owner's other projects) can replace that; it should call the same scripts
-   and keep the file names and `SHA256SUMS`.
+5. Publish: push to main. `ci.yml` creates tag `vX.Y.Z` and the release
+   when the tests and builds pass. Pushes that keep an already released
+   version only run the checks.
 
 ## One-time steps that need the owner
 

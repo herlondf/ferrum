@@ -549,8 +549,9 @@ irm https://raw.githubusercontent.com/herlondf/ferrum/main/get.ps1 | iex        
 ## Packaging and releases
 
 CI builds and tests on Linux, Windows and macOS and runs the packaging scripts,
-uploading the files as artifacts; pushing a `v*` tag publishes them as a
-GitHub release. File names carry no version
+uploading the files as artifacts. Every push to main whose version in
+`Cargo.toml` has no tag yet publishes them as release `vX.Y.Z`, once the tests
+and builds pass: bump with `scripts/bump-version.sh X.Y.Z` and push. File names carry no version
 (`releases/latest/download/<name>` always works):
 
 - Linux (`scripts/package-linux.sh`): `ferrum-linux-x86_64.tar.gz` (used by
