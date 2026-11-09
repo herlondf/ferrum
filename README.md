@@ -182,6 +182,27 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   always, in Settings), choose to stash and reapply, discard or keep them.
 - **Cherry-pick, revert, reset (soft/mixed/hard), move branch** from the commit
   menu; double-click a branch or tag label in the graph to check it out.
+- **Stacked branches** (like Graphite / git-town): branches based on each other
+  are detected (or recorded when created as a stack, in
+  `branch.<name>.ferrumParent`) and shown in the sidebar's Stacks section and as
+  "stack 2/3" marks in the graph. Restack rebases the whole stack after a branch
+  below moves with one `git rebase --update-refs` (git 2.38+; one branch at a
+  time on older git); Push stack (force with lease); Create pull/merge requests
+  for the stack, each based on the branch below and linking the others in its
+  description; add a branch on top or insert one in the middle.
+- **Absorb** (Changes view, Repository menu, palette): each hunk of the local
+  changes goes as a `fixup!` commit into the commit of the branch that last
+  touched its lines (split per line when a hunk replaces lines of several
+  commits), then an optional autosquash rebase. A preview shows hunk → commit
+  and what stays local, and why.
+- **Move hunks between commits**: in the details of a commit of the current
+  branch, move the selected lines (or the file) into another commit, or split
+  them into a new one, from the "Move … to" menu or by dragging them onto a
+  commit in the history.
+- **Safe history rewriting**: restack, absorb and moves save the branches
+  first under `refs/ferrum/backup/<op>-<unix seconds>/<branch>`, show a
+  preview, stop on conflicts like any rebase (continue or abort), and their
+  toast offers Undo.
 - **Undo** for commits, checkouts, branch/tag changes, merges, rebases and more.
 - **File history and blame** (follows renames): history of files and folders
   on any branch, compare two revisions (Ctrl+click), open them in the external
@@ -406,7 +427,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
   `app/hosted.rs`; branch drag and drop menu: `sidebar:drop:SRC>DST` (DST a
-  branch or a remote); look: `theme:dark|light|contrast`, `density:compact`;
+  branch or a remote); stacks: `stack:restack|push|prs|absorb|pick`,
+  `stack:add=BRANCH`, `stack:insert=BRANCH`, `stack:move=PATH>REV|new`, see
+  `ui/stacks.rs`; look: `theme:dark|light|contrast`, `density:compact`;
   sample toasts: `toast:success|info|error`).
 - `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 - `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
