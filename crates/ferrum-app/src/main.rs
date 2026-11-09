@@ -6,9 +6,11 @@ mod ai;
 #[cfg(test)]
 mod ai_tests;
 mod app;
+mod batch;
 mod benchmark;
 #[cfg(test)]
 mod chrome_tests;
+mod cleanup_ops;
 mod command;
 #[cfg(test)]
 mod commands_tests;
@@ -31,6 +33,8 @@ mod flow_tests;
 mod fonts;
 #[cfg(test)]
 mod fork_tools_tests;
+#[cfg(test)]
+mod health_tests;
 #[cfg(test)]
 mod history_tests;
 mod hosted;

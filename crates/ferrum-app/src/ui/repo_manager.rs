@@ -1,7 +1,8 @@
 //! The Repository Manager: the start screen and the "new tab" (Ctrl+T).
 //! Large Open / Clone / New actions, a search field, and the known
-//! repositories as cards (recent first, then by group), with workspaces and
-//! source folders on the left.
+//! repositories as cards or a list (recent first, then by group), with
+//! workspaces and source folders on the left. The dashboard bar above them
+//! (`dashboard.rs`) filters them and fetches or pulls them all.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ use crate::repos::{Library, RepoCmd, SourceFolder};
 use crate::settings::Settings;
 use crate::tab::RepoTab;
 use crate::theme;
+use crate::ui::dashboard::{self, Filter};
 use crate::ui::dialogs::Dialog;
 use crate::ui::palette::{Entry, Group};
 
@@ -43,13 +45,19 @@ pub struct Manager {
     order: Vec<PathBuf>,
     /// Branch, last commit and changes of each repository (see `glance`).
     glances: HashMap<PathBuf, Glance>,
-    loading: Option<Receiver<(PathBuf, Glance)>>,
+    /// Repositories whose glance could not be read, with the error.
+    errors: HashMap<PathBuf, String>,
+    loading: Option<Receiver<(PathBuf, Result<Glance, String>)>>,
     loaded_at: Option<Instant>,
     /// Repositories asked for since `loaded_at`.
     requested: std::collections::HashSet<PathBuf>,
     /// Frame the manager was last drawn in: the search field gets the focus
     /// when it comes back into view.
     last_pass: Option<u64>,
+    /// Filters and "Fetch all" / "Pull all".
+    pub dash: dashboard::Dash,
+    /// An app-wide job runs (no batch can start).
+    pub busy: bool,
 }
 
 impl Manager {
@@ -78,6 +86,7 @@ pub fn show(
 ) {
     import_recent(settings);
     load_glances(ui.ctx(), m, &settings.library);
+    dashboard::take_glances(&m.dash, &mut m.glances);
     let pass = ui.ctx().cumulative_pass_nr();
     let focus_search = m.last_pass.is_none_or(|p| p + 1 < pass);
     m.last_pass = Some(pass);
@@ -110,7 +119,11 @@ pub fn show(
                         if let Some(a) = search_keys(ui, m, &search) {
                             action = Some(a);
                         }
-                        ui.add_space(theme::SPACE_L);
+                        ui.add_space(theme::SPACE_M);
+                        if !settings.library.repos.is_empty() {
+                            dash_bar(ui, m, &mut settings.library, cmds);
+                        }
+                        ui.add_space(theme::SPACE_M);
                         let recent = settings.recent.clone();
                         let lists = repo_list(ui, m, &mut settings.library, open, &recent, cmds);
                         action = action.take().or(lists);
@@ -162,8 +175,13 @@ fn load_glances(ctx: &egui::Context, m: &mut Manager, lib: &Library) {
     if let Some(rx) = &m.loading {
         loop {
             match rx.try_recv() {
-                Ok((p, g)) => {
+                Ok((p, Ok(g))) => {
+                    m.errors.remove(&p);
                     m.glances.insert(p, g);
+                }
+                Ok((p, Err(e))) => {
+                    m.glances.remove(&p);
+                    m.errors.insert(p, e);
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
@@ -193,9 +211,8 @@ fn load_glances(ctx: &egui::Context, m: &mut Manager, lib: &Library) {
     let ctx = ctx.clone();
     std::thread::spawn(move || {
         for p in paths.into_iter().filter(|p| p.exists()) {
-            if let Ok(g) = ferrum_core::glance::glance(&p)
-                && tx.send((p, g)).is_err()
-            {
+            let g = ferrum_core::glance::glance(&p).map_err(|e| e.to_string());
+            if tx.send((p, g)).is_err() {
                 return;
             }
         }
@@ -555,7 +572,7 @@ fn repo_list(
         let mut paths: Vec<PathBuf> = lib
             .repos
             .iter()
-            .filter(|r| r.folder == g && matches(lib, &m.filter, &r.path))
+            .filter(|r| r.folder == g && shown(m, lib, &r.path))
             .map(|r| r.path.clone())
             .collect();
         recent_first(&mut paths, recent);
@@ -603,6 +620,12 @@ fn repo_list(
             ui.add_space(theme::SPACE_M);
         }
     }
+    let hidden = lib
+        .repos
+        .iter()
+        .filter(|r| matches(lib, &m.filter, &r.path) && !shown(m, lib, &r.path))
+        .count();
+    dashboard::hidden_hint(ui, &mut m.dash, hidden);
     if !shown_any && !m.filter.trim().is_empty() {
         ui.add_space(theme::SPACE_L);
         ui.vertical_centered(|ui| {
@@ -724,6 +747,9 @@ fn grid(
     menu: &RowMenu,
     cmds: &mut Commands,
 ) -> Option<Action> {
+    if lib.list_view {
+        return list(ui, m, lib, paths, open, menu, cmds);
+    }
     let avail = ui.available_width();
     let cols = (((avail + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)).floor() as usize).max(1);
     let width = (avail - CARD_GAP * (cols - 1) as f32) / cols as f32;
@@ -755,7 +781,6 @@ fn card(
     cmds: &mut Commands,
 ) -> Option<Action> {
     m.order.push(p.to_path_buf());
-    let mut action = None;
     let exists = p.exists();
     let name = display_name(lib, p);
     let (rect, resp) = ui.allocate_exact_size(vec2(width, CARD_HEIGHT), Sense::click());
@@ -763,6 +788,7 @@ fn card(
     resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &name));
     let glance = m.glances.get(p).cloned();
     if ui.is_rect_visible(rect) {
+        let look = dashboard::look(&m.dash, &m.glances, &m.errors, p);
         paint_card(
             ui,
             &resp,
@@ -771,20 +797,40 @@ fn card(
             p,
             &name,
             glance.as_ref(),
+            &look,
             selected,
             is_open,
             exists,
         );
     }
+    let name_rect = Rect::from_min_size(rect.min + vec2(14.0, 8.0), vec2(width - 28.0, 24.0));
+    interact(ui, m, lib, p, &name, resp, name_rect, exists, menu, cmds)
+}
+
+/// Rename, click, double-click and the context menu of a card or row.
+#[allow(clippy::too_many_arguments)]
+fn interact(
+    ui: &mut egui::Ui,
+    m: &mut Manager,
+    lib: &mut Library,
+    p: &Path,
+    name: &str,
+    resp: egui::Response,
+    name_rect: Rect,
+    exists: bool,
+    menu: &RowMenu,
+    cmds: &mut Commands,
+) -> Option<Action> {
+    let mut action = None;
     // Inline rename over the name.
     if let Some((rp, new)) = &mut m.renaming
         && rp == p
     {
-        let r = Rect::from_min_size(rect.min + vec2(14.0, 8.0), vec2(width - 28.0, 24.0));
+        let r = name_rect;
         let edit = ui.put(
             r,
             egui::TextEdit::singleline(new)
-                .hint_text(&name)
+                .hint_text(name)
                 .font(theme::strong_font(14.0)),
         );
         if m.focus_rename {
@@ -829,6 +875,7 @@ fn paint_card(
     p: &Path,
     name: &str,
     glance: Option<&Glance>,
+    look: &dashboard::Look,
     selected: bool,
     is_open: bool,
     exists: bool,
@@ -866,8 +913,11 @@ fn paint_card(
     let right = rect.right() - 14.0;
     // Line 1: name, changes dot, and on the right "open" or "missing".
     let mut tag_left = right;
+    let problem = look.problem();
     let tag = if !exists {
         Some((t!("missing"), v.warn_fg_color))
+    } else if problem.is_some() {
+        Some((t!("problem"), v.warn_fg_color))
     } else if is_open {
         Some((t!("open"), weak))
     } else {
@@ -881,6 +931,10 @@ fn paint_card(
         painter.rect_filled(r, 8.0, tint(c, 30));
         painter.galley(r.center() - g.size() / 2.0, g, c);
         tag_left = r.left() - 8.0;
+        if let Some(prob) = &problem {
+            ui.interact(r, resp.id.with("problem"), Sense::hover())
+                .on_hover_text(prob);
+        }
     }
     let name_g = painter.layout(
         name.to_owned(),
@@ -944,6 +998,32 @@ fn paint_card(
     let time = gl
         .last_commit
         .map(|t| crate::util::relative_time(t, crate::util::now_secs()));
+    // Ahead / behind the upstream, or the running batch, on the right.
+    let mut right_x = right;
+    let sync: Vec<(String, Color32)> = match &look.batch {
+        Some(s @ (crate::batch::ItemState::Running(_) | crate::batch::ItemState::Waiting)) => {
+            let (_, c) = dashboard::state_text(ui, s);
+            vec![(icons::ARROWS_CLOCKWISE.to_owned(), c)]
+        }
+        _ => match gl.ahead_behind {
+            Some((a, b)) => [
+                (icons::ARROW_UP, a, accent),
+                (icons::ARROW_DOWN, b, v.warn_fg_color),
+            ]
+            .into_iter()
+            .filter(|x| x.1 > 0)
+            .map(|(i, n, c)| (format!("{i}{n}"), if selected { strong } else { c }))
+            .collect(),
+            None => Vec::new(),
+        },
+    };
+    for (t, c) in sync.into_iter().rev() {
+        let g = painter.layout_no_wrap(t, theme::strong_font(12.0), c);
+        right_x -= g.size().x;
+        painter.galley(egui::pos2(right_x, y3 - g.size().y / 2.0), g, c);
+        right_x -= 8.0;
+    }
+    let right = right_x;
     let time_w = time.as_ref().map_or(0.0, |t| {
         painter
             .layout_no_wrap(t.clone(), small.clone(), weak)
@@ -961,6 +1041,98 @@ fn paint_card(
         let g = painter.layout_no_wrap(format!("{}  {t}", icons::CLOCK), small, weak);
         painter.galley(egui::pos2(x, y3 - g.size().y / 2.0), g, weak);
     }
+}
+
+/// Whether `p` passes the search text and the dashboard filter.
+fn shown(m: &Manager, lib: &Library, p: &Path) -> bool {
+    if !matches(lib, &m.filter, p) {
+        return false;
+    }
+    let f = m.dash.filter;
+    f == Filter::All
+        || dashboard::look(&m.dash, &m.glances, &m.errors, p).keep(f)
+        || f == Filter::Problems && !p.exists()
+}
+
+/// The dashboard bar: view mode, filters with counts, Fetch all / Pull all
+/// (on the repositories shown), then the batch progress.
+fn dash_bar(ui: &mut egui::Ui, m: &mut Manager, lib: &mut Library, cmds: &mut Commands) {
+    let searched: Vec<PathBuf> = lib
+        .repos
+        .iter()
+        .filter(|r| matches(lib, &m.filter, &r.path))
+        .map(|r| r.path.clone())
+        .collect();
+    let mut counts = [0usize; 5];
+    for p in &searched {
+        let look = dashboard::look(&m.dash, &m.glances, &m.errors, p);
+        for (i, f) in [
+            Filter::All,
+            Filter::Changes,
+            Filter::Ahead,
+            Filter::Behind,
+            Filter::Problems,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if look.keep(f) || f == Filter::Problems && !p.exists() {
+                counts[i] += 1;
+            }
+        }
+    }
+    let targets: Vec<PathBuf> = searched
+        .into_iter()
+        .filter(|p| p.exists() && shown(m, lib, p))
+        .collect();
+    dashboard::bar(ui, &mut m.dash, lib, counts, &targets, m.busy, cmds);
+    dashboard::batch_panel(ui, &mut m.dash, lib);
+}
+
+/// Repositories as rows of a table (the list mode).
+fn list(
+    ui: &mut egui::Ui,
+    m: &mut Manager,
+    lib: &mut Library,
+    paths: &[PathBuf],
+    open: &[PathBuf],
+    menu: &RowMenu,
+    cmds: &mut Commands,
+) -> Option<Action> {
+    let mut action = None;
+    dashboard::header(ui);
+    for p in paths {
+        m.order.push(p.to_path_buf());
+        let exists = p.exists();
+        let name = display_name(lib, p);
+        let width = ui.available_width();
+        let (rect, resp) =
+            ui.allocate_exact_size(vec2(width, dashboard::ROW_HEIGHT), Sense::click());
+        let selected = m.selected.contains(p);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &name));
+        let mut name_rect = Rect::from_min_size(rect.min + vec2(12.0, 2.0), vec2(240.0, 20.0));
+        if ui.is_rect_visible(rect) {
+            let look = dashboard::look(&m.dash, &m.glances, &m.errors, p);
+            let color = lib.color(p).map(crate::ui::tabs::color32);
+            name_rect = dashboard::paint_row(
+                ui,
+                &resp,
+                rect,
+                color,
+                &name,
+                &short_path(p),
+                &look,
+                selected,
+                open.contains(p),
+                exists,
+            );
+        }
+        if let Some(a) = interact(ui, m, lib, p, &name, resp, name_rect, exists, menu, cmds) {
+            action = Some(a);
+        }
+    }
+    ui.add_space(theme::SPACE_S);
+    action
 }
 
 fn card_menu(

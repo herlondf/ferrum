@@ -220,11 +220,48 @@ impl FerrumApp {
                 }
             }
             RepoCmd::Dev(step) => self.dev_step(&step, ctx),
+            RepoCmd::Batch(kind, paths) => self.start_batch(kind, paths, ctx),
+        }
+    }
+
+    /// Starts "Fetch all" / "Pull all" as the app-wide job.
+    fn start_batch(&mut self, kind: crate::batch::Kind, paths: Vec<PathBuf>, ctx: &egui::Context) {
+        if paths.is_empty() {
+            return;
+        }
+        if self.global_job.is_some() {
+            self.error(t!("Another operation is still running."));
+            return;
+        }
+        let shared = crate::batch::Batch::new(kind, paths.clone());
+        let (work, repaint) = (shared.clone(), ctx.clone());
+        self.spawn_global_cancellable(&kind.label(paths.len()), ctx, move |env| {
+            crate::batch::run(&work, env, &move || repaint.request_repaint())
+        });
+        if let (Some(job), Ok(mut b)) = (&self.global_job, shared.lock()) {
+            b.cancel = Some(job.operation.cancel.clone());
+        }
+        self.repos.manager.dash.batch = Some(shared);
+    }
+
+    /// A batch finished: open tabs of its repositories reload.
+    pub(super) fn batch_finished(&mut self, paths: &[PathBuf], message: String, failed: bool) {
+        for t in &mut self.tabs {
+            if paths.iter().any(|p| p == t.path()) {
+                t.request_refresh(crate::jobs::Refresh::All);
+            }
+        }
+        if failed {
+            self.error(message);
+        } else {
+            self.info(message);
         }
     }
 
     /// `FERRUM_START` steps: `manager`, `quick:TEXT`, `overview`,
-    /// `repo-settings`, `workspace:NAME`, `vertical-tabs`.
+    /// `repo-settings`, `workspace:NAME`, `vertical-tabs`, `manager-list`,
+    /// `manager-filter:changes|ahead|behind|problems`, `fetch-all`,
+    /// `insights[:cleanup|rewrite|sparse]`.
     fn dev_step(&mut self, step: &str, ctx: &egui::Context) {
         let (cmd, arg) = step.split_once(':').unwrap_or((step, ""));
         match cmd {
@@ -241,6 +278,28 @@ impl FerrumApp {
             "repo-settings" => self.handle_repos(RepoCmd::Settings, ctx),
             "workspace" => self.switch_workspace(arg),
             "vertical-tabs" => self.settings.library.vertical_tabs = true,
+            "manager-list" => self.settings.library.list_view = true,
+            "manager-filter" => {
+                use crate::ui::dashboard::Filter;
+                self.repos.manager.dash.filter = match arg {
+                    "changes" => Filter::Changes,
+                    "ahead" => Filter::Ahead,
+                    "behind" => Filter::Behind,
+                    "problems" => Filter::Problems,
+                    _ => Filter::All,
+                };
+            }
+            "fetch-all" => {
+                let paths = self.settings.library.repos.iter().map(|r| r.path.clone());
+                let paths = paths.filter(|p| p.exists()).collect();
+                self.start_batch(crate::batch::Kind::Fetch, paths, ctx);
+                self.repos.manager.dash.show_results = true;
+            }
+            "insights" => {
+                if let Some(t) = self.tabs.get_mut(self.active) {
+                    crate::ui::insights::open(t, arg);
+                }
+            }
             _ => eprintln!("FERRUM_START: unknown step {step}"),
         }
     }
@@ -478,6 +537,7 @@ impl FerrumApp {
     pub(super) fn home(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
         let open: Vec<PathBuf> = self.tabs.iter().map(|t| t.path().to_path_buf()).collect();
         let scanning = self.scanning();
+        self.repos.manager.busy = self.global_job.is_some();
         egui::CentralPanel::default_margins().show(ui, |ui| {
             repo_manager::show(
                 ui,
@@ -646,6 +706,10 @@ fn tab_view(
         View::Overview => {
             egui::CentralPanel::default_margins()
                 .show(ui, |ui| crate::ui::overview::show(ui, tab, cmds));
+        }
+        View::Insights => {
+            egui::CentralPanel::default_margins()
+                .show(ui, |ui| crate::ui::insights::show(ui, tab, cmds));
         }
         #[allow(unreachable_patterns)]
         _ => {

@@ -303,6 +303,8 @@ pub enum Op {
     Stack(crate::stack_ops::StackOp),
     /// Split into commits (see `ai.rs`).
     Ai(crate::ai::AiOp),
+    /// Cleanup assistant and sparse checkout (see `cleanup_ops.rs`).
+    Cleanup(crate::cleanup_ops::CleanupOp),
 }
 
 impl Op {
@@ -409,6 +411,7 @@ impl Op {
             Op::SecretCheck(c) => c.op.label(),
             Op::Stack(s) => s.label(),
             Op::Ai(a) => a.label(),
+            Op::Cleanup(c) => c.label(),
         }
     }
 
@@ -437,6 +440,7 @@ impl Op {
             Op::SecretCheck(c) => c.op.refresh(),
             Op::Stack(s) => s.refresh(),
             Op::Ai(a) => a.refresh(),
+            Op::Cleanup(c) => c.refresh(),
             _ => Refresh::All,
         }
     }
@@ -452,6 +456,7 @@ impl Op {
             Op::SecretCheck(c) => return c.execute(git, progress),
             Op::Stack(s) => return s.execute(git, progress),
             Op::Ai(a) => return a.execute(git, progress),
+            Op::Cleanup(c) => return c.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -569,6 +574,7 @@ impl Op {
             Op::SecretCheck(c) => c.op.run(git, progress),
             Op::Stack(s) => s.run(git, progress),
             Op::Ai(a) => a.run(git, progress),
+            Op::Cleanup(c) => c.run(git, progress),
         }
     }
 }

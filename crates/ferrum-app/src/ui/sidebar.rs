@@ -287,6 +287,17 @@ fn views(ui: &mut egui::Ui, tab: &RepoTab, st: &mut SidebarState, cmds: &mut Com
     if r.clicked() || a.is_some() {
         cmds.push(Command::SetView(View::Overview));
     }
+    let insights = tab.view == View::Insights;
+    let label = crate::icons::text(crate::icons::INSIGHTS, t!("Insights"));
+    let (r, a) = leaf(
+        ui,
+        st,
+        "view:insights",
+        egui::Button::selectable(insights, label),
+    );
+    if r.clicked() || a.is_some() {
+        cmds.push(Command::SetView(View::Insights));
+    }
     if let Some(h) = &tab.hosted {
         let label = format!("🔀 {}s", capitalize(h.kind.request_name()));
         let prs = tab.view == View::PullRequests;

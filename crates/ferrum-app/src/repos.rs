@@ -35,6 +35,8 @@ pub enum RepoCmd {
     Settings,
     /// A `FERRUM_START` step (see `app/repos.rs`).
     Dev(String),
+    /// Fetch or pull (fast-forward only) several repositories (see `batch.rs`).
+    Batch(crate::batch::Kind, Vec<PathBuf>),
 }
 
 /// Repository settings and fixes, run as jobs.
@@ -131,6 +133,9 @@ pub struct Library {
     pub config: BTreeMap<String, RepoConfig>,
     /// The recent list was copied in once (from versions without the list).
     pub imported_recent: bool,
+    /// The Repository Manager shows a list instead of cards.
+    #[serde(default)]
+    pub list_view: bool,
 }
 
 impl Library {

@@ -387,7 +387,10 @@ fn view(ui: &mut egui::Ui, bar: &mut Bar, cmds: &mut Commands) {
         ) {
             keymap::trigger(ui.ctx(), Action::ShowChanges);
         }
-        let mut views = vec![(View::Overview, t!("Overview"))];
+        let mut views = vec![
+            (View::Overview, t!("Overview")),
+            (View::Insights, t!("Insights")),
+        ];
         if t.hosted.is_some() {
             views.push((View::PullRequests, t!("Pull requests")));
             views.push((View::Issues, t!("Issues")));

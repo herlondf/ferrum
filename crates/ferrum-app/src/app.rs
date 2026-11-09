@@ -72,7 +72,8 @@ pub struct FerrumApp {
 /// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`),
 /// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
 /// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
-/// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`),
+/// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs`,
+/// `manager-list`, `manager-filter:F`, `fetch-all`, `insights[:cleanup|sparse]` (see `app/repos.rs`),
 /// `toast:success|info|error` (see `toasts::dev_step`),
 /// `timeline`, `restore:N`, `learning`, `secrets:scan` (see `app/safety.rs`),
 /// `ai:explain=N|diff=PATH|history=PATH|split` (see `app/ai.rs`),
@@ -164,7 +165,8 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "bisect" => out.extend(crate::ui::bisect::dev_step(arg, tab)),
             "patch" => out.extend(crate::ui::patches::dev_step(arg, tab)),
             "stack" => out.extend(crate::ui::stacks::dev_step(arg, tab)),
-            "manager" | "quick" | "overview" | "repo-settings" | "workspace" | "vertical-tabs" => {
+            "manager" | "quick" | "overview" | "repo-settings" | "workspace" | "vertical-tabs"
+            | "manager-list" | "manager-filter" | "fetch-all" | "insights" => {
                 out.push(Command::Repos(crate::repos::RepoCmd::Dev(step.into())))
             }
             "select" => {
@@ -496,6 +498,15 @@ impl FerrumApp {
             }
             JobOutput::OpenRepo(path) => self.open(path),
             JobOutput::Secrets(held) => self.secrets_found(tab, *held),
+            JobOutput::Repositories {
+                paths,
+                message,
+                failed,
+            } => self.batch_finished(&paths, message, failed),
+            JobOutput::Message(text) => match t {
+                Some(t) => t.info(text),
+                None => self.info(text),
+            },
             JobOutput::Clipboard(text) => {
                 self.ctx_handle().copy_text(text);
                 self.info(t!("Copied to the clipboard"));
@@ -1113,6 +1124,10 @@ impl eframe::App for FerrumApp {
                     egui::CentralPanel::default_margins().show(ui, |ui| {
                         crate::ui::issues::show_view(ui, tab, settings, &mut cmds)
                     });
+                }
+                View::Insights => {
+                    egui::CentralPanel::default_margins()
+                        .show(ui, |ui| crate::ui::insights::show(ui, tab, &mut cmds));
                 }
             }
             if tab.rebase.is_some() {

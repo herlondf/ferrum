@@ -27,6 +27,9 @@ pub enum View {
     /// README, remotes and statistics (`ui::overview`).
     Overview,
     Issues,
+    /// Hotspots, knowledge, contributors, cleanup and sparse checkout
+    /// (`ui::insights`).
+    Insights,
 }
 
 pub struct Message {
@@ -143,6 +146,7 @@ pub struct RepoTab {
     /// Details tabs, file tree, compare view and commit windows.
     pub details: crate::ui::details_model::DetailsState,
     pub overview: crate::ui::overview::OverviewState,
+    pub insights: crate::ui::insights::InsightsState,
 
     pub undo: Vec<UndoEntry>,
     pub job: Option<Job>,
@@ -213,6 +217,7 @@ impl RepoTab {
             diff_options: Default::default(),
             details: Default::default(),
             overview: Default::default(),
+            insights: Default::default(),
             undo: Vec::new(),
             job: None,
             pending_undo: None,
