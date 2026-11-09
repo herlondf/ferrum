@@ -23,11 +23,12 @@ enum Section {
     Ssh,
     Shortcuts,
     Commands,
+    Safety,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 12] = [
+    const ALL: [Section; 13] = [
         Section::General,
         Section::Appearance,
         Section::Git,
@@ -39,6 +40,7 @@ impl Section {
         Section::Ssh,
         Section::Shortcuts,
         Section::Commands,
+        Section::Safety,
         Section::About,
     ];
 
@@ -55,6 +57,7 @@ impl Section {
             Section::Ssh => t!("🔐 SSH keys"),
             Section::Shortcuts => t!("⌘ Shortcuts"),
             Section::Commands => t!("▶ Custom commands"),
+            Section::Safety => t!("🔒 Safety"),
             Section::About => t!("📝 About"),
         }
     }
@@ -86,6 +89,7 @@ impl SettingsWindow {
             "ssh" => Section::Ssh,
             "shortcuts" => Section::Shortcuts,
             "commands" => Section::Commands,
+            "safety" => Section::Safety,
             "about" => Section::About,
             _ => Section::General,
         };
@@ -158,6 +162,9 @@ pub fn show(
                             Section::Shortcuts => crate::ui::shortcuts::section(ui, settings),
                             Section::Commands => {
                                 crate::ui::custom_commands::settings_section(ui, settings, cmds)
+                            }
+                            Section::Safety => {
+                                crate::ui::safety_settings::section(ui, settings, cmds)
                             }
                             Section::About => about(ui, win, cmds),
                         });

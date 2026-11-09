@@ -450,7 +450,8 @@ fn tools<'a>(tab: &RepoTab, settings: &Settings, labels: bool) -> Vec<(Tool<'a>,
     );
     add(
         Tb::Undo,
-        Tool::new(icons::UNDO, t!("Undo")).enabled(!busy && !tab.undo.is_empty()),
+        Tool::new(icons::UNDO, t!("Undo"))
+            .enabled(!busy && crate::timeline::undo_label(tab).is_some()),
     );
     add(Tb::Terminal, Tool::new(icons::TERMINAL, t!("Terminal")));
     add(
@@ -512,6 +513,13 @@ pub fn repo_buttons(
                         tip
                     }
                 };
+                let op = match b {
+                    Tb::Fetch => Some(Op::Fetch { remote: None }),
+                    Tb::Pull => Some(Op::Pull(settings.pull.mode())),
+                    _ => sync_ui::quick_push(tab, &settings.sync),
+                };
+                let op = op.map(|o| crate::sync::with_options(o, &settings.sync));
+                let tip = crate::ui::learning::tip(ui.ctx(), tip, op.as_ref());
                 let main = main.on_hover_text(tip);
                 let caret = r.caret.map(|c| c.on_hover_text(more));
                 // A plain click runs; Alt/Ctrl+click, right-click or the ⏷ opens the dialog.
@@ -531,9 +539,12 @@ pub fn repo_buttons(
                 }
             }
             Tb::Stash => {
-                let resp = main.on_hover_text(t!(
+                let tip = t!(
                     "Stash changes (Ctrl+Shift+S)\nCtrl/Alt+click: quick stash without the dialog"
-                ));
+                );
+                let quick = crate::ui::ref_dialogs::quick_stash();
+                let resp =
+                    main.on_hover_text(crate::ui::learning::tip(ui.ctx(), tip, Some(&quick)));
                 if resp.clicked() {
                     // Ctrl or Alt+click stashes everything right away.
                     let quick = mods.command || mods.alt;
@@ -552,8 +563,13 @@ pub fn repo_buttons(
             }
             Tb::Pop => {
                 if let Some(s) = tab.stashes.first() {
+                    let tip = t!("Apply and delete the latest stash: {}", s.message);
+                    let op = Op::StashApply {
+                        stash: s.clone(),
+                        pop: true,
+                    };
                     let resp =
-                        main.on_hover_text(t!("Apply and delete the latest stash: {}", s.message));
+                        main.on_hover_text(crate::ui::learning::tip(ui.ctx(), tip, Some(&op)));
                     if resp.clicked() {
                         cmds.run(Op::StashApply {
                             stash: s.clone(),
@@ -565,7 +581,7 @@ pub fn repo_buttons(
                 }
             }
             Tb::Undo => {
-                if let Some(label) = tab.undo.last().map(|u| u.label.clone())
+                if let Some(label) = crate::timeline::undo_label(tab)
                     && main.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
                 {
                     cmds.push(Command::Undo);

@@ -79,6 +79,8 @@ pub enum Command {
     Custom(crate::custom_commands::Invocation),
     /// Hosted services: reviews, notifications, SSH hosts (see `hosted.rs`).
     Hosted(crate::hosted::HostedCmd),
+    /// Timeline, secrets warning and learning mode (see `safety.rs`).
+    Safety(crate::safety::SafetyCmd),
 }
 
 pub enum DevStep {
@@ -289,6 +291,10 @@ pub enum Op {
     Sequence(String, Vec<Op>),
     /// A custom command's script or program (see `custom_commands.rs`).
     Custom(crate::custom_commands::Run),
+    /// Restore, delete and prune restore points (see `timeline.rs`).
+    Timeline(crate::timeline::TimelineOp),
+    /// A commit or push run only if no secret is found (see `safety.rs`).
+    SecretCheck(crate::safety::SecretCheck),
 }
 
 impl Op {
@@ -391,6 +397,8 @@ impl Op {
             Op::Repo(r) => r.label(),
             Op::Sequence(label, _) => label.clone(),
             Op::Custom(r) => r.label.clone(),
+            Op::Timeline(t) => t.label(),
+            Op::SecretCheck(c) => c.op.label(),
         }
     }
 
@@ -416,6 +424,7 @@ impl Op {
             Op::Patch(p) => p.refresh(),
             Op::Repo(_) => Refresh::Status,
             Op::Custom(r) => r.refresh(),
+            Op::SecretCheck(c) => c.op.refresh(),
             _ => Refresh::All,
         }
     }
@@ -428,6 +437,7 @@ impl Op {
             }
             Op::Part(p) => return p.execute(git, progress),
             Op::Patch(p) => return p.execute(git),
+            Op::SecretCheck(c) => return c.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -541,6 +551,8 @@ impl Op {
             Op::Repo(r) => r.run(git),
             Op::Sequence(_, list) => list.iter().try_for_each(|op| op.run(git, progress)),
             Op::Custom(r) => r.run(git, progress),
+            Op::Timeline(t) => t.run(git),
+            Op::SecretCheck(c) => c.op.run(git, progress),
         }
     }
 }

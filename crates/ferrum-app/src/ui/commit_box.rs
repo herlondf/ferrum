@@ -644,7 +644,17 @@ fn buttons(
                         can_commit,
                         theme::primary(icons::text(icons::CHECK, label)).min_size(size),
                     )
-                    .on_hover_text(t!("Ctrl+Enter"))
+                    .on_hover_text(crate::ui::learning::tip(
+                        ui.ctx(),
+                        t!("Ctrl+Enter"),
+                        Some(&Op::Commit {
+                            message: String::new(),
+                            amend: tab.changes.amend,
+                            signoff: false,
+                            no_verify: false,
+                            log: Default::default(),
+                        }),
+                    ))
                     .on_disabled_hover_text(&why);
                 if resp.clicked() || (commit_key && can_commit) {
                     commit(tab, settings, cmds, false, false, false);

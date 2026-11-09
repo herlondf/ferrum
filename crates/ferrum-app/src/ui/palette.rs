@@ -213,6 +213,12 @@ fn commands_for(t: &RepoTab, settings: &Settings, list: &mut Vec<Entry>) {
         }),
         action(t!("Refresh"), Action::Refresh, || Command::Refresh),
         action(t!("Undo last action"), Action::Undo, || Command::Undo),
+        action(t!("Operation timeline"), Action::Timeline, || {
+            Command::Safety(crate::safety::SafetyCmd::ToggleTimeline)
+        }),
+        command(t!("Learning mode"), || {
+            Command::Safety(crate::safety::SafetyCmd::ToggleLearning)
+        }),
         action(t!("Fetch all remotes"), Action::Fetch, || {
             Command::Run(Op::Fetch { remote: None })
         }),

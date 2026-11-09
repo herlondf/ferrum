@@ -38,6 +38,14 @@ pub struct Toast {
     /// The repository, for messages of a tab that is not the active one.
     pub repo: Option<String>,
     born: Instant,
+    /// A button, e.g. "Undo" after an operation that saved a restore point.
+    pub action: Option<(String, ToastAction)>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ToastAction {
+    /// Ask to restore point `id` of the repository at `repo`.
+    Restore { repo: PathBuf, id: String },
 }
 
 struct Pending {
@@ -76,6 +84,7 @@ impl Toasts {
             text,
             repo,
             born: Instant::now(),
+            action: None,
         });
         // Too many: the oldest that is not an error goes first.
         while self.list.len() > MAX {
@@ -144,6 +153,14 @@ impl Toasts {
             Kind::Info
         };
         self.push(kind, m.text.clone(), repo);
+    }
+
+    /// Gives the newest toast a button.
+    pub fn attach(&mut self, label: String, action: ToastAction) {
+        if let Some(t) = self.list.last_mut() {
+            t.action = Some((label, action));
+            t.born = Instant::now();
+        }
     }
 
     /// Draws the toasts above the status bar, whose top is at `bottom`.
@@ -259,13 +276,21 @@ fn toast(ui: &mut egui::Ui, t: &Toast, cmds: &mut Commands) -> bool {
                     )
                     .on_hover_text(&t.text);
                 }
-                if t.kind == Kind::Error {
+                if t.kind == Kind::Error || t.action.is_some() {
                     ui.add_space(theme::SPACE_XS);
                     ui.horizontal(|ui| {
-                        if ui.small_button(t!("Copy")).clicked() {
-                            cmds.push(Command::Copy(t.text.clone()));
+                        if let Some((label, action)) = &t.action
+                            && ui.small_button(label).clicked()
+                        {
+                            cmds.push(action_command(action));
+                            closed = true;
                         }
-                        crate::ui::repo_dialogs::error_actions(ui, &t.text, cmds);
+                        if t.kind == Kind::Error {
+                            if ui.small_button(t!("Copy")).clicked() {
+                                cmds.push(Command::Copy(t.text.clone()));
+                            }
+                            crate::ui::repo_dialogs::error_actions(ui, &t.text, cmds);
+                        }
                     });
                 }
             });
@@ -296,6 +321,14 @@ fn toast(ui: &mut egui::Ui, t: &Toast, cmds: &mut Commands) -> bool {
         color,
     );
     closed
+}
+
+fn action_command(a: &ToastAction) -> Command {
+    match a {
+        ToastAction::Restore { repo, id } => Command::Safety(
+            crate::safety::SafetyCmd::ConfirmRestore(repo.clone(), id.clone()),
+        ),
+    }
 }
 
 fn commits(n: usize) -> String {

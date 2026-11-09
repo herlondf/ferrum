@@ -11,6 +11,7 @@ mod background;
 mod hosted;
 mod parts;
 mod repos;
+mod safety;
 
 use crate::command::{Command, Commands, DevStep, Op};
 use crate::icons;
@@ -48,6 +49,8 @@ pub struct FerrumApp {
     repos: repos::State,
     /// Notifications in the bottom-right corner.
     toasts: crate::ui::toasts::Toasts,
+    /// Operation timeline, secrets warning, learning panel.
+    safety: safety::State,
 }
 
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
@@ -68,7 +71,8 @@ pub struct FerrumApp {
 /// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
 /// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
 /// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`),
-/// `toast:success|info|error` (see `toasts::dev_step`).
+/// `toast:success|info|error` (see `toasts::dev_step`),
+/// `timeline`, `restore:N`, `learning`, `secrets:scan` (see `app/safety.rs`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -116,6 +120,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "activity" => out.push(Command::ShowActivity),
             "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
             "toast" => out.push(Command::DevStep(DevStep::Toast(step.into()))),
+            "timeline" | "restore" | "learning" | "secrets" | "discard-all" => {
+                out.push(safety::dev_command(step))
+            }
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
             "collapse-all" => out.push(history_options::cmd(|t, _| {
@@ -244,6 +251,7 @@ impl FerrumApp {
             startup: Vec::new(),
             repos: Default::default(),
             toasts: Default::default(),
+            safety: Default::default(),
         };
         // Repositories given on the command line replace the saved session.
         let (to_open, active) = if paths.is_empty() {
@@ -471,6 +479,7 @@ impl FerrumApp {
                 }
             }
             JobOutput::OpenRepo(path) => self.open(path),
+            JobOutput::Secrets(held) => self.secrets_found(tab, *held),
             JobOutput::Clipboard(text) => {
                 self.ctx_handle().copy_text(text);
                 self.info(t!("Copied to the clipboard"));
@@ -537,6 +546,7 @@ impl FerrumApp {
                     let op = crate::sync::with_options(op, &self.settings.sync);
                     self.toasts.started(t, &op);
                     let then = crate::repo_parts::after(&op, t, &self.settings.submodules);
+                    let op = crate::safety::wrap(op, &self.settings, t);
                     t.run(op, ctx);
                     if let Some(next) = then {
                         t.run(next, ctx);
@@ -545,15 +555,7 @@ impl FerrumApp {
                 Some(prompt) => self.handle(prompt, ctx),
                 None => self.error(t!("Open a repository first.")),
             },
-            Command::Undo => {
-                if let Some(t) = self.tab() {
-                    if t.undo.is_empty() {
-                        t.info(t!("Nothing to undo."));
-                    } else {
-                        t.run_undo(ctx);
-                    }
-                }
-            }
+            Command::Undo => self.undo(ctx),
             Command::Refresh => {
                 if let Some(t) = self.tab() {
                     t.request_refresh(Refresh::All);
@@ -776,6 +778,7 @@ impl FerrumApp {
                 }
             }
             Command::Hosted(c) => self.handle_hosted(c, ctx),
+            Command::Safety(c) => self.handle_safety(c, ctx),
             Command::FocusSearch => {
                 if let Some(t) = self.tab() {
                     t.view = View::History;
@@ -862,6 +865,9 @@ impl FerrumApp {
         let typing = ctx.memory(|m| m.focused().is_some());
         if !typing && pressed(A::Undo) {
             cmds.push(Command::Undo);
+        }
+        if pressed(A::Timeline) {
+            cmds.push(Command::Safety(crate::safety::SafetyCmd::ToggleTimeline));
         }
     }
 
@@ -955,6 +961,7 @@ impl eframe::App for FerrumApp {
         self.maybe_screenshot(&ctx);
         self.apply_look(&ctx);
         self.poll_jobs(&ctx);
+        self.safety_tick(&ctx);
         self.background_tick(&ctx);
         self.repos_tick(&ctx);
         self.hosted_tick(&ctx);
@@ -1013,6 +1020,7 @@ impl eframe::App for FerrumApp {
             .show(ui, |ui| self.status_bar(ui, &mut cmds));
         let tab = self.tabs.get(self.active).map(|_| self.active).unwrap_or(0);
         self.toasts.observe(&self.tabs, tab, self.message.as_ref());
+        self.safety_toasts();
         self.toasts
             .show(&ctx, status.response.rect.top(), &mut cmds);
 
@@ -1108,6 +1116,7 @@ impl eframe::App for FerrumApp {
 
         self.repo_windows(&ctx, &mut cmds);
         self.show_activity(&ctx);
+        self.safety_windows(&ctx, &mut cmds);
         crate::ui::custom_commands::output_window(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
         self.hosted_windows(&ctx, &mut cmds);

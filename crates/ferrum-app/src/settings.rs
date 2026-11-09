@@ -178,6 +178,9 @@ pub struct Settings {
     /// Command palette entries run last, newest first.
     #[serde(default)]
     pub palette_recent: Vec<String>,
+    /// Restore points, secret detection and learning mode.
+    #[serde(default)]
+    pub safety: crate::safety::SafetySettings,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -244,6 +247,7 @@ impl Default for Settings {
             custom: Default::default(),
             forge: Default::default(),
             palette_recent: Vec::new(),
+            safety: Default::default(),
         }
     }
 }

@@ -333,12 +333,18 @@ fn file(ui: &mut egui::Ui, bar: &Bar, cmds: &mut Commands) {
 fn edit(ui: &mut egui::Ui, bar: &Bar, cmds: &mut Commands) {
     let tab = bar.tab();
     let idle = tab.is_some_and(|t| !t.busy());
-    let undo = tab.and_then(|t| t.undo.last()).map(|u| u.label.clone());
+    let undo = tab.and_then(crate::timeline::undo_label);
     let label = match &undo {
         Some(l) => t!("Undo: {}", l),
         None => t!("Undo"),
     };
     action(ui, label, Action::Undo, idle && undo.is_some());
+    action(
+        ui,
+        t!("Operation timeline…"),
+        Action::Timeline,
+        tab.is_some(),
+    );
     ui.separator();
     let has = tab.is_some();
     action(ui, t!("Find…"), Action::Find, has);
@@ -541,6 +547,10 @@ fn window(ui: &mut egui::Ui, bar: &Bar, cmds: &mut Commands) {
     });
     ui.separator();
     command(ui, t!("Activity"), true, cmds, || Command::ShowActivity);
+    let learning = bar.settings.safety.learning;
+    if check(ui, learning, t!("Learning mode"), String::new(), true) {
+        cmds.push(Command::Safety(crate::safety::SafetyCmd::ToggleLearning));
+    }
 }
 
 fn help(ui: &mut egui::Ui, cmds: &mut Commands) {

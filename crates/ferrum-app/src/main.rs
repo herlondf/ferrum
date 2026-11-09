@@ -51,6 +51,9 @@ mod repo_settings;
 mod repos;
 #[cfg(test)]
 mod repos_tests;
+mod safety;
+#[cfg(test)]
+mod safety_tests;
 mod settings;
 mod single_instance;
 #[cfg(all(test, feature = "all-languages"))]
@@ -60,6 +63,7 @@ mod sync;
 mod sync_tests;
 mod tab;
 mod theme;
+mod timeline;
 mod ui;
 #[cfg(test)]
 mod ui_tests;

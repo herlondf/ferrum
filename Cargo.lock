@@ -1351,6 +1351,7 @@ version = "0.1.0"
 dependencies = [
  "git2",
  "md5",
+ "regex",
  "serde",
  "serde_json",
  "similar",

@@ -30,6 +30,8 @@ pub mod patch;
 pub mod rebase;
 pub mod refs;
 mod repo;
+pub mod restore;
+pub mod secrets;
 pub mod semantic_merge;
 pub mod shell;
 pub mod ssh;

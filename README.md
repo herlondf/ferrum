@@ -271,6 +271,30 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   ("Pushed 3 commits to origin/main", "Fetched 2 remotes") and fade out (not
   while hovered); errors stay until dismissed, with Copy (and Delete the lock
   file when git left one behind).
+- **Operation timeline — undo anything**: before every operation that
+  rewrites or drops work (rebase, reset, merge, cherry-pick, amend, discard,
+  stash drop, branch and tag delete, force push, custom commands…) Ferrum saves
+  a restore point: refs, HEAD, stashes, the index and the working tree
+  (untracked files included, up to 100 MB) in hidden refs
+  (`refs/ferrum/restore/…`, never pushed), without touching your files. The
+  timeline (Edit > Operation timeline, Ctrl+Alt+Z) lists them by day with what
+  changed (moved/deleted branches, dropped stashes, saved files) and the
+  backups of history rewrites (`refs/ferrum/backup/…`). "Restore…" brings back
+  branches, tags, HEAD, stashes and, if you want, the files — after saving the
+  current state as a new point, and ending a rebase or merge in progress.
+  Ctrl+Z and the Undo button on the toast pick the newest step: a quick undo
+  or a restore point. Points are kept for N days (Settings > Safety).
+- **Secret detection**: before a commit (and a push), the staged lines (and
+  the commits to push) are scanned for API keys and tokens (AWS, GitHub,
+  GitLab, Slack, Stripe, Google, OpenAI, Anthropic, npm, PyPI…), private keys,
+  passwords in URLs, hard-coded secrets, `.env`/key files and high-entropy
+  strings. A warning shows the lines found (masked) with Unstage, Ignore once,
+  Add to allowlist (per repository, stored as hashes) and Cancel; `ferrum:allow`
+  on a line accepts it. Rules can be turned off, custom patterns added, and the
+  check disabled (Settings > Safety).
+- **Learning mode** (Window > Learning mode): a panel shows the git commands
+  each action runs, as they run, with copy buttons and a short explanation;
+  the tooltips of Fetch, Pull, Push, Stash, Pop and Commit show their command.
 - **Live refresh** without freezing: the working folder is watched for
   changes (or polled at a set interval), reloads run in the background, and
   long operations that finish while the window is in the background raise a
@@ -337,7 +361,8 @@ in Settings > Shortcuts. Defaults:
 | Delete the selected sidebar branch, tag or stash (asks first) | Delete |
 | Stash (Ctrl/Alt+click on the Stash button: quick stash) | Ctrl+Shift+S |
 | Fetch / Pull / Push (dialog) | Ctrl+Shift+F / Ctrl+Shift+D / Ctrl+Shift+U |
-| Undo | Ctrl+Z |
+| Undo (quick undo or the newest restore point) | Ctrl+Z |
+| Operation timeline (restore points) | Ctrl+Alt+Z |
 | Open in terminal / show in file manager | Ctrl+Alt+T / Ctrl+Alt+O |
 | Close tab, next / previous tab | Ctrl+W, Ctrl+Tab / Ctrl+Shift+Tab |
 | Quit | Ctrl+Q |
@@ -431,7 +456,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
   `app/hosted.rs`; branch drag and drop menu: `sidebar:drop:SRC>DST` (DST a
   branch or a remote); look: `theme:dark|light|contrast`, `density:compact`;
-  sample toasts: `toast:success|info|error`; structural diff in every
+  sample toasts: `toast:success|info|error`; safety: `timeline`, `restore:N`
+  (restore question for the N-th point), `learning`, `secrets:scan` (the
+  warning for the staged changes), see `app/safety.rs`; structural diff in every
   repository: `diff:structural`; conflict editor: `conflict:PATH`).
 - `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 - `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
