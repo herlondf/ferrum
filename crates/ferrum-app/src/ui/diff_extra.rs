@@ -131,7 +131,16 @@ fn content(
         binary(ui, repo, file, source);
         return None;
     }
-    diff_view::show(ui, id, file, mode, line_staging, selection)
+    let structural = crate::ui::structural_view::Source::new(repo, source, file);
+    diff_view::show_with(
+        ui,
+        id,
+        file,
+        mode,
+        line_staging,
+        selection,
+        structural.as_ref(),
+    )
 }
 
 fn large_untracked(ui: &mut egui::Ui, size: u64) -> Option<DiffAction> {

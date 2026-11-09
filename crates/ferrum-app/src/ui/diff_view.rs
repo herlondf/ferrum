@@ -17,6 +17,7 @@ use crate::icons;
 use crate::tab::LineSelection;
 use crate::ui::diff_prefs::{self, CONTEXT_CHOICES, DiffPrefs, FONT_SIZES};
 use crate::ui::diff_text::{self, LineStyle, SideHighlighter};
+use crate::ui::structural_view;
 use crate::util::{added_color, removed_color};
 
 /// Marks "no row" / "no line" in the row tables.
@@ -226,7 +227,7 @@ struct Model {
     minimap: Option<(MinimapKey, Vec<u8>)>,
 }
 
-fn file_key(file: &FileDiff) -> u64 {
+pub(crate) fn file_key(file: &FileDiff) -> u64 {
     let mut h = std::hash::DefaultHasher::new();
     file.path.hash(&mut h);
     for hunk in &file.hunks {
@@ -484,10 +485,25 @@ pub fn show(
     file: &FileDiff,
     mode: DiffMode,
     line_staging: bool,
+    selection: Option<&mut LineSelection>,
+) -> Option<DiffAction> {
+    show_with(ui, id, file, mode, line_staging, selection, None)
+}
+
+/// Like [`show`], offering the structural diff of the file's versions.
+pub fn show_with(
+    ui: &mut egui::Ui,
+    id: &str,
+    file: &FileDiff,
+    mode: DiffMode,
+    line_staging: bool,
     mut selection: Option<&mut LineSelection>,
+    structural: Option<&structural_view::Source>,
 ) -> Option<DiffAction> {
     let ctx = ui.ctx().clone();
     let mut prefs = diff_prefs::get(&ctx);
+    let structural = structural.filter(|_| prefs.structural_diff);
+    let structural_on = structural.is_some_and(|s| structural_view::is_on(&prefs, s));
     let original_prefs = prefs.clone();
     let mut st = load_state(&ctx, id);
     let large_window = id.ends_with(LARGE_SUFFIX);
@@ -499,8 +515,12 @@ pub fn show(
     }
     // A diff that ignores whitespace cannot be applied back to the files.
     let ws_locked = prefs.ignore_whitespace && mode != DiffMode::ReadOnly;
-    let mode = if ws_locked { DiffMode::ReadOnly } else { mode };
-    let line_staging = line_staging && !ws_locked;
+    let mode = if ws_locked || structural_on {
+        DiffMode::ReadOnly
+    } else {
+        mode
+    };
+    let line_staging = line_staging && !ws_locked && !structural_on;
     let mut action = None;
     let mut nav = None;
 
@@ -514,14 +534,15 @@ pub fn show(
         &mut action,
         &mut nav,
         large_window,
+        structural.map(|s| s.repo_key.as_str()),
     );
-    if ws_locked {
+    if ws_locked && !structural_on {
         ui.weak(t!(
             "Staging lines and hunks is off while whitespace is ignored."
         ));
     }
     meta_info(ui, file);
-    let find_focused = st.find_open && find_bar(ui, &mut st, &mut nav);
+    let find_focused = st.find_open && !structural_on && find_bar(ui, &mut st, &mut nav);
     ui.separator();
 
     let body_rect = ui.available_rect_before_wrap();
@@ -535,6 +556,10 @@ pub fn show(
         } else {
             t!("No changes to show (empty file or mode change).")
         });
+    } else if let Some(src) = structural.filter(|_| structural_on)
+        && structural_view::body(ui, id, src, file, &prefs, structural_nav(&ctx, id, nav))
+    {
+        // Shown structurally.
     } else {
         if active_view(&ctx).as_deref() == Some(id) {
             use crate::keymap::{Action, pressed};
@@ -582,6 +607,25 @@ enum Nav {
     PrevFound,
     /// The query changed: go to the first match from the current position.
     Found,
+}
+
+/// Change navigation for the structural view: +1 next, -1 previous.
+fn structural_nav(ctx: &egui::Context, id: &str, nav: Option<Nav>) -> i32 {
+    let mut nav = nav;
+    if active_view(ctx).as_deref() == Some(id) {
+        use crate::keymap::{Action, pressed};
+        if pressed(ctx, Action::NextHunk) {
+            nav = Some(Nav::NextHunk);
+        }
+        if pressed(ctx, Action::PrevHunk) {
+            nav = Some(Nav::PrevHunk);
+        }
+    }
+    match nav {
+        Some(Nav::NextChange | Nav::NextHunk) => 1,
+        Some(Nav::PrevChange | Nav::PrevHunk) => -1,
+        _ => 0,
+    }
 }
 
 /// An icon toggle of the toolbar; the tooltip names it and says what it does.
@@ -637,8 +681,10 @@ fn toolbar(
     action: &mut Option<DiffAction>,
     nav: &mut Option<Nav>,
     large_window: bool,
+    structural: Option<&str>,
 ) {
     let height = 26.0;
+    let structural_on = structural.is_some_and(|r| prefs.structural_repos.contains(r));
     let width = ui.available_width();
     // Narrow panes drop the view toggles first (the Options popover has
     // them all), then the change navigation (Ctrl+Up/Down still work).
@@ -661,8 +707,14 @@ fn toolbar(
             {
                 st.large = true;
             }
-            options_menu(ui, prefs);
-            if icon_toggle(ui, st.find_open, icons::SEARCH, t!("Find in diff (Ctrl+F)")).clicked() {
+            options_menu(ui, prefs, structural);
+            if let Some(repo) = structural {
+                structural_view::toggle(ui, prefs, repo);
+            }
+            if !structural_on
+                && icon_toggle(ui, st.find_open, icons::SEARCH, t!("Find in diff (Ctrl+F)"))
+                    .clicked()
+            {
                 st.find_open = !st.find_open;
                 st.find_focus = st.find_open;
             }
@@ -676,7 +728,7 @@ fn toolbar(
                 }
             }
             if show_toggles {
-                view_toggles(ui, prefs);
+                view_toggles(ui, prefs, structural_on);
             }
 
             // What is left of the line: the size of the change and the selection.
@@ -719,7 +771,7 @@ fn toolbar(
 }
 
 /// Layout and content toggles, right to left.
-fn view_toggles(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
+fn view_toggles(ui: &mut egui::Ui, prefs: &mut DiffPrefs, structural: bool) {
     divider(ui);
     toggle(
         ui,
@@ -728,20 +780,23 @@ fn view_toggles(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
         t!("Entire file"),
         t!("Show the whole file, not just the changed parts"),
     );
-    toggle(
-        ui,
-        &mut prefs.ignore_whitespace,
-        icons::PARAGRAPH,
-        t!("Ignore whitespace"),
-        t!("Hide changes that only touch whitespace"),
-    );
-    toggle(
-        ui,
-        &mut prefs.wrap,
-        icons::ARROW_ELBOW_DOWN_LEFT,
-        t!("Wrap"),
-        t!("Wrap long lines"),
-    );
+    // The structural diff ignores whitespace and does not wrap.
+    if !structural {
+        toggle(
+            ui,
+            &mut prefs.ignore_whitespace,
+            icons::PARAGRAPH,
+            t!("Ignore whitespace"),
+            t!("Hide changes that only touch whitespace"),
+        );
+        toggle(
+            ui,
+            &mut prefs.wrap,
+            icons::ARROW_ELBOW_DOWN_LEFT,
+            t!("Wrap"),
+            t!("Wrap long lines"),
+        );
+    }
     divider(ui);
     // Unified / side by side, as a pair.
     if icon_toggle(ui, prefs.side_by_side, icons::COLUMNS, t!("Side by side")).clicked() {
@@ -753,7 +808,7 @@ fn view_toggles(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
 }
 
 /// The Options popover: every diff option, with labels.
-fn options_menu(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
+fn options_menu(ui: &mut egui::Ui, prefs: &mut DiffPrefs, structural: Option<&str>) {
     let changed = prefs.context_lines != DiffPrefs::default().context_lines;
     let icon = egui::RichText::new(icons::SLIDERS_HORIZONTAL).size(icons::ICON_SIZE);
     let button = egui::Button::new(icon)
@@ -767,6 +822,9 @@ fn options_menu(ui: &mut egui::Ui, prefs: &mut DiffPrefs) {
         .ui(ui, |ui| {
             ui.set_min_width(230.0);
             ui.label(crate::theme::strong(t!("View")));
+            if let Some(repo) = structural {
+                structural_view::checkbox(ui, prefs, repo);
+            }
             ui.checkbox(&mut prefs.side_by_side, t!("Side by side"));
             ui.checkbox(&mut prefs.wrap, t!("Wrap"));
             ui.checkbox(&mut prefs.ignore_whitespace, t!("Ignore whitespace"));

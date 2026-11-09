@@ -46,6 +46,7 @@ pub const ARROWS_CLOCKWISE: &str = "\u{e094}";
 pub const ARROWS_DOWN_UP: &str = "\u{e098}";
 pub const ARROWS_LEFT_RIGHT: &str = "\u{e0a0}";
 pub const ARROWS_IN_SIMPLE: &str = "\u{e09e}";
+pub const ARROWS_MERGE: &str = "\u{ed3e}";
 pub const ARROWS_OUT_SIMPLE: &str = "\u{e0a6}";
 pub const BELL: &str = "\u{e0ce}";
 pub const BOOKMARK_SIMPLE: &str = "\u{e0ea}";
@@ -131,6 +132,7 @@ pub const LINK: &str = "\u{e2e2}";
 pub const LIST: &str = "\u{e2f0}";
 pub const LOCK: &str = "\u{e2fa}";
 pub const LOCK_OPEN: &str = "\u{e306}";
+pub const MAGIC_WAND: &str = "\u{e6b6}";
 pub const MAGNIFYING_GLASS: &str = "\u{e30c}";
 pub const MINUS: &str = "\u{e32a}";
 pub const MONITOR: &str = "\u{e32e}";
@@ -166,6 +168,7 @@ pub const TERMINAL_WINDOW: &str = "\u{eae8}";
 pub const TEXT_AA: &str = "\u{e6ee}";
 pub const TEXT_ALIGN_LEFT: &str = "\u{e484}";
 pub const TOOLBOX: &str = "\u{eca0}";
+pub const TREE_STRUCTURE: &str = "\u{e67c}";
 pub const TRASH: &str = "\u{e4a6}";
 pub const TRAY_ARROW_DOWN: &str = "\u{e010}";
 pub const TRAY_ARROW_UP: &str = "\u{ee52}";
@@ -277,6 +280,7 @@ pub const ALL: &[&str] = &[
     ARROWS_DOWN_UP,
     ARROWS_LEFT_RIGHT,
     ARROWS_IN_SIMPLE,
+    ARROWS_MERGE,
     ARROWS_OUT_SIMPLE,
     BELL,
     BOOKMARK_SIMPLE,
@@ -362,6 +366,7 @@ pub const ALL: &[&str] = &[
     LIST,
     LOCK,
     LOCK_OPEN,
+    MAGIC_WAND,
     MAGNIFYING_GLASS,
     MINUS,
     MONITOR,
@@ -397,6 +402,7 @@ pub const ALL: &[&str] = &[
     TEXT_AA,
     TEXT_ALIGN_LEFT,
     TOOLBOX,
+    TREE_STRUCTURE,
     TRASH,
     TRAY_ARROW_DOWN,
     TRAY_ARROW_UP,

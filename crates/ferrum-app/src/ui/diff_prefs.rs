@@ -1,7 +1,7 @@
 //! Diff viewer preferences (saved in the settings) and the diff options each
 //! repository tab loads its diffs with.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use eframe::egui;
 use ferrum_core::diff::DiffConfig;
@@ -58,6 +58,14 @@ pub struct DiffPrefs {
     pub image_mode: ImageMode,
     /// Show SVG files as images rather than text.
     pub svg_as_image: bool,
+    /// Offer the structural (syntax-aware) diff.
+    pub structural_diff: bool,
+    /// Repositories whose diffs are shown structurally (the toolbar toggle).
+    pub structural_repos: BTreeSet<String>,
+    /// Try a semantic merge of conflicted files.
+    pub semantic_merge: bool,
+    /// Also try the mergiraf program when it is installed.
+    pub mergiraf: bool,
 }
 
 impl Default for DiffPrefs {
@@ -77,6 +85,10 @@ impl Default for DiffPrefs {
             minimap: true,
             image_mode: ImageMode::SideBySide,
             svg_as_image: true,
+            structural_diff: true,
+            structural_repos: BTreeSet::new(),
+            semantic_merge: true,
+            mergiraf: true,
         }
     }
 }
@@ -178,7 +190,8 @@ pub fn load_large(tab: &mut RepoTab, path: &str) {
 /// `FERRUM_START` step `diff:OPTS`, a comma-separated list of `sbs`, `wrap`,
 /// `ws` (show whitespace), `full`, `nomarkers`, `nosyntax`, `font=N`,
 /// `context=N`, `image=swipe|onion|difference`, `find=TEXT` (opens the find bar),
-/// `large` (opens the large window), `options` (opens the Options popover).
+/// `large` (opens the large window), `options` (opens the Options popover),
+/// `structural` (structural diff in every repository).
 pub fn dev_step(ctx: &egui::Context, prefs: &mut DiffPrefs, arg: &str) {
     for opt in arg.split(',').map(str::trim) {
         let (key, value) = opt.split_once('=').unwrap_or((opt, ""));
@@ -200,6 +213,7 @@ pub fn dev_step(ctx: &egui::Context, prefs: &mut DiffPrefs, arg: &str) {
                 }
             }
             "options" => crate::ui::diff_view::dev_open_options(ctx),
+            "structural" => crate::ui::structural_view::dev_all(prefs),
             "find" | "large" => {
                 for view in ["changes-diff", "commit-diff", "file-history-diff"] {
                     crate::ui::diff_view::dev_open(ctx, view, (key == "find").then_some(value));

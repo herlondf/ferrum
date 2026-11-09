@@ -26,6 +26,10 @@ const MAX_DEPTH: usize = 600;
 const MAX_TOKENS: usize = 150_000;
 /// A deleted subtree found again elsewhere counts as moved from this many tokens.
 const MIN_MOVED_TOKENS: usize = 3;
+/// Sibling pairs compared for similarity in one place.
+const MAX_PAIRING: usize = 4096;
+/// Larger subtrees are not compared for similarity.
+const MAX_COMPARED_TOKENS: usize = 20_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mark {
@@ -337,7 +341,92 @@ impl Differ<'_> {
             }
             return;
         }
+        // Pair siblings that look alike; compare the rest token by token.
+        if ra.len() * rb.len() <= MAX_PAIRING {
+            let pairs = self.similar_pairs(ra, rb);
+            if !pairs.is_empty() {
+                let (mut pa, mut pb) = (0, 0);
+                for (x, y) in pairs {
+                    self.gap(&ra[pa..x], &rb[pb..y]);
+                    self.pair(ra[x], rb[y]);
+                    (pa, pb) = (x + 1, y + 1);
+                }
+                self.gap(&ra[pa..], &rb[pb..]);
+                return;
+            }
+        }
         self.tokens(a.leaves_of(ra), b.leaves_of(rb));
+    }
+
+    fn gap(&mut self, ra: &[u32], rb: &[u32]) {
+        let (a, b) = (self.a, self.b);
+        if ra.is_empty() || rb.is_empty() {
+            self.novel(a.leaves_of(ra), true);
+            self.novel(b.leaves_of(rb), false);
+        } else {
+            self.tokens(a.leaves_of(ra), b.leaves_of(rb));
+        }
+    }
+
+    /// Two nodes taken as versions of each other.
+    fn pair(&mut self, x: u32, y: u32) {
+        let (nx, ny) = (self.a.node(x), self.b.node(y));
+        if nx.hash == ny.hash {
+            self.same(x, y);
+        } else if nx.atom && ny.atom {
+            self.changed_atoms(nx.leaves.start, ny.leaves.start);
+        } else if !nx.atom && !ny.atom {
+            self.siblings(&nx.kids, &ny.kids);
+        } else {
+            self.tokens(nx.leaves.clone(), ny.leaves.clone());
+        }
+    }
+
+    /// Siblings of the same kind that share most of their tokens, in order.
+    fn similar_pairs(&self, ra: &[u32], rb: &[u32]) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        let mut next = 0;
+        for (i, &x) in ra.iter().enumerate() {
+            let mut best: Option<(usize, f32)> = None;
+            for (j, &y) in rb.iter().enumerate().skip(next) {
+                if self.a.node(x).kind != self.b.node(y).kind {
+                    continue;
+                }
+                let s = self.similarity(x, y);
+                if s >= 0.5 && best.is_none_or(|(_, b)| s > b) {
+                    best = Some((j, s));
+                }
+            }
+            if let Some((j, _)) = best {
+                out.push((i, j));
+                next = j + 1;
+            }
+        }
+        out
+    }
+
+    /// How much two nodes have in common, from 0 to 1.
+    fn similarity(&self, x: u32, y: u32) -> f32 {
+        let (nx, ny) = (self.a.node(x), self.b.node(y));
+        if nx.hash == ny.hash {
+            return 1.0;
+        }
+        if nx.atom || ny.atom {
+            let (lx, ly) = (&self.a.leaves[nx.leaves.start as usize], &self.b.leaves[ny.leaves.start as usize]);
+            if !(nx.atom && ny.atom && lx.prose && ly.prose) {
+                return 0.0;
+            }
+            let (ta, tb) = (&self.sa[lx.range.clone()], &self.sb[ly.range.clone()]);
+            let wa: Vec<&str> = words(ta).into_iter().map(|r| &ta[r]).collect();
+            let wb: Vec<&str> = words(tb).into_iter().map(|r| &tb[r]).collect();
+            return dice(&wa, &wb);
+        }
+        if nx.leaves.len() + ny.leaves.len() > MAX_COMPARED_TOKENS {
+            return 0.0;
+        }
+        let ha: Vec<u64> = nx.leaves.clone().map(|i| self.a.leaves[i as usize].hash).collect();
+        let hb: Vec<u64> = ny.leaves.clone().map(|i| self.b.leaves[i as usize].hash).collect();
+        dice(&ha, &hb)
     }
 
     fn tokens(&mut self, la: Range<u32>, lb: Range<u32>) {
@@ -356,15 +445,41 @@ impl Differ<'_> {
                     }
                 }
                 _ => {
-                    self.novel(ra, true);
-                    self.novel(rb, false);
+                    self.novel(ra.clone(), true);
+                    self.novel(rb.clone(), false);
+                    self.reword(ra, rb);
                 }
+            }
+        }
+    }
+
+    /// Among replaced tokens, comments and strings that are mostly the same
+    /// text are marked word by word.
+    fn reword(&mut self, ra: Range<u32>, rb: Range<u32>) {
+        let prose_a: Vec<u32> = ra.filter(|&i| self.a.leaves[i as usize].prose).collect();
+        let prose_b: Vec<u32> = rb.filter(|&j| self.b.leaves[j as usize].prose).collect();
+        if prose_a.is_empty() || prose_b.is_empty() || prose_a.len() * prose_b.len() > MAX_PAIRING {
+            return;
+        }
+        let text = |s: &str, r: &Range<usize>| s[r.clone()].to_owned();
+        let mut next = 0;
+        for i in prose_a {
+            let ta = text(self.sa, &self.a.leaves[i as usize].range);
+            let found = prose_b.iter().enumerate().skip(next).find(|(_, j)| {
+                let tb = text(self.sb, &self.b.leaves[**j as usize].range);
+                word_changes(&ta, &tb).is_some()
+            });
+            if let Some((k, &j)) = found {
+                self.changed_atoms(i, j);
+                next = k + 1;
             }
         }
     }
 
     /// Two tokens in the same place that differ: prose is marked word by word.
     fn changed_atoms(&mut self, i: u32, j: u32) {
+        // Their lines are versions of each other.
+        self.pairs.push((i, j));
         let (x, y) = (&self.a.leaves[i as usize], &self.b.leaves[j as usize]);
         if x.prose && y.prose {
             let (ta, tb) = (&self.sa[x.range.clone()], &self.sb[y.range.clone()]);
@@ -425,6 +540,27 @@ fn collect_novel(t: &Tree, id: Option<u32>, marks: &[LeafMark], out: &mut HashMa
             collect_novel(t, Some(k), marks, out);
         }
     }
+}
+
+/// Share of common items (Dice coefficient), from 0 to 1.
+fn dice<T: Hash + Eq>(a: &[T], b: &[T]) -> f32 {
+    if a.is_empty() && b.is_empty() {
+        return 1.0;
+    }
+    let mut counts: HashMap<&T, i32> = HashMap::new();
+    for x in a {
+        *counts.entry(x).or_default() += 1;
+    }
+    let mut common = 0;
+    for y in b {
+        if let Some(c) = counts.get_mut(y)
+            && *c > 0
+        {
+            *c -= 1;
+            common += 1;
+        }
+    }
+    2.0 * common as f32 / (a.len() + b.len()) as f32
 }
 
 /// Words of two texts that differ; `None` when they share too little.
@@ -632,6 +768,17 @@ mod tests {
         let d = rust(old, new);
         assert_eq!(marked(old, &d.old, Mark::Novel), ["brown"]);
         assert_eq!(marked(new, &d.new, Mark::Novel), ["red"]);
+    }
+
+    #[test]
+    fn moves_next_to_changes_and_reworded_comments() {
+        let old = "/// Builds the file.\nfn render() {}\n\nfn count() -> usize {\n    1\n}\n\nfn has(t: &str) -> bool {\n    t.is_empty()\n}\n";
+        let new = "fn has(t: &str) -> bool {\n    t.is_empty()\n}\n\n/// Builds the whole file.\nfn render() {}\n\nfn count() -> usize {\n    2\n}\n";
+        let d = rust(old, new);
+        // `has` moved to the top, `count` changed, the comment gained a word.
+        assert!(marked(new, &d.new, Mark::Moved).contains(&"is_empty"));
+        assert_eq!(marked(old, &d.old, Mark::Novel), ["1"]);
+        assert_eq!(marked(new, &d.new, Mark::Novel), ["whole", "2"]);
     }
 
     #[test]

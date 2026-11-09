@@ -64,6 +64,7 @@ pub mod sidebar;
 pub mod sidebar_model;
 pub mod stats;
 pub mod status_bar;
+pub mod structural_view;
 pub mod submodules;
 pub mod sync_dialogs;
 pub mod sync_ui;
