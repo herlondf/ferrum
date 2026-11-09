@@ -183,6 +183,7 @@ pub(crate) fn header(
     let text = RichText::new(format!("{arrow} {}", label.text()));
     let text = if key.starts_with("sec:") {
         text.strong()
+            .family(egui::FontFamily::Name(crate::fonts::STRONG.into()))
     } else {
         text
     };
@@ -197,10 +198,7 @@ pub(crate) fn header(
         let size = egui::vec2(20.0, resp.rect.height() - 2.0);
         let rect =
             egui::Rect::from_min_size(resp.rect.right_top() + egui::vec2(-size.x - 2.0, 1.0), size);
-        added = ui
-            .put(rect, egui::Button::new("+").small())
-            .on_hover_text(tip)
-            .clicked();
+        added = overlay_button(ui, rect, key, crate::icons::ADD, tip).clicked();
     }
     st.register(key, Some(open));
     if resp.clicked() && !forced {
@@ -215,6 +213,31 @@ pub(crate) fn header(
         resp,
         add: added,
     }
+}
+
+/// A small icon button drawn over a row. It does not take layout space, so it
+/// cannot widen the panel.
+fn overlay_button(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    key: &str,
+    icon: &str,
+    tip: &str,
+) -> egui::Response {
+    let resp = ui.interact(rect, ui.scope_id().with(("add", key)), egui::Sense::click());
+    // Labeled "+" like the button it replaced; the tooltip says what it adds.
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "+"));
+    let v = ui.style().interact(&resp);
+    ui.painter()
+        .rect_filled(rect, v.corner_radius, v.weak_bg_fill);
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        icon,
+        egui::FontId::proportional(13.0),
+        v.text_color(),
+    );
+    resp.on_hover_text(tip)
 }
 
 /// Draws the rows inside an open header.
@@ -569,7 +592,12 @@ fn upstream_badge(ui: &egui::Ui, b: &BranchInfo) -> RichText {
         text.push('⚠');
         return RichText::new(text).color(ui.visuals().warn_fg_color);
     }
-    text.push(if b.upstream.is_some() { '☁' } else { '○' });
+    // Tracked branches show a cloud, local-only ones a dashed circle.
+    text.push_str(if b.upstream.is_some() {
+        crate::icons::REMOTE
+    } else {
+        crate::icons::CIRCLE_DASHED
+    });
     RichText::new(text).weak()
 }
 
@@ -877,7 +905,7 @@ fn drop_menu(ctx: &egui::Context, tab: &RepoTab, st: &mut SidebarState, cmds: &m
                         close = true;
                     }
                 });
-                if ui.button(t!("Cancel")).clicked() {
+                if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                     close = true;
                 }
             });

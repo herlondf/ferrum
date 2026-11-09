@@ -306,10 +306,10 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool, enter: bool) -> Option<bo
     ui.add_space(8.0);
     let mut result = None;
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if ui.add_enabled(enabled, egui::Button::new(ok)).clicked() || (enter && enabled) {
+        if ui.add_enabled(enabled, crate::theme::primary(ok)).clicked() || (enter && enabled) {
             result = Some(true);
         }
-        if ui.button(t!("Cancel")).clicked() {
+        if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
             result = Some(false);
         }
     });

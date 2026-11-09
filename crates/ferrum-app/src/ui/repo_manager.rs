@@ -585,7 +585,11 @@ fn sources(ui: &mut egui::Ui, lib: &mut Library, scanning: bool, cmds: &mut Comm
     for (i, s) in lib.sources.iter_mut().enumerate() {
         ui.horizontal(|ui| {
             ui.label(s.path.display().to_string());
-            if ui.small_button("×").on_hover_text(t!("Remove")).clicked() {
+            if ui
+                .small_button(crate::icons::CLOSE)
+                .on_hover_text(t!("Remove"))
+                .clicked()
+            {
                 remove = Some(i);
             }
         });

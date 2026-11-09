@@ -711,7 +711,7 @@ fn new_pr_dialog(
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(ready, egui::Button::new(t!("Create {}", noun)))
+                .add_enabled(ready, crate::theme::primary(t!("Create {}", noun)))
                 .clicked()
             {
                 if push_reason.is_some() && f.push_first {
@@ -738,7 +738,7 @@ fn new_pr_dialog(
                 f.error = None;
                 f.submitted = Some(Instant::now());
             }
-            if ui.button(t!("Cancel")).clicked() {
+            if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                 keep = false;
             }
         });
@@ -921,7 +921,7 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .add_enabled(ready, egui::Button::new(t!("Log in")))
+                .add_enabled(ready, crate::theme::primary(t!("Log in")))
                 .clicked()
                 || (enter && ready)
             {
@@ -935,7 +935,7 @@ fn login_dialog(ui: &mut egui::Ui, f: &mut LoginForm, cmds: &mut Commands) -> bo
                 });
                 keep = false;
             }
-            if ui.button(t!("Cancel")).clicked() {
+            if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                 keep = false;
             }
         });

@@ -72,6 +72,7 @@ pub fn show(ctx: &egui::Context, p: &mut Prompts, prefs: &mut ForgePrefs) {
     let kind = prompt_kind(&cur.req.prompt);
     let mut done: Option<Option<String>> = None;
     egui::Modal::new(egui::Id::unique("askpass-prompt"))
+        .frame(crate::theme::dialog_frame(&ctx.global_style()))
         .show(ctx, |ui| {
             ui.set_width(460.0);
             ui.heading(match kind {
@@ -87,10 +88,10 @@ pub fn show(ctx: &egui::Context, p: &mut Prompts, prefs: &mut ForgePrefs) {
                     ui.weak(t!("Check the fingerprint against the one the service publishes before trusting it."));
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button(t!("Trust and connect")).clicked() {
+                        if ui.add(crate::theme::primary(t!("Trust and connect"))).clicked() {
                             done = Some(Some("yes".into()));
                         }
-                        if ui.button(t!("Cancel")).clicked() {
+                        if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                             done = Some(Some("no".into()));
                         }
                     });
@@ -119,10 +120,10 @@ pub fn show(ctx: &egui::Context, p: &mut Prompts, prefs: &mut ForgePrefs) {
                     }
                     ui.add_space(8.0);
                     ui.horizontal(|ui| {
-                        if ui.button(t!("OK")).clicked() || (enter && resp.lost_focus()) {
+                        if ui.add(crate::theme::primary(t!("OK"))).clicked() || (enter && resp.lost_focus()) {
                             done = Some(Some(cur.answer.clone()));
                         }
-                        if ui.button(t!("Cancel")).clicked() {
+                        if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                             done = Some(None);
                         }
                     });
@@ -175,7 +176,9 @@ pub fn trust_window(ctx: &egui::Context, w: &mut TrustWindow) -> bool {
         w.keys = Some(r);
     }
     let mut keep = true;
-    egui::Modal::new(egui::Id::unique("ssh-trust")).show(ctx, |ui| {
+    let modal = egui::Modal::new(egui::Id::unique("ssh-trust"));
+    let modal = modal.frame(crate::theme::dialog_frame(&ctx.global_style()));
+    modal.show(ctx, |ui| {
         ui.set_width(520.0);
         ui.heading(t!("Trust SSH host"));
         ui.add_space(4.0);

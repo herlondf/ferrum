@@ -91,7 +91,7 @@ pub fn section(ui: &mut egui::Ui, settings: &mut Settings) {
                             keymap::start_capture();
                         }
                         if ui
-                            .small_button("×")
+                            .small_button(crate::icons::CLOSE)
                             .on_hover_text(t!("Remove this shortcut"))
                             .clicked()
                         {

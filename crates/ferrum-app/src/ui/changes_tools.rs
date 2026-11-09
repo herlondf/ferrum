@@ -114,7 +114,9 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
     let Some(mut tool) = tab.changes.ui.tool.take() else {
         return;
     };
-    let modal = egui::Modal::new(egui::Id::unique("changes-tool")).show(ctx, |ui| {
+    let modal = egui::Modal::new(egui::Id::unique("changes-tool"));
+    let modal = modal.frame(crate::theme::dialog_frame(&ctx.global_style()));
+    let modal = modal.show(ctx, |ui| {
         ui.set_width(440.0);
         match &mut tool {
             Tool::Pattern {
@@ -136,16 +138,10 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool) -> Option<bool> {
     ui.add_space(8.0);
     let mut out = None;
     ui.horizontal(|ui| {
-        if ui
-            .add_enabled(
-                enabled,
-                egui::Button::new(ok).min_size(egui::vec2(90.0, 24.0)),
-            )
-            .clicked()
-        {
+        if ui.add_enabled(enabled, crate::theme::primary(ok)).clicked() {
             out = Some(true);
         }
-        if ui.button(t!("Cancel")).clicked() {
+        if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
             out = Some(false);
         }
     });

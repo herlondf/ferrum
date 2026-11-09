@@ -474,13 +474,13 @@ pub fn show(ctx: &egui::Context, tab: &mut RepoTab, cmds: &mut Commands) {
             ui.horizontal(|ui| {
                 let can_start = result.is_ok() && !same && !busy;
                 if ui
-                    .add_enabled(can_start, egui::Button::new(t!("Start rebase")))
+                    .add_enabled(can_start, crate::theme::primary(t!("Start rebase")))
                     .clicked()
                 {
                     cmds.run(start_op(plan));
                     close = true;
                 }
-                if ui.button(t!("Cancel")).clicked() {
+                if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                     ask_close = true;
                 }
             });

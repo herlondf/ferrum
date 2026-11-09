@@ -1039,7 +1039,7 @@ fn quick_checkout_ui(
     }
     ui.add_space(4.0);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        !ui.button(t!("Cancel")).clicked()
+        !ui.add(crate::theme::secondary(t!("Cancel"))).clicked()
     })
     .inner
 }

@@ -316,11 +316,11 @@ pub fn show_dialog(
     ui.add_space(8.0);
     let mut result = None;
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let add = ui.add_enabled(ok, egui::Button::new(t!("Add worktree")));
+        let add = ui.add_enabled(ok, crate::theme::primary(t!("Add worktree")));
         if add.clicked() || (enter && ok) {
             result = Some(true);
         }
-        if ui.button(t!("Cancel")).clicked() {
+        if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
             result = Some(false);
         }
     });

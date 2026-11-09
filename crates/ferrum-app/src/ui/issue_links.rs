@@ -145,7 +145,7 @@ pub fn window(ctx: &egui::Context, tab: &mut RepoTab) {
                                 .hint_text("https://jira.example.com/browse/$1")
                                 .desired_width(280.0),
                         );
-                        if ui.small_button("×").on_hover_text(t!("Remove")).clicked() {
+                        if ui.small_button(crate::icons::CLOSE).on_hover_text(t!("Remove")).clicked() {
                             remove = Some(i);
                         }
                         ui.end_row();

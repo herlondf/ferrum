@@ -324,7 +324,7 @@ fn new_issue_form(ui: &mut egui::Ui, ctx: &egui::Context, tab: &mut RepoTab, set
             let sending = form.sending.is_some();
             let ready = !form.title.trim().is_empty() && !sending;
             if ui
-                .add_enabled(ready, egui::Button::new(t!("Create issue")))
+                .add_enabled(ready, crate::theme::primary(t!("Create issue")))
                 .clicked()
             {
                 match crate::hosted::credentials(settings, &hosted) {
@@ -342,7 +342,7 @@ fn new_issue_form(ui: &mut egui::Ui, ctx: &egui::Context, tab: &mut RepoTab, set
                     None => form.error = Some(t!("Log in to {} to see issues.", hosted.host)),
                 }
             }
-            close = ui.button(t!("Cancel")).clicked();
+            close = ui.add(crate::theme::secondary(t!("Cancel"))).clicked();
             if sending {
                 ui.spinner();
             }
@@ -360,7 +360,7 @@ fn issue_row(ui: &mut egui::Ui, issue: &Issue, now: i64, cmds: &mut Commands) {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
                     let (color, mark) = if issue.open {
-                        (egui::Color32::from_rgb(60, 170, 90), "○")
+                        (egui::Color32::from_rgb(60, 170, 90), crate::icons::CIRCLE)
                     } else {
                         (ui.visuals().weak_text_color(), "✔")
                     };

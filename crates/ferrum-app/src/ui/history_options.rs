@@ -148,7 +148,7 @@ pub fn filter_status(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
         return;
     }
     if ui
-        .small_button("×")
+        .small_button(crate::icons::CLOSE)
         .on_hover_text(t!("Clear the graph filter"))
         .clicked()
     {

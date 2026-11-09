@@ -530,7 +530,7 @@ fn buttons(
         let resp = ui
             .add_enabled(
                 can_commit,
-                egui::Button::new(label).min_size(egui::vec2(140.0, 26.0)),
+                crate::theme::primary(label).min_size(egui::vec2(140.0, 26.0)),
             )
             .on_hover_text(t!("Ctrl+Enter"))
             .on_disabled_hover_text(&why);
@@ -584,7 +584,12 @@ fn hook_output(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &mut Settings, cm
                 ui.strong(t!("Hook output"));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if !running && ui.small_button("×").on_hover_text(t!("Close")).clicked() {
+                if !running
+                    && ui
+                        .small_button(crate::icons::CLOSE)
+                        .on_hover_text(t!("Close"))
+                        .clicked()
+                {
                     let st = &mut tab.changes.ui.commit;
                     st.failed = false;
                     if let Ok(mut l) = st.log.lock() {

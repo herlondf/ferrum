@@ -561,7 +561,11 @@ fn editor(ui: &mut egui::Ui, c: &mut CustomCommand, i: usize) {
                                 ui.selectable_value(&mut f.kind, k, k.label());
                             }
                         });
-                    if ui.small_button("×").on_hover_text(t!("Remove")).clicked() {
+                    if ui
+                        .small_button(crate::icons::CLOSE)
+                        .on_hover_text(t!("Remove"))
+                        .clicked()
+                    {
                         remove = Some(j);
                     }
                 });

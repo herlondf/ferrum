@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use eframe::egui::{self, RichText};
+use eframe::egui;
 use ferrum_core::ops::ResetMode;
 use ferrum_core::{BranchKind, Identity};
 
@@ -202,7 +202,9 @@ pub fn show(
     cmds: &mut Commands,
 ) -> bool {
     let mut open = true;
-    let modal = egui::Modal::new(egui::Id::unique("ferrum-dialog")).show(ctx, |ui| {
+    let modal = egui::Modal::new(egui::Id::unique("ferrum-dialog"));
+    let modal = modal.frame(crate::theme::dialog_frame(&ctx.global_style()));
+    let modal = modal.show(ctx, |ui| {
         ui.set_width(460.0);
         // Enter in an open drop-down (e.g. its filter field) is not "OK".
         let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift)
@@ -227,15 +229,15 @@ pub(crate) fn buttons(
     let mut result = None;
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let text = if danger {
-                RichText::new(ok).color(ui.visuals().error_fg_color)
+            let ok = if danger {
+                ui.add_enabled(enabled, crate::theme::danger(ok))
             } else {
-                RichText::new(ok)
+                ui.add_enabled(enabled, crate::theme::primary(ok))
             };
-            if ui.add_enabled(enabled, egui::Button::new(text)).clicked() || (enter && enabled) {
+            if ok.clicked() || (enter && enabled) {
                 result = Some(true);
             }
-            if ui.button(t!("Cancel")).clicked() {
+            if ui.add(crate::theme::secondary(t!("Cancel"))).clicked() {
                 result = Some(false);
             }
         });

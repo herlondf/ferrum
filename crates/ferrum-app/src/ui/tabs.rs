@@ -4,6 +4,7 @@ use eframe::egui::{self, Color32, RichText};
 
 use crate::command::{Command, Commands};
 use crate::external::Launch;
+use crate::icons;
 use crate::repos::{Library, RepoCmd, TAB_COLORS};
 use crate::tab::RepoTab;
 
@@ -54,13 +55,13 @@ fn tabs(ui: &mut egui::Ui, bar: &Bar, lib: &mut Library, cmds: &mut Commands, ve
         if let Some(b) = &tab.head
             && !vertical
         {
-            label.push_str(&format!("  🌿 {b}"));
+            label.push_str(&format!("  {} {b}", icons::BRANCH));
         }
         if tab.busy() {
-            label.push_str(" ⏳");
+            label.push_str(&format!(" {}", icons::HOURGLASS));
         }
         if bar.in_window.iter().any(|p| p == tab.path()) {
-            label.push_str(" ⛶");
+            label.push_str(&format!(" {}", icons::ARROW_SQUARE_OUT));
         }
         let mut text = RichText::new(label);
         let dirty = tab.status.total() > 0;
@@ -78,7 +79,7 @@ fn tabs(ui: &mut egui::Ui, bar: &Bar, lib: &mut Library, cmds: &mut Commands, ve
                 r.on_hover_text(t!("Uncommitted changes"));
             }
             if ui
-                .small_button("×")
+                .small_button(icons::CLOSE)
                 .on_hover_text(t!("Close (Ctrl+W)"))
                 .clicked()
             {
@@ -98,7 +99,7 @@ fn tabs(ui: &mut egui::Ui, bar: &Bar, lib: &mut Library, cmds: &mut Commands, ve
         }
         let mut tip = tab.path().display().to_string();
         if let Some(b) = &tab.head {
-            tip.push_str(&format!("\n🌿 {b}"));
+            tip.push_str(&format!("\n{} {b}", icons::BRANCH));
         }
         if dirty {
             tip.push_str(&format!("\n{}", t!("{} changed files", tab.status.total())));
@@ -127,7 +128,7 @@ fn tabs(ui: &mut egui::Ui, bar: &Bar, lib: &mut Library, cmds: &mut Commands, ve
             }
             if resp.middle_clicked()
                 || ui
-                    .small_button("×")
+                    .small_button(icons::CLOSE)
                     .on_hover_text(t!("Close (Ctrl+W)"))
                     .clicked()
             {
@@ -135,7 +136,7 @@ fn tabs(ui: &mut egui::Ui, bar: &Bar, lib: &mut Library, cmds: &mut Commands, ve
             }
         });
     } else if ui
-        .small_button("+")
+        .small_button(icons::ADD)
         .on_hover_text(t!("New tab (Ctrl+T)"))
         .clicked()
     {
