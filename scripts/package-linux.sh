@@ -45,9 +45,7 @@ fi
 
 # Fedora / openSUSE
 if command -v cargo-generate-rpm >/dev/null; then
-    rm -rf target/rpm-out
-    cargo generate-rpm -p crates/ferrum-app -o target/rpm-out/
-    mv target/rpm-out/*.rpm "dist/$name.rpm"
+    cargo generate-rpm -p crates/ferrum-app -o "dist/$name.rpm"
 else
     missing cargo-generate-rpm "the .rpm"
 fi
