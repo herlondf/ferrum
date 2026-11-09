@@ -79,7 +79,8 @@ fn fetch_dialog_options_are_remembered() {
     let mut h = harness(p);
     frames(&mut h);
     // Alt+click opens the dialog instead of fetching.
-    h.get_by_label("🔄 Fetch").click_modifiers(Modifiers::ALT);
+    h.get_by_label(&crate::icons::text(crate::icons::FETCH, "Fetch"))
+        .click_modifiers(Modifiers::ALT);
     frames(&mut h);
     h.get_by_label("Prune remote branches that were deleted")
         .click();
@@ -91,7 +92,8 @@ fn fetch_dialog_options_are_remembered() {
 
     // A plain click fetches with the remembered options: nothing is pruned.
     git(remote.path(), &["branch", "-D", "gone"]);
-    h.get_by_label("🔄 Fetch").click();
+    h.get_by_label(&crate::icons::text(crate::icons::FETCH, "Fetch"))
+        .click();
     settle(&mut h);
     git(p, &["rev-parse", "--verify", "origin/gone"]);
     let last = crate::jobs::operations()
@@ -157,7 +159,8 @@ fn fast_forwards_the_selected_branches() {
     push_from_elsewhere(remote.path(), "feature", "f.txt");
     let mut h = harness(p);
     frames(&mut h);
-    h.get_by_label("🔄 Fetch").click();
+    h.get_by_label(&crate::icons::text(crate::icons::FETCH, "Fetch"))
+        .click();
     settle(&mut h);
     let main = h.state().tabs[0].current_branch().unwrap().ahead_behind;
     assert_eq!(main, Some((0, 1)), "the Pull button shows 1");

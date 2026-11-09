@@ -7,6 +7,7 @@ use eframe::egui;
 
 use crate::command::{Command, Commands};
 use crate::external::Launch;
+use crate::icons;
 use crate::prefs::{Prefs, ToolbarButton};
 
 /// The terminal and file manager toolbar buttons (each can be hidden in Settings).
@@ -19,7 +20,7 @@ pub fn toolbar_buttons(ui: &mut egui::Ui, prefs: &Prefs, repo: &Path, cmds: &mut
     ui.separator();
     if terminal
         && ui
-            .button(">_")
+            .add(icons::icon_button(icons::TERMINAL))
             .on_hover_text(t!("Open in terminal"))
             .clicked()
     {
@@ -27,7 +28,7 @@ pub fn toolbar_buttons(ui: &mut egui::Ui, prefs: &Prefs, repo: &Path, cmds: &mut
     }
     if files
         && ui
-            .button("📁")
+            .add(icons::icon_button(icons::FILE_MANAGER))
             .on_hover_text(t!("Show in file manager"))
             .clicked()
     {

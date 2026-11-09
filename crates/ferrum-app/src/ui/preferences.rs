@@ -49,7 +49,7 @@ pub fn appearance(ui: &mut egui::Ui, settings: &mut Settings) {
 
         ui.label(t!("Code font"));
         ui.horizontal(|ui| {
-            let builtin = t!("Built-in (Hack)");
+            let builtin = t!("Built-in ({})", crate::fonts::CODE_FONT_NAME);
             let current = if p.code_font.is_empty() {
                 builtin.clone()
             } else {
@@ -82,6 +82,16 @@ pub fn appearance(ui: &mut egui::Ui, settings: &mut Settings) {
         });
         ui.end_row();
 
+        ui.label(t!("Density"));
+        ui.horizontal(|ui| {
+            for d in crate::theme::Density::ALL {
+                ui.selectable_value(&mut p.density, d, d.label());
+            }
+        })
+        .response
+        .on_hover_text(t!("Row heights and padding"));
+        ui.end_row();
+
         ui.label(t!("Tab width"));
         ui.add(egui::Slider::new(&mut p.tab_width, 1..=8));
         ui.end_row();
@@ -101,9 +111,11 @@ pub fn appearance(ui: &mut egui::Ui, settings: &mut Settings) {
         ui.end_row();
     });
 
-    subheading(ui, t!("Toolbar buttons"));
+    subheading(ui, t!("Window"));
     ui.checkbox(&mut p.hide_menu_bar, t!("Hide the menu bar"))
         .on_hover_text(t!("F10 and Alt+letter only work while it is shown"));
+
+    subheading(ui, t!("Toolbar buttons"));
     ui.horizontal_wrapped(|ui| {
         for b in ToolbarButton::ALL {
             let mut shown = p.shows(b);

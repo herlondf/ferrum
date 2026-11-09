@@ -23,6 +23,7 @@ mod refs;
 mod repos;
 mod sidebar;
 mod sync;
+mod visual;
 
 pub static TABLES: &[&[(&str, &str)]] = &[
     activity::T,
@@ -46,4 +47,5 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     repos::T,
     sidebar::T,
     sync::T,
+    visual::T,
 ];

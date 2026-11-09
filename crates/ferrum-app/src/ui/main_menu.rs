@@ -410,12 +410,8 @@ fn view(ui: &mut egui::Ui, bar: &mut Bar, cmds: &mut Commands) {
     let spacer = egui::AtomExt::atom_size("", egui::vec2(14.0, 0.0));
     ui.menu_button((spacer, t!("Theme")), |ui| {
         let theme = &mut bar.settings.theme;
-        for (choice, label) in [
-            (ThemeChoice::System, t!("System")),
-            (ThemeChoice::Light, t!("Light")),
-            (ThemeChoice::Dark, t!("Dark")),
-        ] {
-            if ui.radio_value(theme, choice, label).clicked() {
+        for choice in ThemeChoice::ALL {
+            if ui.radio_value(theme, choice, choice.label()).clicked() {
                 ui.close();
             }
         }

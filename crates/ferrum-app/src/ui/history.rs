@@ -17,9 +17,6 @@ use crate::ui::history_options::{self, cmd};
 use crate::ui::{avatars, history_flow, issue_links};
 use crate::util::format_date;
 
-const ROW_HEIGHT: f32 = 24.0;
-/// Rows with the author and date on a second line (details beside the list).
-const TALL_ROW_HEIGHT: f32 = 40.0;
 const LANE_WIDTH: f32 = 14.0;
 /// Very wide graphs are clipped (Shift+wheel scrolls them) so the description stays readable.
 const MAX_GRAPH_LANES: usize = 10;
@@ -183,7 +180,10 @@ pub fn search_bar(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cmd
             .on_hover_text(t!("Recent searches"));
         }
         if !tab.history.search.is_empty()
-            && ui.small_button("×").on_hover_text(t!("Clear")).clicked()
+            && ui
+                .small_button(crate::icons::CLOSE)
+                .on_hover_text(t!("Clear"))
+                .clicked()
         {
             tab.history.search.clear();
             tab.history.content_hits = None;
@@ -297,7 +297,11 @@ pub fn commit_list(ui: &mut egui::Ui, tab: &mut RepoTab, settings: &Settings, cm
     keyboard_navigation(ui, tab);
     let hs = &settings.history;
     let tall = hs.vertical_layout && !hs.single_line_rows;
-    let row_height = if tall { TALL_ROW_HEIGHT } else { ROW_HEIGHT };
+    let row_height = if tall {
+        crate::theme::tall_row_height()
+    } else {
+        crate::theme::row_height()
+    };
     // The graph only makes sense for the full, unfiltered history.
     let filtered = tab.history.visible.is_some();
     let lanes = if filtered { 0 } else { tab.graph.width.max(1) };

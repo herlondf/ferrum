@@ -129,6 +129,10 @@ pub const SOURCES: &[&str] = &[
     include_str!("i18n/pt_br/hosted.rs"),
     include_str!("ui/main_menu.rs"),
     include_str!("i18n/pt_br/main_menu.rs"),
+    include_str!("theme.rs"),
+    include_str!("fonts.rs"),
+    include_str!("icons.rs"),
+    include_str!("i18n/pt_br/visual.rs"),
 ];
 
 pub fn git(dir: &Path, args: &[&str]) -> String {
@@ -358,7 +362,8 @@ fn create_branch_then_undo() {
     let dir = repo();
     let mut h = harness(dir.path());
     frames(&mut h);
-    h.get_by_label("🌿 Branch").click();
+    h.get_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
+        .click();
     frames(&mut h);
     // The dialog's name field has the focus (the history search box is also a text input).
     let field = h
@@ -416,10 +421,24 @@ fn discard_from_context_menu_asks_first() {
 #[test]
 fn ui_characters_have_glyphs() {
     let sources = SOURCES;
-    // The harness sets up fonts the same way the app does.
-    let harness = Harness::new_ui(|_| {});
+    // The app's fonts: Inter, JetBrains Mono, the Phosphor icons, then egui's.
+    let mut harness = Harness::new_ui(|_| {});
+    crate::fonts::install(&harness.ctx);
+    harness.run();
     let ctx = harness.ctx.clone();
     let mut missing: Vec<char> = Vec::new();
+    // Icons are private-use characters of the icon font, written as escapes.
+    for icon in crate::icons::ALL {
+        for c in icon.chars() {
+            let has = ctx.fonts_mut(|f| {
+                f.has_glyph(&eframe::egui::FontId::proportional(13.0), c)
+                    && f.has_glyph(&eframe::egui::FontId::monospace(12.0), c)
+            });
+            if !has && !missing.contains(&c) {
+                missing.push(c);
+            }
+        }
+    }
     for src in sources {
         // Skip comments: only string contents reach the screen.
         for line in src.lines().filter(|l| !l.trim_start().starts_with("//")) {
@@ -584,7 +603,8 @@ fn push_and_pull_through_the_toolbar() {
     let mut h = harness(p);
     frames(&mut h);
     // A plain click publishes main to origin and sets the upstream.
-    h.get_by_label("⬆ Push").click();
+    h.get_by_label(&crate::icons::text(crate::icons::PUSH, "Push"))
+        .click();
     settle(&mut h);
     assert_eq!(git(remote.path(), &["log", "--format=%s", "main"]), "first");
     assert_eq!(
@@ -602,7 +622,8 @@ fn push_and_pull_through_the_toolbar() {
     git(other.path(), &["commit", "-qm", "from someone else"]);
     git(other.path(), &["push", "-q"]);
 
-    h.get_by_label("⬇ Pull").click();
+    h.get_by_label(&crate::icons::text(crate::icons::PULL, "Pull"))
+        .click();
     settle(&mut h);
     assert_eq!(git(p, &["log", "-1", "--format=%s"]), "from someone else");
     assert!(p.join("b.txt").exists());
@@ -613,7 +634,8 @@ fn branch_names_get_spaces_replaced() {
     let dir = repo();
     let mut h = harness(dir.path());
     frames(&mut h);
-    h.get_by_label("🌿 Branch").click();
+    h.get_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
+        .click();
     frames(&mut h);
     let field = h
         .get_all_by_role(Role::TextInput)
@@ -634,16 +656,22 @@ fn toolbar_buttons_can_be_hidden() {
     let dir = repo();
     let mut h = harness(dir.path());
     frames(&mut h);
-    assert!(h.query_by_label("🌿 Branch").is_some());
-    assert!(h.query_by_label(">_").is_some());
+    assert!(
+        h.query_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
+            .is_some()
+    );
+    assert!(h.query_by_label(crate::icons::TERMINAL).is_some());
     h.state_mut().settings.prefs.hidden_toolbar = vec![
         crate::prefs::ToolbarButton::Branch,
         crate::prefs::ToolbarButton::Terminal,
     ];
     frames(&mut h);
-    assert!(h.query_by_label("🌿 Branch").is_none());
-    assert!(h.query_by_label(">_").is_none());
-    assert!(h.query_by_label("📁").is_some());
+    assert!(
+        h.query_by_label(&crate::icons::text(crate::icons::BRANCH, "Branch"))
+            .is_none()
+    );
+    assert!(h.query_by_label(crate::icons::TERMINAL).is_none());
+    assert!(h.query_by_label(crate::icons::FILE_MANAGER).is_some());
 }
 
 #[cfg(unix)]
@@ -757,7 +785,8 @@ fn cancel_a_running_fetch() {
     git(p, &["remote", "add", "origin", "ext::sleep 30"]);
     let mut h = harness(p);
     frames(&mut h);
-    h.get_by_label("🔄 Fetch").click();
+    h.get_by_label(&crate::icons::text(crate::icons::FETCH, "Fetch"))
+        .click();
     frames(&mut h);
     assert!(h.state().tabs[0].busy());
     h.get_by_label("✖").click();

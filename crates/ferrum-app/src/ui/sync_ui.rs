@@ -6,6 +6,7 @@ use ferrum_core::sync::PushRequest;
 use ferrum_core::{BranchInfo, BranchKind, RemoteInfo};
 
 use crate::command::{Command, Commands, Op};
+use crate::icons;
 use crate::prefs::ToolbarButton as Tb;
 use crate::settings::Settings;
 use crate::sync::SyncSettings;
@@ -74,7 +75,14 @@ pub fn toolbar(ui: &mut egui::Ui, tab: &RepoTab, settings: &Settings, cmds: &mut
     let show = |b| settings.prefs.shows(b);
     if show(Tb::Fetch) {
         let tip = t!("Fetch all remotes (Ctrl+Shift+F)");
-        let (run, open) = sync_button(ui, has_remote, "🔄 Fetch", 0, tip, more.clone());
+        let (run, open) = sync_button(
+            ui,
+            has_remote,
+            &icons::text(icons::FETCH, "Fetch"),
+            0,
+            tip,
+            more.clone(),
+        );
         if run {
             cmds.run(Op::Fetch { remote: None });
         }
@@ -88,7 +96,14 @@ pub fn toolbar(ui: &mut egui::Ui, tab: &RepoTab, settings: &Settings, cmds: &mut
         if behind > 0 {
             tip = format!("{tip}\n{}", t!("{} commits to pull", behind));
         }
-        let (run, open) = sync_button(ui, can, "⬇ Pull", behind, tip, more.clone());
+        let (run, open) = sync_button(
+            ui,
+            can,
+            &icons::text(icons::PULL, "Pull"),
+            behind,
+            tip,
+            more.clone(),
+        );
         if run {
             cmds.run(Op::Pull(settings.pull.mode()));
         }
@@ -101,7 +116,7 @@ pub fn toolbar(ui: &mut egui::Ui, tab: &RepoTab, settings: &Settings, cmds: &mut
         if ahead > 0 {
             tip = format!("{tip}\n{}", t!("{} commits to push", ahead));
         }
-        let (run, open) = sync_button(ui, can, "⬆ Push", ahead, tip, more);
+        let (run, open) = sync_button(ui, can, &icons::text(icons::PUSH, "Push"), ahead, tip, more);
         if run && let Some(op) = quick_push(tab, &settings.sync) {
             cmds.run(op);
         }

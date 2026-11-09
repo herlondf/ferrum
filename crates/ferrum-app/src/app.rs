@@ -13,6 +13,7 @@ mod parts;
 mod repos;
 
 use crate::command::{Command, Commands, DevStep, Op};
+use crate::icons;
 use crate::jobs::{Job, JobOutput, Refresh};
 use crate::settings::{STORAGE_KEY, Settings, ThemeChoice};
 use crate::tab::{Message, RepoTab, View};
@@ -97,9 +98,14 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "settings" if arg.is_empty() => out.push(Command::ShowSettings),
             // settings:appearance|git|tools|profiles|...
             "settings" => out.push(Command::DevStep(DevStep::SettingsSection(arg.into()))),
+            "density" => out.push(Command::DevStep(DevStep::Density(match arg {
+                "compact" => crate::theme::Density::Compact,
+                _ => crate::theme::Density::Comfortable,
+            }))),
             "theme" => out.push(Command::DevStep(DevStep::Theme(match arg {
                 "light" => ThemeChoice::Light,
                 "dark" => ThemeChoice::Dark,
+                "contrast" => ThemeChoice::HighContrast,
                 _ => ThemeChoice::System,
             }))),
             "palette" if arg.is_empty() => out.push(Command::ShowPalette),
@@ -328,7 +334,13 @@ impl FerrumApp {
     }
 
     fn apply_look(&mut self, ctx: &egui::Context) {
-        crate::prefs::apply(ctx, &self.settings.prefs);
+        let p = &self.settings.prefs;
+        crate::prefs::apply(ctx, p);
+        let accent = p
+            .system_accent
+            .then(|| crate::prefs::system_accent(ctx))
+            .flatten();
+        crate::theme::apply(ctx, self.settings.theme, p.density, accent);
         let want = (
             self.settings.theme,
             self.settings.zoom.clamp(0.6, 2.0),
@@ -341,7 +353,7 @@ impl FerrumApp {
         ctx.set_theme(match want.0 {
             ThemeChoice::System => egui::ThemePreference::System,
             ThemeChoice::Light => egui::ThemePreference::Light,
-            ThemeChoice::Dark => egui::ThemePreference::Dark,
+            ThemeChoice::Dark | ThemeChoice::HighContrast => egui::ThemePreference::Dark,
         });
         ctx.set_zoom_factor(want.1);
         self.applied = Some(want);
@@ -692,6 +704,7 @@ impl FerrumApp {
                     self.settings_window.select(&name);
                 }
                 DevStep::Theme(theme) => self.settings.theme = theme,
+                DevStep::Density(d) => self.settings.prefs.density = d,
                 DevStep::Menu(i) => crate::ui::main_menu::open(ctx, i),
                 DevStep::Palette(q) => self.palette.open_with(&q),
                 DevStep::Search(q) => {
@@ -863,7 +876,7 @@ impl FerrumApp {
                 ui.separator();
                 if show(Tb::Branch)
                     && ui
-                        .button("🌿 Branch")
+                        .button(icons::text(icons::BRANCH, "Branch"))
                         .on_hover_text(t!("New branch (Ctrl+Shift+B)"))
                         .clicked()
                 {
@@ -872,7 +885,7 @@ impl FerrumApp {
                 }
                 if show(Tb::Stash) {
                     let resp = ui
-                        .add_enabled(!tab.status.is_empty(), egui::Button::new("📦 Stash"))
+                        .add_enabled(!tab.status.is_empty(), icons::button(icons::STASH, "Stash"))
                         .on_hover_text(t!("Stash changes (Ctrl+Shift+S)\nCtrl/Alt+click: quick stash without the dialog"));
                     if resp.clicked() {
                         // Ctrl or Alt+click stashes everything right away.
@@ -902,7 +915,7 @@ impl FerrumApp {
                 }
                 if show(Tb::Undo) {
                     let undo = tab.undo.last().map(|u| u.label.clone());
-                    let resp = ui.add_enabled(undo.is_some(), egui::Button::new(t!("↩ Undo")));
+                    let resp = ui.add_enabled(undo.is_some(), icons::button(icons::UNDO, t!("Undo")));
                     if let Some(label) = undo
                         && resp.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
                     {
@@ -915,14 +928,14 @@ impl FerrumApp {
             crate::ui::activity::status_control(ui, tab, self.global_job.as_ref(), cmds);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .button("⚙")
+                    .add(icons::icon_button(icons::SETTINGS))
                     .on_hover_text(t!("Settings (Ctrl+,)"))
                     .clicked()
                 {
                     cmds.push(Command::ShowSettings);
                 }
                 if ui
-                    .button("⌘")
+                    .add(icons::icon_button(icons::COMMAND_PALETTE))
                     .on_hover_text(t!("Command palette (Ctrl+P)"))
                     .clicked()
                 {
@@ -975,8 +988,10 @@ impl FerrumApp {
                     let fresh = m.at.elapsed() < Duration::from_secs(10);
                     if m.error {
                         let first = m.text.lines().next().unwrap_or_default();
-                        let resp =
-                            ui.colored_label(ui.visuals().error_fg_color, format!("⚠ {first}"));
+                        let resp = ui.colored_label(
+                            ui.visuals().error_fg_color,
+                            icons::text(icons::WARNING, first),
+                        );
                         if m.text.lines().count() > 1 {
                             resp.on_hover_text(&m.text);
                         }
@@ -994,7 +1009,7 @@ impl FerrumApp {
                 history_options::filter_status(ui, tab, cmds);
                 let id = &tab.identity;
                 let who = match (&id.name, &id.email) {
-                    (Some(n), Some(e)) => format!("👤 {n} <{e}>"),
+                    (Some(n), Some(e)) => icons::text(icons::IDENTITY, format!("{n} <{e}>")),
                     _ => t!("👤 No identity"),
                 };
                 if ui
@@ -1011,7 +1026,7 @@ impl FerrumApp {
                     && let Some((a, bh)) = b.ahead_behind
                     && (a > 0 || bh > 0)
                 {
-                    ui.weak(format!("⬆{a} ⬇{bh}"));
+                    ui.weak(format!("{}{a} {}{bh}", icons::ARROW_UP, icons::ARROW_DOWN));
                 }
             });
         });

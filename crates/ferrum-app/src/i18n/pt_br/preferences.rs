@@ -16,7 +16,6 @@ pub static T: &[(&str, &str)] = &[
         "Internacional longa (5 de março de 2024 14:30)",
     ),
     ("Code font", "Fonte do código"),
-    ("Built-in (Hack)", "Embutida (Hack)"),
     ("Tab width", "Largura da tabulação"),
     ("Accent color", "Cor de destaque"),
     (

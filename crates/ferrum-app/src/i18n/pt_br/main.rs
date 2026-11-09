@@ -46,7 +46,6 @@ pub static T: &[(&str, &str)] = &[
         "Apply and delete the latest stash: {}",
         "Aplicar e remover o stash mais recente: {}",
     ),
-    ("↩ Undo", "↩ Desfazer"),
     ("Undo: {} (Ctrl+Z)", "Desfazer: {} (Ctrl+Z)"),
     ("Settings (Ctrl+,)", "Configurações (Ctrl+,)"),
     ("Command palette (Ctrl+P)", "Paleta de comandos (Ctrl+P)"),

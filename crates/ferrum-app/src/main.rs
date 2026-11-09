@@ -20,6 +20,7 @@ mod file_history_tests;
 mod flow;
 #[cfg(test)]
 mod flow_tests;
+mod fonts;
 #[cfg(test)]
 mod fork_tools_tests;
 #[cfg(test)]
@@ -28,6 +29,7 @@ mod hosted;
 #[cfg(test)]
 mod hosted_tests;
 mod icon;
+mod icons;
 mod jobs;
 mod keymap;
 #[cfg(test)]
@@ -50,10 +52,13 @@ mod sync;
 #[cfg(test)]
 mod sync_tests;
 mod tab;
+mod theme;
 mod ui;
 #[cfg(test)]
 mod ui_tests;
 mod util;
+#[cfg(test)]
+mod visual_tests;
 mod watcher;
 
 fn main() -> eframe::Result {

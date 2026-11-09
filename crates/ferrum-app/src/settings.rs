@@ -14,6 +14,26 @@ pub enum ThemeChoice {
     System,
     Light,
     Dark,
+    /// Dark with stronger contrast.
+    HighContrast,
+}
+
+impl ThemeChoice {
+    pub const ALL: [ThemeChoice; 4] = [
+        ThemeChoice::System,
+        ThemeChoice::Light,
+        ThemeChoice::Dark,
+        ThemeChoice::HighContrast,
+    ];
+
+    pub fn label(self) -> String {
+        match self {
+            ThemeChoice::System => t!("System"),
+            ThemeChoice::Light => t!("Light"),
+            ThemeChoice::Dark => t!("Dark"),
+            ThemeChoice::HighContrast => t!("High contrast"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]

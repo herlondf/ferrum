@@ -86,6 +86,7 @@ pub enum DevStep {
     Select(ferrum_core::DiffSource, String),
     Diff(String),
     Theme(crate::settings::ThemeChoice),
+    Density(crate::theme::Density),
     /// Open the command palette with a query.
     Palette(String),
     /// Open Settings at a section, e.g. "appearance".

@@ -133,6 +133,7 @@ pub struct Prefs {
     pub git_path: String,
     pub verbose_git: bool,
     pub hide_menu_bar: bool,
+    pub density: crate::theme::Density,
 }
 
 impl Default for Prefs {
@@ -150,6 +151,7 @@ impl Default for Prefs {
             git_path: String::new(),
             verbose_git: false,
             hide_menu_bar: false,
+            density: crate::theme::Density::Comfortable,
         }
     }
 }
@@ -197,7 +199,7 @@ pub fn default_merge() -> MergeMode {
     MergeChoice::ALL[usize::from(MERGE.load(Ordering::Relaxed)).min(3)].mode()
 }
 
-/// Publishes the preferences and applies fonts and accent color. Cheap when
+/// Publishes the preferences and applies the fonts (the theme: `theme::apply`). Cheap when
 /// nothing changed; called every frame.
 pub fn apply(ctx: &egui::Context, p: &Prefs) {
     let date = match p.date_format {
@@ -235,29 +237,9 @@ pub fn apply(ctx: &egui::Context, p: &Prefs) {
             font_data(ctx, &family).map(|f| f.map(|(data, index)| (family.clone(), data, index)))
         };
         if let Some(font) = font {
-            let mut defs = egui::FontDefinitions::default();
-            if let Some((name, data, index)) = font {
-                let key = format!("code:{name}");
-                let fd = egui::FontData::from_blob(data, index);
-                defs.font_data.insert(key.clone(), Arc::new(fd));
-                if let Some(list) = defs.families.get_mut(&egui::FontFamily::Monospace) {
-                    list.insert(0, key);
-                }
-            }
-            ctx.set_fonts(defs);
+            ctx.set_fonts(crate::fonts::definitions(font));
             applied.font = Some(family);
         }
-    }
-
-    // Accent color.
-    let accent = if p.system_accent {
-        system_accent(ctx)
-    } else {
-        None
-    };
-    if applied.accent != Some(accent) {
-        apply_accent(ctx, accent);
-        applied.accent = Some(accent);
     }
 
     if applied != before {
@@ -270,52 +252,6 @@ pub fn apply(ctx: &egui::Context, p: &Prefs) {
 struct Applied {
     git: Option<(String, bool)>,
     font: Option<String>,
-    accent: Option<Option<Color32>>,
-}
-
-fn apply_accent(ctx: &egui::Context, accent: Option<Color32>) {
-    for theme in [egui::Theme::Dark, egui::Theme::Light] {
-        let base = match theme {
-            egui::Theme::Dark => egui::Visuals::dark(),
-            egui::Theme::Light => egui::Visuals::light(),
-        };
-        ctx.style_mut_of(theme, |style| {
-            let v = &mut style.visuals;
-            match accent {
-                None => {
-                    v.selection = base.selection;
-                    v.hyperlink_color = base.hyperlink_color;
-                }
-                Some(c) => {
-                    let (fill, stroke, link) = accent_shades(c, theme == egui::Theme::Dark);
-                    v.selection.bg_fill = fill;
-                    v.selection.stroke.color = stroke;
-                    v.hyperlink_color = link;
-                }
-            }
-        });
-    }
-}
-
-/// Selection fill, selection text and link colors derived from an accent color.
-fn accent_shades(c: Color32, dark: bool) -> (Color32, Color32, Color32) {
-    let mix = |a: Color32, b: Color32, t: f32| {
-        let m = |x: u8, y: u8| (f32::from(x) * (1.0 - t) + f32::from(y) * t).round() as u8;
-        Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
-    };
-    if dark {
-        (
-            mix(c, Color32::BLACK, 0.45),
-            mix(c, Color32::WHITE, 0.8),
-            mix(c, Color32::WHITE, 0.35),
-        )
-    } else {
-        (
-            mix(c, Color32::WHITE, 0.6),
-            mix(c, Color32::BLACK, 0.6),
-            mix(c, Color32::BLACK, 0.2),
-        )
-    }
 }
 
 // ----- System fonts -----
@@ -433,11 +369,5 @@ mod tests {
         let p: Prefs = serde_json::from_str("{}").unwrap();
         assert_eq!(p, Prefs::default());
         assert!(p.shows(ToolbarButton::Fetch));
-    }
-
-    #[test]
-    fn accent_shades_keep_the_hue() {
-        let (fill, _, link) = accent_shades(Color32::from_rgb(0x35, 0x84, 0xe4), true);
-        assert!(fill.b() > fill.r() && link.b() > link.r());
     }
 }

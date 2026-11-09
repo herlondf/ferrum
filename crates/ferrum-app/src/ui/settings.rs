@@ -167,7 +167,7 @@ pub fn show(
 }
 
 fn heading(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).size(16.0).strong());
+    ui.label(crate::theme::strong(text).size(16.0));
     ui.add_space(6.0);
 }
 
@@ -189,12 +189,8 @@ fn general(ui: &mut egui::Ui, settings: &mut Settings) {
 
             ui.label(t!("Theme"));
             ui.horizontal(|ui| {
-                for (t, name) in [
-                    (ThemeChoice::System, t!("System")),
-                    (ThemeChoice::Light, t!("Light")),
-                    (ThemeChoice::Dark, t!("Dark")),
-                ] {
-                    ui.selectable_value(&mut settings.theme, t, name);
+                for t in ThemeChoice::ALL {
+                    ui.selectable_value(&mut settings.theme, t, t.label());
                 }
             });
             ui.end_row();

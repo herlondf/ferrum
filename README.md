@@ -6,10 +6,15 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
 
 ## Features
 
+- **Look**: Ferrum's own dark, light and high-contrast themes (or follow the
+  system), with a rust-orange accent (or the system accent color), rounded
+  corners, accent-colored main buttons in dialogs, and Compact / Comfortable
+  density (Settings > Appearance). Inter for the interface, JetBrains Mono for
+  code and Phosphor icons, all embedded (see `crates/ferrum-app/assets/fonts`).
 - **Main menu bar**: File, Edit, View, Repository, Window and Help, with every
   item's shortcut (from Settings > Shortcuts). F10 opens the first menu,
   Alt + the underlined letter opens a menu, Left / Right switch menus. It can be
-  hidden in Settings > Appearance.
+  hidden in Settings > Appearance > Window.
 - **Repository Manager** (start screen, and Ctrl+T in a new tab): known
   repositories in groups, rename (F2), remove from the list (Delete), open
   (Enter or double-click), Ctrl/Shift+click to select several, missing folders
@@ -314,6 +319,9 @@ it already; on Windows add `HKEY_CURRENT_USER\Software\Classes\x-github-client`
 
 - `crates/ferrum-core` — Git logic (libgit2 reads, git CLI writes), no UI code
 - `crates/ferrum-app` — desktop app (`egui`/`eframe`), binary `ferrum`
+- `crates/ferrum-app/assets/fonts` — embedded fonts (Inter and JetBrains Mono
+  under the OFL, Phosphor icons under MIT; licenses next to them), cut down by
+  `scripts/build-fonts.py`
 
 ## Building
 
@@ -359,7 +367,7 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   hosted services: `issues`, `settings:accounts`, `settings:ssh`,
   `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
-  `app/hosted.rs`).
+  `app/hosted.rs`; look: `theme:dark|light|contrast`, `density:compact`).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
