@@ -94,6 +94,8 @@ pub struct ChangesState {
 pub struct UndoEntry {
     pub label: String,
     pub ops: Vec<Op>,
+    /// Number of the job it undoes (see `timeline::TabTimeline`).
+    pub seq: u64,
 }
 
 pub struct RepoTab {
@@ -150,6 +152,8 @@ pub struct RepoTab {
     pub live: crate::refresh::Live,
     /// Automatic fetch (see `sync.rs`).
     pub sync: crate::sync::TabSync,
+    /// Restore points taken by this tab's jobs (see `timeline.rs`).
+    pub timeline: crate::timeline::TabTimeline,
 }
 
 impl RepoTab {
@@ -213,6 +217,7 @@ impl RepoTab {
             message: None,
             live: Default::default(),
             sync: Default::default(),
+            timeline: Default::default(),
         })
     }
 
@@ -458,6 +463,7 @@ impl RepoTab {
         }
         if let Some(entry) = self.undo.pop() {
             self.pending_undo = None;
+            self.timeline.forget(entry.seq);
             self.start(Op::Sequence(t!("Undo: {}", entry.label), entry.ops), ctx);
         }
     }
@@ -490,13 +496,15 @@ impl RepoTab {
 
     fn start_job(&mut self, op: Op, ctx: &egui::Context, background: bool) {
         let git = self.git.clone();
-        let is_commit = matches!(op, Op::Commit { .. });
+        let is_commit = matches!(crate::safety::inner(&op), Op::Commit { .. });
         let spec = JobSpec::new(op.label(), op.refresh())
             .repo(self.path())
             .background(background)
             .cancellable();
+        let (plan, slot) = self.timeline.begin(&op, background);
         let mut job = Job::start(spec, ctx, move |env| {
-            op.execute(&env.git(&git), &|l| env.progress(l))
+            let logged = env.git(&git);
+            crate::timeline::run_job(&op, plan, &git, &logged, &slot, &|l| env.progress(l))
         });
         job.is_commit = is_commit;
         self.job = Some(job);
@@ -523,6 +531,11 @@ impl RepoTab {
     pub fn poll_job(&mut self, ctx: &egui::Context) -> Option<JobOutput> {
         let result = self.job.as_ref()?.poll()?;
         let job = self.job.take()?;
+        let (seq, restored) = self.timeline.finished(&job.label);
+        if restored {
+            // Everything moved: the quick undo entries no longer apply.
+            self.undo.clear();
+        }
         // Reloads in the background; the state is read now for the undo check.
         self.request_refresh(job.refresh);
         self.state = self.repo.state();
@@ -533,6 +546,13 @@ impl RepoTab {
                 self.queue.clear();
                 self.info(t!("{} cancelled", job.label));
                 None
+            }
+            // Secrets found: nothing ran; the app asks what to do.
+            Ok(JobOutput::Secrets(mut held)) => {
+                self.pending_undo = None;
+                self.changes.committing = false;
+                held.ops.extend(self.queue.drain(..));
+                Some(JobOutput::Secrets(held))
             }
             // Shown in the activity window; no error in the status bar.
             Err(_) if job.background => None,
@@ -547,9 +567,10 @@ impl RepoTab {
                         self.refresh_status();
                     }
                 }
-                if let Some(entry) = self.pending_undo.take()
+                if let Some(mut entry) = self.pending_undo.take()
                     && self.state == RepoState::Clean
                 {
+                    entry.seq = seq;
                     self.undo.push(entry);
                 }
                 if job.refresh != Refresh::None {
@@ -614,6 +635,7 @@ impl RepoTab {
                 mode: ResetMode::Keep,
             }],
             Op::Flow(crate::flow::FlowOp::WithLocalChanges { op, .. }) => return self.undo_for(op),
+            Op::SecretCheck(c) => return self.undo_for(&c.op),
             Op::Checkout(_) | Op::CheckoutDetached(_) => vec![self.back_to_current()?],
             Op::CheckoutRemote { local, .. } => {
                 vec![
@@ -681,6 +703,7 @@ impl RepoTab {
         Some(UndoEntry {
             label: op.label(),
             ops,
+            seq: 0,
         })
     }
 

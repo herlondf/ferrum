@@ -39,6 +39,8 @@ pub enum JobOutput {
     SubmodulesOutOfDate(Vec<String>),
     /// Text to put on the clipboard (e.g. "Copy as patch").
     Clipboard(String),
+    /// A commit or push stopped because secrets were found (see `safety.rs`).
+    Secrets(Box<crate::safety::Held>),
 }
 
 pub type JobResult = Result<JobOutput, String>;

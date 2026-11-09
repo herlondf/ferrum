@@ -72,6 +72,7 @@ actions! {
     Pull = "pull", t!("Pull"), ["Mod+Shift+D"];
     Push = "push", t!("Push (dialog)"), ["Mod+Shift+U"];
     Undo = "undo", t!("Undo the last operation"), ["Mod+Z"];
+    Timeline = "operation_timeline", t!("Operation timeline (restore points)"), ["Mod+Alt+Z"];
     Terminal = "open_terminal", t!("Open in terminal"), ["Mod+Alt+T"];
     FileManager = "open_file_manager", t!("Show in file manager"), ["Mod+Alt+O"];
     CloseTab = "close_tab", t!("Close tab"), ["Mod+W"];
