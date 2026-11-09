@@ -177,7 +177,26 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   resolving several files with one side, images, LFS files and submodules (pick
   a side), and a diff of files resolved by hand or in a merge tool. A banner
   shows what is being merged or rebased (with links to the commits and rebase
-  progress), Continue / Skip / Abort, and undoes a resolution.
+  progress), Continue / Skip / Abort, and undoes a resolution. Progress, next /
+  previous unresolved conflict (Ctrl+Up / Ctrl+Down), an optional base column
+  (diff3 markers) and "all ours / all theirs" for the remaining conflicts.
+- **Structural diff**: the Structural toggle in the diff toolbar (remembered per
+  repository) compares the code as syntax trees, in the spirit of difftastic:
+  indentation, line breaks and other formatting do not count, changed tokens
+  are marked (comments and strings word by word) and moved code is shown in
+  blue. Works in local changes, commit details, compare and file history.
+  Built-in tree-sitter grammars: Rust, JavaScript, TypeScript/TSX, Python, Go,
+  Java, C, C++, C#, JSON, YAML, TOML, HTML, CSS and Markdown; other files and
+  files over 1 MiB keep the line diff.
+- **Semantic merge**: when a merge, rebase or cherry-pick stops with conflicts,
+  each conflicted file is merged declaration by declaration in the background
+  (functions, classes, `impl` blocks, struct fields, imports, JSON/YAML/TOML
+  keys…). Files it resolves are offered as "Resolved automatically — review",
+  with what it decided and a diff against each side; nothing is written or
+  staged until you use the result and mark the file as resolved. Real
+  conflicts get a one-line reason. If [mergiraf](https://mergiraf.org) is
+  installed it is tried too (it is GPL, so Ferrum runs it rather than linking
+  it). Both can be turned off in Settings > Tools.
 - **Local changes on checkout**: when a checkout would overwrite them (or
   always, in Settings), choose to stash and reapply, discard or keep them.
 - **Cherry-pick, revert, reset (soft/mixed/hard), move branch** from the commit
@@ -375,6 +394,11 @@ dev rust cargo clippy --all-targets
 
 Without the container, plain `cargo build` / `cargo test` work too.
 
+Each tree-sitter grammar is a cargo feature of `ferrum-core` (`lang-rust`,
+`lang-cpp`, `lang-csharp`…, all on by default through the app's
+`all-languages` feature). For a smaller binary, pick some:
+`cargo build --release --no-default-features --features ferrum-core/lang-rust,ferrum-core/lang-python`.
+
 CI builds and tests on Linux, Windows and macOS and uploads the installers as
 artifacts; pushing a `v*` tag publishes them as a GitHub release:
 
@@ -407,7 +431,8 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
   `app/hosted.rs`; branch drag and drop menu: `sidebar:drop:SRC>DST` (DST a
   branch or a remote); look: `theme:dark|light|contrast`, `density:compact`;
-  sample toasts: `toast:success|info|error`).
+  sample toasts: `toast:success|info|error`; structural diff in every
+  repository: `diff:structural`; conflict editor: `conflict:PATH`).
 - `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 - `FERRUM_HOVER=X,Y` moves the pointer there once, to screenshot hover states
   (tooltips, the commit preview card).

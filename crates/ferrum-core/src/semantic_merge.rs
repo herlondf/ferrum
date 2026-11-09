@@ -805,7 +805,12 @@ pub mod mergiraf {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(
+    test,
+    feature = "lang-rust",
+    feature = "lang-python",
+    feature = "lang-json"
+))]
 mod tests {
     use super::*;
     use crate::testutil::TestRepo;
@@ -947,6 +952,32 @@ mod tests {
         let (base, ours, theirs) = versions(&t, "src/lib.rs");
         let r = merge("src/lib.rs", base.as_deref(), &ours, &theirs);
         assert_eq!(r, Err(Failure::Conflict("fn main()".into())));
+    }
+
+    /// The mergiraf command line: `merge BASE OURS THEIRS -o OUT ...`, exit 0
+    /// when clean. A stand-in script checks it.
+    #[cfg(unix)]
+    #[test]
+    fn runs_mergiraf() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let fake = |name: &str, status: u8| {
+            let p = dir.path().join(name);
+            let script = format!(
+                "#!/bin/sh\n[ \"$1\" = merge ] && [ \"$5\" = -o ] || exit 9\ncat \"$3\" \"$4\" > \"$6\"\nexit {status}\n"
+            );
+            std::fs::write(&p, script).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            p
+        };
+        let clean = fake("clean", 0);
+        let out = mergiraf::merge(&clean, "src/a.rs", "b\n", "o\n", "t\n").unwrap();
+        assert_eq!(out.as_deref(), Some("o\nt\n"));
+        let conflicted = fake("conflicted", 1);
+        assert_eq!(
+            mergiraf::merge(&conflicted, "a.rs", "", "o\n", "t\n").unwrap(),
+            None
+        );
     }
 
     #[test]

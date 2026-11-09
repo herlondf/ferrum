@@ -11,7 +11,7 @@ repository = "https://github.com/herlondf/ferrum"
 eframe = { version = "0.37.0", features = ["persistence"] }
 egui_commonmark = { version = "0.26.0", default-features = false, features = ["pulldown_cmark"] }
 egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
-ferrum-core = { version = "0.1.0", path = "../ferrum-core" }
+ferrum-core = { version = "0.1.0", path = "../ferrum-core", default-features = false }
 hayro = "0.9.0"
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "ico", "tga"] }
 notify = "8"
@@ -25,6 +25,12 @@ syntect = { version = "5.3.0", default-features = false, features = ["default-fa
 sys-locale = "0.3.2"
 fontdb = "0.23.0"
 serde_json = "1.0.154"
+
+[features]
+# The tree-sitter grammars of the structural diff and semantic merge. For a
+# smaller binary: --no-default-features --features ferrum-core/lang-rust,...
+default = ["all-languages"]
+all-languages = ["ferrum-core/default"]
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 zbus = "5.19.0"

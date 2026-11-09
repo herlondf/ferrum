@@ -318,7 +318,7 @@ pub fn banner_hint(ui: &mut egui::Ui, tab: &RepoTab) -> Option<String> {
 /// Settings > Tools: structural diff and semantic merge.
 pub fn settings_block(ui: &mut egui::Ui, prefs: &mut diff_prefs::DiffPrefs) {
     ui.add_space(crate::theme::SPACE_XL);
-    ui.label(crate::theme::strong(t!("Structural diff and semantic merge")).size(15.0));
+    ui.label(crate::theme::strong(t!("Structural diff and semantic merge")).size(16.0));
     ui.add_space(crate::theme::SPACE_S);
     let langs: Vec<&str> = ferrum_core::syntax::available()
         .iter()

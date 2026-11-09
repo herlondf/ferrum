@@ -720,7 +720,12 @@ fn align(a: &Tree, b: &Tree, old: &Side, new: &Side, pairs: &[(u32, u32)]) -> Ve
     rows
 }
 
-#[cfg(test)]
+#[cfg(all(
+    test,
+    feature = "lang-rust",
+    feature = "lang-python",
+    feature = "lang-json"
+))]
 mod tests {
     use super::*;
 

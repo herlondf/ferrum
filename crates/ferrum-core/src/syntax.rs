@@ -178,7 +178,7 @@ pub(crate) fn is_prose(node: &Node) -> bool {
     is_comment(node) || k.contains("string") || k == "inline" || k == "text"
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "lang-rust"))]
 mod tests {
     use super::*;
 
@@ -188,7 +188,7 @@ mod tests {
         assert_eq!(Lang::from_path("a/b/App.TSX"), Some(Lang::Tsx));
         assert_eq!(Lang::from_path("Makefile"), None);
         assert_eq!(Lang::from_path("notes.txt"), None);
-        assert_eq!(available().len(), Lang::ALL.len());
+        assert!(available().contains(&Lang::Rust));
         for lang in available() {
             assert!(parse(lang, "").is_some(), "{}", lang.name());
         }
