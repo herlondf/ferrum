@@ -23,11 +23,19 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   each remembering its own tabs, switched from the manager or the command
   palette ("Workspace: …"), shown in the window title. **Open Quickly**
   (Ctrl+Shift+O) searches every known, recent and scanned repository.
-- **Tabs**: reopen closed tabs (Ctrl+Shift+T), middle-click to close, a dot for
-  uncommitted changes, same-named tabs show the folder that tells them apart (a
-  worktree shows "repo (worktree)"), and a menu with Close Others/All, Rename,
-  Color, Open in terminal, Show in file manager, Open in new window, Repository
-  settings and Move to workspace; optionally a vertical tab list.
+- **Toolbar** like Fork's: large buttons with the label underneath, in groups
+  (Fetch / Pull / Push, Branch / Stash / Pop, Undo, Terminal / Folder), with
+  the commits to pull and to push as badges on Pull and Push and a spinner on
+  the button whose operation runs. When the window is too narrow the labels
+  hide and only the icons stay. Buttons can be hidden in Settings.
+- **Tabs**: real tabs attached to the view, showing the repository color, the
+  current branch and a dot for uncommitted changes; × on hover (always on the
+  active tab); the strip scrolls when there are many tabs; drag a tab to move
+  it. Reopen closed tabs (Ctrl+Shift+T), middle-click to close, same-named tabs
+  show the folder that tells them apart (a worktree shows "repo (worktree)"),
+  and a menu with Close Others/All, Rename, Color, Open in terminal, Show in
+  file manager, Open in new window, Repository settings and Move to workspace;
+  optionally a vertical tab list (name and branch per row).
 - **Repository overview** (sidebar > Overview): the rendered README, remotes and
   counts of commits, contributors, branches and tags, and the size on disk.
 - **Opening**: drop a folder on the window (`git init` is offered when it is not
@@ -212,11 +220,18 @@ A fast, cross-platform Git client written in Rust, inspired by Fork and GitKrake
   `.ferrum/custom-commands.json` (same format as "Copy as JSON"); each shared
   command shows its text and asks for approval before its first run, and again
   when it changes.
-- **Status and activity**: the toolbar shows the repository, branch,
-  ahead/behind and the running operation with its progress; a click opens the
+- **Status bar**: the current branch (a click opens quick checkout) with its
+  upstream and ahead/behind, the repository state (merging, rebasing,
+  bisecting…), the running operation with a spinner, its progress and a cancel
+  button, the graph filter, the last fetch time and the author identity (a
+  click edits it). The pulse button and the running operation open the
   **Activity** window with every operation, the exact git commands, their
   output and result (user and background operations apart). Running
   operations (fetch, pull, push, clone…) can be cancelled.
+- **Toasts**: finished operations say what they did in the bottom-right corner
+  ("Pushed 3 commits to origin/main", "Fetched 2 remotes") and fade out (not
+  while hovered); errors stay until dismissed, with Copy (and Delete the lock
+  file when git left one behind).
 - **Live refresh** without freezing: the working folder is watched for
   changes (or polled at a set interval), reloads run in the background, and
   long operations that finish while the window is in the background raise a
@@ -294,7 +309,9 @@ in Settings > Shortcuts. Defaults:
 | Collapse / expand the selected merge | Left / Right |
 | Main menu: open the first menu / a menu / switch menus | F10 / Alt+letter / Left, Right |
 | Stage / unstage selected files | Enter (Ctrl/Shift-click to select several) |
-| Fetch / Pull / Push with options | Alt+click or right-click the toolbar button |
+| Fetch / Pull / Push with options | Alt+click, right-click or ⏷ on the toolbar button |
+| Quick stash (no dialog) | Ctrl/Alt+click Stash in the toolbar |
+| Move a tab / close a tab | Drag it / middle-click or × |
 | Compare two commits / select several | Ctrl+click / Shift+click |
 | Move between sidebar, commit list and details | Tab / Shift+Tab |
 | Sidebar: move, open/close, check out, select | Arrows, Home/End, Enter, Space |
@@ -367,7 +384,9 @@ artifacts; pushing a `v*` tag publishes them as a GitHub release:
   hosted services: `issues`, `settings:accounts`, `settings:ssh`,
   `hosted:askpass[=PROMPT]`, `hosted:review=BASE..HEAD`, `hosted:ssh-setup`,
   `hosted:trust=HOST`, `hosted:notifications`, `hosted:new-issue`, see
-  `app/hosted.rs`; look: `theme:dark|light|contrast`, `density:compact`).
+  `app/hosted.rs`; look: `theme:dark|light|contrast`, `density:compact`;
+  sample toasts: `toast:success|info|error`).
+- `FERRUM_WINDOW_SIZE=1000x700` sets the first window size (narrow layouts).
 
 - `FERRUM_TIMING=1` prints how long reloading a repository takes.
 - `ferrum --benchmark <repo> [runs]` times each reload step (branches, commits,
