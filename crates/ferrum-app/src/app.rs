@@ -120,7 +120,9 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "activity" => out.push(Command::ShowActivity),
             "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
             "toast" => out.push(Command::DevStep(DevStep::Toast(step.into()))),
-            "timeline" | "restore" | "learning" | "secrets" => out.push(safety::dev_command(step)),
+            "timeline" | "restore" | "learning" | "secrets" | "discard-all" => {
+                out.push(safety::dev_command(step))
+            }
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
             "collapse-all" => out.push(history_options::cmd(|t, _| {

@@ -180,7 +180,8 @@ impl FerrumApp {
     }
 
     /// `FERRUM_START` steps: `timeline`, `restore:N` (N-th point),
-    /// `learning`, `secrets:scan` (the warning for the staged changes).
+    /// `learning`, `secrets:scan` (the warning for the staged changes),
+    /// `discard-all` (discards the unstaged changes: a point and its toast).
     fn safety_dev_step(&mut self, step: &str, ctx: &egui::Context) {
         let (cmd, arg) = step.split_once(':').unwrap_or((step, ""));
         let Some(t) = self.tabs.get(self.active) else {
@@ -189,6 +190,11 @@ impl FerrumApp {
         match cmd {
             "timeline" => self.safety.timeline.open = true,
             "learning" => self.settings.safety.learning = true,
+            // Discards every unstaged change: a restore point and its toast.
+            "discard-all" => {
+                let files = t.status.unstaged.clone();
+                self.handle(Command::Run(Op::Discard(files)), ctx);
+            }
             "restore" => {
                 let n = arg.parse::<usize>().unwrap_or(0);
                 let points = restore::list(&t.repo).unwrap_or_default();
