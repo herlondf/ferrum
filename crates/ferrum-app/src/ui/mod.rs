@@ -71,4 +71,5 @@ pub mod tabs;
 pub mod toasts;
 pub mod toolbar;
 pub mod tools;
+pub mod updater;
 pub mod worktrees;

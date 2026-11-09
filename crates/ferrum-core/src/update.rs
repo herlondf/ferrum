@@ -1,4 +1,5 @@
-//! Looks for a newer Ferrum release on GitHub. Only tells; never downloads.
+//! Looks for a newer Ferrum release on GitHub. Installing it is up to
+//! `self_update`, and only when the user asks.
 
 use std::time::Duration;
 
@@ -13,6 +14,17 @@ pub struct Release {
     pub version: String,
     /// The release page.
     pub url: String,
+    /// The files attached to the release.
+    pub assets: Vec<Asset>,
+}
+
+/// A file attached to a release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asset {
+    pub name: String,
+    /// Direct download link.
+    pub url: String,
+    pub size: u64,
 }
 
 /// The latest release of `owner/name` on GitHub.
@@ -37,9 +49,23 @@ pub fn latest_release(repo: &str) -> Result<Release> {
 fn parse_release(body: &Value) -> Option<Release> {
     let tag = body.get("tag_name")?.as_str()?;
     let url = body.get("html_url")?.as_str()?;
+    let assets = body
+        .get("assets")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|a| {
+            Some(Asset {
+                name: a.get("name")?.as_str()?.to_owned(),
+                url: a.get("browser_download_url")?.as_str()?.to_owned(),
+                size: a.get("size").and_then(Value::as_u64).unwrap_or(0),
+            })
+        })
+        .collect();
     Some(Release {
         version: tag.trim_start_matches(['v', 'V']).to_owned(),
         url: url.to_owned(),
+        assets,
     })
 }
 
@@ -87,9 +113,16 @@ mod tests {
         let body = serde_json::json!({
             "tag_name": "v0.3.1",
             "html_url": "https://github.com/herlondf/ferrum/releases/tag/v0.3.1",
+            "assets": [{
+                "name": "SHA256SUMS",
+                "browser_download_url": "https://example.com/SHA256SUMS",
+                "size": 400,
+            }],
         });
         let r = parse_release(&body).unwrap();
         assert_eq!(r.version, "0.3.1");
+        assert_eq!(r.assets[0].name, "SHA256SUMS");
+        assert_eq!(r.assets[0].size, 400);
         assert!(r.url.ends_with("v0.3.1"));
         assert!(parse_release(&serde_json::json!({"message": "Not Found"})).is_none());
     }

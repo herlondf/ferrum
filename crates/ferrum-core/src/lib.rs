@@ -30,6 +30,7 @@ pub mod patch;
 pub mod rebase;
 pub mod refs;
 mod repo;
+pub mod self_update;
 pub mod shell;
 pub mod ssh;
 pub mod stats;

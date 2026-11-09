@@ -61,6 +61,8 @@ mod theme;
 mod ui;
 #[cfg(test)]
 mod ui_tests;
+#[cfg(test)]
+mod update_tests;
 mod util;
 #[cfg(test)]
 mod views_tests;

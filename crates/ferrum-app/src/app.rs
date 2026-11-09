@@ -68,7 +68,8 @@ pub struct FerrumApp {
 /// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
 /// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
 /// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`),
-/// `toast:success|info|error` (see `toasts::dev_step`).
+/// `toast:success|info|error` (see `toasts::dev_step`),
+/// `update:appimage|windows|mac|script|flatpak` (the update window).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -116,6 +117,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "activity" => out.push(Command::ShowActivity),
             "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
             "toast" => out.push(Command::DevStep(DevStep::Toast(step.into()))),
+            "update" => out.push(Command::DevStep(DevStep::Update(arg.into()))),
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
             "collapse-all" => out.push(history_options::cmd(|t, _| {
@@ -714,6 +716,12 @@ impl FerrumApp {
                 DevStep::Density(d) => self.settings.prefs.density = d,
                 DevStep::Menu(i) => crate::ui::main_menu::open(ctx, i),
                 DevStep::Toast(step) => crate::ui::toasts::dev_step(&mut self.toasts, &step),
+                DevStep::Update(kind) => {
+                    let v = "9.9.9";
+                    let url = "https://github.com/herlondf/ferrum/releases";
+                    self.settings.background.update_available = Some((v.into(), url.into()));
+                    self.bg.updater.dev(&kind);
+                }
                 DevStep::Palette(q) => self.palette.open_with(&q),
                 DevStep::Search(q) => {
                     if let Some(t) = self.tab() {
@@ -1108,6 +1116,7 @@ impl eframe::App for FerrumApp {
 
         self.repo_windows(&ctx, &mut cmds);
         self.show_activity(&ctx);
+        self.show_updater(&ctx);
         crate::ui::custom_commands::output_window(&ctx);
         crate::ui::file_window::show_all(&ctx, &mut self.tabs, self.active, &mut cmds);
         self.hosted_windows(&ctx, &mut cmds);

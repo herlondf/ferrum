@@ -19,6 +19,7 @@ pub struct State {
     pub activity: activity::ActivityWindow,
     update: Option<Receiver<Result<update::Release, String>>>,
     update_started: bool,
+    pub updater: crate::ui::updater::Updater,
 }
 
 fn now() -> u64 {
@@ -107,9 +108,15 @@ impl FerrumApp {
                 .label_shown(labels);
             let tip = format!("{}\n{url}", t!("Version {} available", version));
             if tool.show(ui).main.on_hover_text(tip).clicked() {
-                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                crate::ui::updater::request_open(ui.ctx());
             }
         }
+    }
+
+    /// The "Update Ferrum" window (download, install, restart).
+    pub(super) fn show_updater(&mut self, ctx: &egui::Context) {
+        let available = self.settings.background.update_available.as_ref();
+        crate::ui::updater::show(ctx, &mut self.bg.updater, available, RELEASES);
     }
 
     pub(super) fn show_activity(&mut self, ctx: &egui::Context) {
