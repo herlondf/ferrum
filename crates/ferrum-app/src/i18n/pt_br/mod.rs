@@ -27,6 +27,7 @@ mod stacks;
 mod structural;
 mod sync;
 mod toolbar;
+mod update;
 mod ux;
 mod views;
 mod visual;
@@ -57,6 +58,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     sync::T,
     toolbar::T,
     views::T,
+    update::T,
     ux::T,
     structural::T,
     visual::T,

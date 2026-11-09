@@ -18,7 +18,8 @@ finish-args:
   - --filesystem=home
   - --socket=ssh-auth
   - --talk-name=org.freedesktop.Notifications
-  - --talk-name=org.freedesktop.secrets
+  # "Show in file manager" selects the file through this D-Bus service.
+  - --talk-name=org.freedesktop.FileManager1
 modules:
   # The runtime has no git command line; Ferrum writes through it.
   - name: git

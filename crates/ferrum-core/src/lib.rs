@@ -35,6 +35,7 @@ pub mod refs;
 mod repo;
 pub mod restore;
 pub mod secrets;
+pub mod self_update;
 pub mod semantic_merge;
 pub mod shell;
 pub mod ssh;

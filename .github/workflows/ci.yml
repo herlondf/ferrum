@@ -54,38 +54,82 @@ jobs:
           # The oldest supported Ubuntu, so the binaries run on older glibc too.
           - { os: ubuntu-22.04, name: linux-x86_64 }
           - { os: windows-latest, name: windows-x86_64 }
-          - { os: macos-latest, name: macos-arm64 }
+          - { os: macos-latest, name: macos-universal }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release -p ferrum
 
-      - name: Package (.deb, .rpm, AppImage, tarball)
+      # The packaging scripts are the same ones a release workflow calls;
+      # STRICT / -Strict makes a missing packaging tool an error.
+      - name: Package (tar.gz, .deb, .rpm, AppImage)
         if: runner.os == 'Linux'
         run: |
+          cargo build --release --locked -p ferrum
           cargo install --locked cargo-deb cargo-generate-rpm
           sudo curl -sSfL -o /usr/local/bin/appimagetool \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           sudo chmod +x /usr/local/bin/appimagetool
-          scripts/package-linux.sh
-      - name: Package (Ferrum.app)
-        if: runner.os == 'macOS'
-        run: scripts/package-macos.sh
-      - name: Package (zip)
+          STRICT=1 scripts/package-linux.sh
+      - name: Package (zip, installer)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path target/release/ferrum.exe, README.md, LICENSE-MIT, LICENSE-APACHE `
-            -DestinationPath "dist/Ferrum-$version-windows-x86_64.zip"
+          cargo build --release --locked -p ferrum
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          scripts/package-windows.ps1 -Strict
+      - name: Package (universal .dmg and .zip)
+        if: runner.os == 'macOS'
+        run: scripts/package-macos.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: ferrum-${{ matrix.name }}
           path: dist/*
+          if-no-files-found: error
+
+  # Checks the Linux metadata and makes the Flatpak's offline crate sources.
+  flatpak-sources:
+    name: Flatpak sources and metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq appstream desktop-file-utils python3-aiohttp python3-tomlkit
+      - run: desktop-file-validate packaging/linux/ferrum.desktop
+      - run: appstreamcli validate --no-net --explain packaging/linux/io.github.herlondf.Ferrum.metainfo.xml
+      - name: cargo-sources.json
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/flatpak-cargo-generator.py" \
+            https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          python3 "$RUNNER_TEMP/flatpak-cargo-generator.py" Cargo.lock -o packaging/flatpak/cargo-sources.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak/cargo-sources.json
+
+  flatpak:
+    name: Flatpak
+    needs: flatpak-sources
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-49
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: ferrum-linux-x86_64.flatpak
+          manifest-path: packaging/flatpak/io.github.herlondf.Ferrum.yml
+          cache-key: flatpak-builder-${{ hashFiles('Cargo.lock') }}
 
   release:
     name: Release
@@ -95,10 +139,23 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
+          pattern: ferrum-*
           path: dist
           merge-multiple: true
+      - name: Checksums and package manager manifests
+        run: |
+          scripts/checksums.sh dist
+          python3 scripts/release-manifests.py "${GITHUB_REF_NAME#v}" dist "$RUNNER_TEMP/manifests"
+      # winget, Scoop, Homebrew and Flathub files, to submit by hand (docs/RELEASING.md).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manifests
+          path: ${{ runner.temp }}/manifests
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

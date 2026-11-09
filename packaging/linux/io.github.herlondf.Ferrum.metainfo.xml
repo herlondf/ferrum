@@ -24,9 +24,28 @@
     </ul>
   </description>
   <launchable type="desktop-id">ferrum.desktop</launchable>
-  <url type="homepage">https://github.com/herlondf/ferrum</url>
+  <url type="homepage">https://herlondf.github.io/ferrum/</url>
   <url type="bugtracker">https://github.com/herlondf/ferrum/issues</url>
   <url type="vcs-browser">https://github.com/herlondf/ferrum</url>
+  <url type="translate">https://github.com/herlondf/ferrum/tree/main/crates/ferrum-app/src/i18n</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The history graph with commit details and a diff</caption>
+      <image type="source" width="1440" height="900">https://raw.githubusercontent.com/herlondf/ferrum/main/site/assets/screenshots/history-en-dark.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Staging single lines in the local changes view</caption>
+      <image type="source" width="1440" height="900">https://raw.githubusercontent.com/herlondf/ferrum/main/site/assets/screenshots/changes-en-light.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>A side-by-side diff in the large view</caption>
+      <image type="source" width="1440" height="900">https://raw.githubusercontent.com/herlondf/ferrum/main/site/assets/screenshots/diff-en-dark.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#f6c6a6</color>
+    <color type="primary" scheme_preference="dark">#6b2f12</color>
+  </branding>
   <categories>
     <category>Development</category>
     <category>RevisionControl</category>
@@ -47,6 +66,17 @@
   </supports>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="0.1.0" date="2026-11-06"/>
+    <release version="0.1.0" date="2026-11-06">
+      <description>
+        <p>First release.</p>
+        <ul>
+          <li>History graph, commit details, diffs and blame</li>
+          <li>Staging of files, hunks and lines; commit, amend and push</li>
+          <li>Interactive rebase, three-way conflict resolver and undo</li>
+          <li>GitHub, GitLab, Bitbucket, Azure DevOps and Gitea pull requests and issues</li>
+          <li>Dark, light and high-contrast themes; English and Brazilian Portuguese</li>
+        </ul>
+      </description>
+    </release>
   </releases>
 </component>

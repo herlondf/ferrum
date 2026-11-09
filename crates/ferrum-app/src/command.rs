@@ -101,6 +101,8 @@ pub enum DevStep {
     Menu(usize),
     /// `toast:success|info|error`: a sample toast (see `toasts::dev_step`).
     Toast(String),
+    /// `update:appimage|windows|mac|script|flatpak`: the update window.
+    Update(String),
 }
 
 /// Collects commands while the UI is drawn.

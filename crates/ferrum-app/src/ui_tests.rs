@@ -23,6 +23,8 @@ pub const SOURCES: &[&str] = &[
     include_str!("ui/activity.rs"),
     include_str!("ui/background.rs"),
     include_str!("app/background.rs"),
+    include_str!("ui/updater.rs"),
+    include_str!("i18n/pt_br/update.rs"),
     include_str!("desktop_notify.rs"),
     include_str!("jobs.rs"),
     include_str!("refresh.rs"),
