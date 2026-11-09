@@ -142,11 +142,14 @@ impl Insights {
     }
 }
 
-/// Bucket width for a period of `span` seconds: weeks up to about half a
-/// year, then months, then wider so there are at most ~60 bars.
+/// Bucket width for a period of `span` seconds: days up to six weeks, weeks
+/// up to about half a year, then months, then wider so there are at most
+/// ~60 bars.
 pub fn bucket_days(span: i64) -> i64 {
     let days = (span / DAY).max(1);
-    if days <= 190 {
+    if days <= 45 {
+        1
+    } else if days <= 190 {
         7
     } else if days <= 30 * 60 {
         30
@@ -354,7 +357,8 @@ fn buckets(out: &mut Insights, events: &[(i64, usize, u64, u64)], opts: &Options
     let Some(oldest) = events.iter().map(|e| e.0).min() else {
         return;
     };
-    let start = opts.since.unwrap_or(oldest).min(oldest).max(0);
+    // From the oldest commit read (a young repository fills the chart).
+    let start = oldest.max(0);
     let width_days = bucket_days(opts.now - start);
     let width = width_days * DAY;
     let count = (((opts.now - start).max(0) / width) + 1) as usize;
@@ -484,7 +488,8 @@ mod tests {
         let t = TestRepo::new();
         let ins = compute(t.path(), &Options::default(), &AtomicBool::new(false)).unwrap();
         assert_eq!(ins.commits, 0);
-        assert_eq!(bucket_days(30 * DAY), 7);
+        assert_eq!(bucket_days(30 * DAY), 1);
+        assert_eq!(bucket_days(90 * DAY), 7);
         assert_eq!(bucket_days(365 * DAY), 30);
         assert!(bucket_days(20 * 365 * DAY) >= 90);
         assert!(20 * 365 / bucket_days(20 * 365 * DAY) <= 61);

@@ -54,7 +54,9 @@ impl BigFile {
     pub fn advice(&self) -> Advice {
         if !self.in_head {
             Advice::Remove
-        } else if looks_binary(&self.path) || self.size >= 5 * 1024 * 1024 {
+        } else if looks_binary(&self.path) && self.size >= 256 * 1024
+            || self.size >= 5 * 1024 * 1024
+        {
             Advice::Lfs
         } else {
             Advice::Keep
@@ -438,7 +440,12 @@ mod tests {
         assert_eq!(big.advice(), Advice::Remove);
         assert_eq!(list[1].path, "mid.png");
         assert!(list[1].in_head);
-        assert_eq!(list[1].advice(), Advice::Lfs);
+        assert_eq!(list[1].advice(), Advice::Keep, "small images are fine");
+        let big_png = BigFile {
+            size: 300 * 1024,
+            ..list[1].clone()
+        };
+        assert_eq!(big_png.advice(), Advice::Lfs);
         assert_eq!(lfs_pattern("a/b.png"), "*.png");
         assert!(largest_files(&TestRepo::new().git, 5).unwrap().is_empty());
     }
