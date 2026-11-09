@@ -81,6 +81,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             }
             if ui.button("↻").on_hover_text(t!("Reload")).clicked() {
                 tab.overview.reset();
+                crate::ui::readme_images::forget(ui.ctx());
             }
         });
     });
@@ -93,27 +94,120 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
             egui::ScrollArea::vertical().show(ui, |ui| facts(ui, tab, cmds));
         });
     egui::CentralPanel::default_margins().show(ui, |ui| {
+        let root = tab.path().to_path_buf();
         let st = &mut tab.overview;
         match &st.readme {
             Some(Some((name, text))) => {
-                ui.weak(name.as_str());
+                ui.label(crate::icons::text(crate::icons::FILE_TEXT, name));
                 ui.separator();
                 let cache = st.markdown.get_or_insert_with(Default::default);
+                // Relative image paths are read from the repository.
+                crate::ui::readme_images::install(ui.ctx());
+                let dir = std::path::Path::new(name.as_str())
+                    .parent()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let prefix = crate::ui::readme_images::uri_prefix(&root, &dir);
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
-                        egui_commonmark::CommonMarkViewer::new().show(ui, cache, text);
+                        egui_commonmark::CommonMarkViewer::new()
+                            .default_implicit_uri_scheme(prefix)
+                            .max_image_width(Some(ui.available_width() as usize))
+                            .show(ui, cache, text);
                     });
             }
             _ => {
-                ui.add_space(20.0);
-                ui.weak(t!("This repository has no README."));
+                crate::ui::empty_state::show(
+                    ui,
+                    crate::icons::FILE_DASHED,
+                    &t!("This repository has no README."),
+                    &t!("Add a README.md to describe the project; it will show up here."),
+                    |_| {},
+                );
             }
         }
     });
 }
 
+/// Commits per week over the last year, as bars.
+fn activity(ui: &mut egui::Ui, weeks: &[u32]) {
+    use eframe::egui::{Rect, Sense, pos2, vec2};
+    let total: u32 = weeks.iter().sum();
+    let max = weeks.iter().copied().max().unwrap_or(0).max(1);
+    ui.horizontal(|ui| {
+        ui.label(crate::theme::strong(t!("Activity")));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.weak(t!("last 12 months"));
+        });
+    });
+    let width = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 64.0), Sense::hover());
+    let painter = ui.painter_at(rect.expand(1.0));
+    let accent = crate::theme::accent(ui);
+    let faint = ui.visuals().widgets.noninteractive.bg_stroke.color;
+    painter.hline(rect.x_range(), rect.bottom(), (1.0, faint));
+    let n = weeks.len().max(1);
+    let step = rect.width() / n as f32;
+    let gap = (step * 0.25).clamp(1.0, 3.0);
+    let hovered = resp
+        .hover_pos()
+        .map(|p| (((p.x - rect.left()) / step) as usize).min(n - 1));
+    for (i, &c) in weeks.iter().enumerate() {
+        let x0 = rect.left() + i as f32 * step;
+        let h = if c == 0 {
+            1.5
+        } else {
+            (c as f32 / max as f32 * (rect.height() - 4.0)).max(3.0)
+        };
+        let bar = Rect::from_min_max(
+            pos2(x0, rect.bottom() - h),
+            pos2(x0 + step - gap, rect.bottom()),
+        );
+        let color = match (c, hovered == Some(i)) {
+            (0, _) => faint,
+            (_, true) => accent,
+            _ => accent.gamma_multiply(0.75),
+        };
+        painter.rect_filled(bar, 1.0, color);
+    }
+    if let Some(i) = hovered {
+        let ago = (weeks.len() - 1 - i) as i64;
+        let start = crate::util::now_secs() - (ago + 1) * 7 * 86_400 + 86_400;
+        let day = crate::util::format_day(start, ferrum_core::local_offset_minutes());
+        let c = weeks[i];
+        resp.on_hover_text(if c == 1 {
+            t!("Week of {}: 1 commit", day)
+        } else {
+            t!("Week of {}: {} commits", day, c)
+        });
+    }
+    ui.horizontal(|ui| {
+        let off = ferrum_core::local_offset_minutes();
+        let now = crate::util::now_secs();
+        let first = now - weeks.len() as i64 * 7 * 86_400;
+        let small = |s: String| egui::RichText::new(s).small().weak();
+        ui.label(small(crate::util::format_day(first, off)));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(small(crate::util::format_day(now, off)));
+        });
+    });
+    ui.label(if total == 0 {
+        t!("No commits in the last 12 months.")
+    } else if total == 1 {
+        t!("1 commit in the last 12 months")
+    } else {
+        t!("{} commits in the last 12 months", total)
+    });
+}
+
 fn facts(ui: &mut egui::Ui, tab: &RepoTab, cmds: &mut Commands) {
+    if let Some(Ok(s)) = &tab.overview.summary
+        && !s.activity.is_empty()
+    {
+        activity(ui, &s.activity);
+        ui.add_space(14.0);
+    }
     ui.strong(t!("Summary"));
     match &tab.overview.summary {
         None => {

@@ -50,6 +50,7 @@ pub mod overview;
 pub mod palette;
 pub mod patches;
 pub mod preferences;
+pub mod readme_images;
 pub mod rebase;
 pub mod ref_dialogs;
 pub mod repo_dialogs;

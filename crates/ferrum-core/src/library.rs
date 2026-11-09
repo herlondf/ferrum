@@ -67,6 +67,28 @@ pub struct Summary {
     /// Time of the first and the last commit (unix seconds).
     pub first_commit: Option<i64>,
     pub last_commit: Option<i64>,
+    /// Commits per week over the last [`ACTIVITY_WEEKS`] weeks, oldest first.
+    pub activity: Vec<u32>,
+}
+
+/// Weeks counted in [`Summary::activity`].
+pub const ACTIVITY_WEEKS: usize = 52;
+
+/// Number of `times` (unix seconds) in each of the `weeks` weeks that end at
+/// `now`, oldest week first. Times outside that span are not counted.
+pub fn weekly_counts(times: &[i64], now: i64, weeks: usize) -> Vec<u32> {
+    const WEEK: i64 = 7 * 86_400;
+    let mut out = vec![0; weeks];
+    for &t in times {
+        if t > now {
+            continue;
+        }
+        let ago = ((now - t) / WEEK) as usize;
+        if ago < weeks {
+            out[weeks - 1 - ago] += 1;
+        }
+    }
+    out
 }
 
 /// Counts commits, contributors, refs and the size of the repository. Walks
@@ -78,17 +100,23 @@ pub fn summary(path: &Path) -> Result<Summary> {
         let mut walk = repo.revwalk()?;
         walk.push(head.id())?;
         let mut authors = HashSet::new();
+        let mut times = Vec::new();
         for id in walk.flatten() {
             let Ok(c) = repo.find_commit(id) else {
                 continue;
             };
             s.commits += 1;
             let t = c.time().seconds();
+            times.push(t);
             s.last_commit = Some(s.last_commit.map_or(t, |l| l.max(t)));
             s.first_commit = Some(s.first_commit.map_or(t, |f| f.min(t)));
             authors.insert(lossy(c.author().email_bytes()).to_lowercase());
         }
         s.contributors = authors.len();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        s.activity = weekly_counts(&times, now, ACTIVITY_WEEKS);
     }
     for b in repo.branches(None)?.flatten() {
         match b.1 {
@@ -306,9 +334,20 @@ mod tests {
         assert_eq!(s.tags, 1);
         assert!(s.git_size > 0);
         assert!(s.first_commit <= s.last_commit);
+        assert_eq!(s.activity.len(), ACTIVITY_WEEKS);
+        assert_eq!(s.activity[ACTIVITY_WEEKS - 1], 2);
         // An empty repository has nothing to count.
         let empty = TestRepo::new();
         assert_eq!(summary(empty.path()).unwrap().commits, 0);
+    }
+
+    #[test]
+    fn counts_commits_per_week() {
+        let now = 100 * 7 * 86_400;
+        let day = 86_400;
+        let times = [now, now - day, now - 8 * day, now - 30 * 7 * day, now + day];
+        let w = weekly_counts(&times, now, 4);
+        assert_eq!(w, vec![0, 0, 1, 2]);
     }
 
     #[test]
