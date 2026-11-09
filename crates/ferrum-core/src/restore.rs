@@ -613,20 +613,55 @@ fn quit_operation(git: &Git, state: RepoState) -> Result<()> {
 }
 
 /// Brings back the state saved in point `id`. The current state is saved as
-/// a new point called `label` first, so a restore can be undone too.
+/// a new point called `label` first, so a restore can be undone too; its id
+/// is returned.
 pub fn restore(
     git: &Git,
     id: &str,
     mode: RestoreMode,
     label: &str,
     opts: &SnapshotOptions,
-) -> Result<()> {
+) -> Result<String> {
     let repo = crate::Repo::open(git.dir())?;
     let point = load(&repo, id)?;
     let pre = create(git, label, opts)?;
     let result = apply(git, &repo, &point.meta, mode);
     let _ = finish(git, &pre, result.as_ref().err().map(|e| e.to_string()));
-    result
+    result.map(|()| pre.id().to_owned())
+}
+
+/// What restoring `meta` would change now: branches and tags, from their
+/// current target (`old`) to the saved one (`new`, `None` = deleted).
+pub fn preview(repo: &crate::Repo, meta: &Meta) -> Vec<RefChange> {
+    let Ok(current) = read_refs(repo.raw()) else {
+        return Vec::new();
+    };
+    let local = |n: &str| n.starts_with("refs/heads/") || n.starts_with("refs/tags/");
+    let mut out = Vec::new();
+    for r in meta.refs.iter().filter(|r| local(&r.name)) {
+        let now = current.get(&r.name).map(|o| o.to_string());
+        if now.as_deref() != Some(r.oid.as_str()) {
+            out.push(RefChange {
+                name: r.name.clone(),
+                old: now,
+                new: Some(r.oid.clone()),
+            });
+        }
+    }
+    for c in meta
+        .changed
+        .iter()
+        .filter(|c| c.old.is_none() && local(&c.name))
+    {
+        if let Some(now) = current.get(&c.name) {
+            out.push(RefChange {
+                name: c.name.clone(),
+                old: Some(now.to_string()),
+                new: None,
+            });
+        }
+    }
+    out
 }
 
 fn apply(git: &Git, repo: &crate::Repo, meta: &Meta, mode: RestoreMode) -> Result<()> {
