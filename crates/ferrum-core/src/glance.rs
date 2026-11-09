@@ -18,6 +18,12 @@ pub struct Glance {
     pub summary: String,
     /// The working copy has changes (untracked files included).
     pub dirty: bool,
+    /// Commits ahead of / behind the upstream (`None`: no upstream).
+    pub ahead_behind: Option<(usize, usize)>,
+    /// Last fetch (modification time of `FETCH_HEAD`, unix seconds).
+    pub last_fetch: Option<i64>,
+    /// A merge, rebase, cherry-pick… is in progress.
+    pub in_progress: bool,
 }
 
 /// Reads branch, last commit and whether there are local changes. Fast for
@@ -40,6 +46,13 @@ pub fn glance(path: &Path) -> Result<Glance> {
         let name = lossy(target);
         g.branch = Some(name.trim_start_matches("refs/heads/").to_owned());
     }
+    g.ahead_behind = ahead_behind(&repo);
+    g.last_fetch = std::fs::metadata(repo.commondir().join("FETCH_HEAD"))
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+    g.in_progress = repo.state() != git2::RepositoryState::Clean;
     if !repo.is_bare() {
         let mut opts = StatusOptions::new();
         opts.include_untracked(true)
@@ -48,6 +61,24 @@ pub fn glance(path: &Path) -> Result<Glance> {
         g.dirty = repo.statuses(Some(&mut opts)).is_ok_and(|s| !s.is_empty());
     }
     Ok(g)
+}
+
+/// Ahead/behind counts of the current branch against its upstream.
+fn ahead_behind(repo: &git2::Repository) -> Option<(usize, usize)> {
+    let head = repo.head().ok()?;
+    if !head.is_branch() {
+        return None;
+    }
+    let local = head.target()?;
+    let name = head.name_bytes();
+    let upstream = repo
+        .branch_upstream_name(std::str::from_utf8(name).ok()?)
+        .ok()?;
+    let upstream = repo
+        .find_reference(std::str::from_utf8(&upstream).ok()?)
+        .ok()?
+        .target()?;
+    repo.graph_ahead_behind(local, upstream).ok()
 }
 
 /// Commits reachable from `from` but not from `onto`, oldest first, at most
@@ -92,6 +123,31 @@ mod tests {
         assert!(glance(t.path()).unwrap().dirty);
         t.git.run(&["checkout", "-q", "--detach"]).unwrap();
         assert_eq!(glance(t.path()).unwrap().branch, None);
+    }
+
+    #[test]
+    fn glance_reads_ahead_behind_and_last_fetch() {
+        let remote = TestRepo::new();
+        remote.commit("a.txt", "a", "base");
+        let t = TestRepo::new();
+        t.git
+            .run(&["remote", "add", "origin", &remote.path().to_string_lossy()])
+            .unwrap();
+        t.git.run(&["fetch", "-q", "origin"]).unwrap();
+        t.git
+            .run(&["checkout", "-q", "-b", "main", "--track", "origin/main"])
+            .unwrap();
+        let g = glance(t.path()).unwrap();
+        assert_eq!(g.ahead_behind, Some((0, 0)));
+        assert!(g.last_fetch.is_some());
+        assert!(!g.in_progress);
+        t.commit("b.txt", "b", "local");
+        remote.commit("c.txt", "c", "remote 1");
+        remote.commit("d.txt", "d", "remote 2");
+        t.git.run(&["fetch", "-q", "origin"]).unwrap();
+        assert_eq!(glance(t.path()).unwrap().ahead_behind, Some((1, 2)));
+        t.git.run(&["checkout", "-q", "-b", "solo"]).unwrap();
+        assert_eq!(glance(t.path()).unwrap().ahead_behind, None);
     }
 
     #[test]
