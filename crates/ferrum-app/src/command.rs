@@ -295,6 +295,8 @@ pub enum Op {
     Timeline(crate::timeline::TimelineOp),
     /// A commit or push run only if no secret is found (see `safety.rs`).
     SecretCheck(crate::safety::SecretCheck),
+    /// Stacked branches, absorb and moving hunks (see `stack_ops.rs`).
+    Stack(crate::stack_ops::StackOp),
 }
 
 impl Op {
@@ -399,6 +401,7 @@ impl Op {
             Op::Custom(r) => r.label.clone(),
             Op::Timeline(t) => t.label(),
             Op::SecretCheck(c) => c.op.label(),
+            Op::Stack(s) => s.label(),
         }
     }
 
@@ -425,6 +428,7 @@ impl Op {
             Op::Repo(_) => Refresh::Status,
             Op::Custom(r) => r.refresh(),
             Op::SecretCheck(c) => c.op.refresh(),
+            Op::Stack(s) => s.refresh(),
             _ => Refresh::All,
         }
     }
@@ -438,6 +442,7 @@ impl Op {
             Op::Part(p) => return p.execute(git, progress),
             Op::Patch(p) => return p.execute(git),
             Op::SecretCheck(c) => return c.execute(git, progress),
+            Op::Stack(s) => return s.execute(git, progress),
             _ => self.run(git, progress).map(|()| JobOutput::Done),
         }
         .map_err(|e| e.to_string())
@@ -553,6 +558,7 @@ impl Op {
             Op::Custom(r) => r.run(git, progress),
             Op::Timeline(t) => t.run(git),
             Op::SecretCheck(c) => c.op.run(git, progress),
+            Op::Stack(s) => s.run(git, progress),
         }
     }
 }

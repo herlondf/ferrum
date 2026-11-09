@@ -37,6 +37,8 @@ pub struct Toast {
     pub text: String,
     /// The repository, for messages of a tab that is not the active one.
     pub repo: Option<String>,
+    /// Offers Undo (history was rewritten in the active tab).
+    pub undo: bool,
     born: Instant,
     /// A button, e.g. "Undo" after an operation that saved a restore point.
     pub action: Option<(String, ToastAction)>,
@@ -53,6 +55,7 @@ struct Pending {
     /// The message the tab sets when the operation is done.
     done: String,
     text: String,
+    undo: bool,
 }
 
 #[derive(Default)]
@@ -83,6 +86,7 @@ impl Toasts {
             kind,
             text,
             repo,
+            undo: false,
             born: Instant::now(),
             action: None,
         });
@@ -109,6 +113,7 @@ impl Toasts {
             repo: tab.path().to_path_buf(),
             done: t!("{} — done", op.label()),
             text,
+            undo: matches!(op, Op::Stack(s) if s.rewrites()),
         });
     }
 
@@ -122,7 +127,16 @@ impl Toasts {
             }
             self.seen.insert(key, m.at);
             let repo = (i != active && tabs.len() > 1).then(|| tab.name.clone());
+            let before = self.next;
             self.message(m, Some(tab.path().to_path_buf()), repo);
+            // A rewrite that stopped for conflicts did not finish: no Undo.
+            if tab.state != ferrum_core::RepoState::Clean
+                && let Some(t) = self.list.last_mut().filter(|t| t.id > before && t.undo)
+            {
+                t.undo = false;
+                t.kind = Kind::Info;
+                t.text = t!("Stopped for conflicts: resolve them, then continue or abort.");
+            }
         }
         if let Some(m) = app
             && !self.seen.get(&None).is_some_and(|at| *at >= m.at)
@@ -144,7 +158,11 @@ impl Toasts {
             .position(|p| Some(&p.repo) == path.as_ref() && p.done == m.text)
         {
             let p = self.pending.remove(i);
+            let undo = p.undo && repo.is_none();
             self.push(Kind::Success, p.text, repo);
+            if let Some(t) = self.list.last_mut() {
+                t.undo = undo;
+            }
             return;
         }
         let kind = if is_done(&m.text) {
@@ -275,6 +293,20 @@ fn toast(ui: &mut egui::Ui, t: &Toast, cmds: &mut Commands) -> bool {
                         .wrap(),
                     )
                     .on_hover_text(&t.text);
+                }
+                // Stack rewrites undo through their backup (unless a restore point offers it).
+                if t.undo && t.action.is_none() {
+                    ui.add_space(theme::SPACE_XS);
+                    let label = t!("Undo");
+                    let undo = egui::Button::new(icons::text(icons::UNDO, &label)).small();
+                    let resp = ui.add(undo);
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::Role::Button, true, &label)
+                    });
+                    if resp.on_hover_text("Ctrl+Z").clicked() {
+                        cmds.push(Command::Undo);
+                        closed = true;
+                    }
                 }
                 if t.kind == Kind::Error || t.action.is_some() {
                     ui.add_space(theme::SPACE_XS);
@@ -417,6 +449,7 @@ pub fn describe(tab: &RepoTab, op: &Op) -> Option<String> {
         Op::StashApply { stash, pop: true } => t!("Popped {}", first_line(&stash.message)),
         Op::Checkout(b) => t!("Switched to {}", b),
         Op::CreateBranch { name, .. } => t!("Created branch {}", name),
+        Op::Stack(s) => s.describe()?,
         _ => return None,
     })
 }

@@ -56,6 +56,9 @@ mod safety;
 mod safety_tests;
 mod settings;
 mod single_instance;
+mod stack_ops;
+#[cfg(test)]
+mod stacks_tests;
 #[cfg(all(test, feature = "all-languages"))]
 mod structural_tests;
 mod sync;

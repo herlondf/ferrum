@@ -76,6 +76,23 @@ pub fn post(url: &str, auth: &Auth, payload: &Value) -> Result<Value> {
     check(resp).map(|r| r.body)
 }
 
+/// PATCH (`put = false`) or PUT a JSON body.
+pub fn update(url: &str, auth: &Auth, payload: &Value, put: bool) -> Result<Value> {
+    let (k, v) = auth.header();
+    let agent = agent();
+    let req = if put {
+        agent.put(url)
+    } else {
+        agent.patch(url)
+    };
+    let resp = req
+        .header(k, &v)
+        .header("Accept", "application/json")
+        .send_json(payload)
+        .map_err(net)?;
+    check(resp).map(|r| r.body)
+}
+
 pub fn put_empty(url: &str, auth: &Auth) -> Result<()> {
     let (k, v) = auth.header();
     let resp = agent()

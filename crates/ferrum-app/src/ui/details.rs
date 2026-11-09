@@ -448,6 +448,13 @@ fn diff(ui: &mut egui::Ui, env: &Env, view: &CommitView, cmds: &mut Commands) {
     });
     let id = format!("commit-diff{}", env.salt);
     diff_view::offer_reveal(ui.ctx(), &id);
+    // A commit of the current branch: its changes can move (see move_hunks).
+    let mut picked = (env.main && !view.is_stash)
+        .then(|| {
+            let ws = env.cfg.ignore_whitespace;
+            crate::ui::move_hunks::bar(ui, env.repo, view.details.info.id, file, ws, env.busy, cmds)
+        })
+        .flatten();
     let action = diff_extra::show_file(
         ui,
         &id,
@@ -455,9 +462,12 @@ fn diff(ui: &mut egui::Ui, env: &Env, view: &CommitView, cmds: &mut Commands) {
         DiffSource::Commit(view.details.info.id),
         file,
         diff_view::DiffMode::ReadOnly,
-        false,
-        None,
+        picked.is_some(),
+        picked.as_mut(),
     );
+    if let Some(sel) = picked {
+        crate::ui::move_hunks::store(ui.ctx(), sel);
+    }
     if let Some(diff_view::DiffAction::Reveal(line)) = action {
         cmds.push(file_actions::reveal_line(env.repo.path(), file, line));
     }

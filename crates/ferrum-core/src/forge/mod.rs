@@ -6,6 +6,7 @@ use std::sync::RwLock;
 
 mod azure;
 mod bitbucket;
+pub mod chain;
 mod gitea;
 mod github;
 mod gitlab;

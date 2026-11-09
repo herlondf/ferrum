@@ -112,6 +112,8 @@ pub struct RepoTab {
     pub remotes: Vec<RemoteInfo>,
     pub submodules: Vec<SubmoduleInfo>,
     pub worktrees: Vec<WorktreeInfo>,
+    /// Stacked branches (see `ui::stacks`).
+    pub stacks: Vec<ferrum_core::stack::Stack>,
     pub identity: Identity,
     pub uses_lfs: bool,
     pub hosted: Option<HostedRepo>,
@@ -186,6 +188,7 @@ impl RepoTab {
             remotes: Vec::new(),
             submodules: Vec::new(),
             worktrees: Vec::new(),
+            stacks: Vec::new(),
             identity: Identity::default(),
             uses_lfs: false,
             hosted: None,
@@ -258,6 +261,7 @@ impl RepoTab {
         self.stashes = self.repo.stashes().unwrap_or_default();
         self.submodules = self.repo.submodules().unwrap_or_default();
         self.worktrees = self.repo.worktrees().unwrap_or_default();
+        self.stacks = ferrum_core::stack::detect(&self.repo).unwrap_or_default();
         self.uses_lfs = self.repo.uses_lfs();
         self.hosted = crate::hosted::hosted_for(self);
         self.apply_search();
@@ -636,6 +640,7 @@ impl RepoTab {
             }],
             Op::Flow(crate::flow::FlowOp::WithLocalChanges { op, .. }) => return self.undo_for(op),
             Op::SecretCheck(c) => return self.undo_for(&c.op),
+            Op::Stack(s) => return s.undo(self),
             Op::Checkout(_) | Op::CheckoutDetached(_) => vec![self.back_to_current()?],
             Op::CheckoutRemote { local, .. } => {
                 vec![

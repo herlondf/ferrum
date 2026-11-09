@@ -39,6 +39,7 @@ pub fn show(ui: &mut egui::Ui, tab: &mut RepoTab, cmds: &mut Commands) {
                 ui.separator();
                 pinned(ui, tab, &mut st, cmds);
                 local_branches(ui, tab, &mut st, cmds);
+                crate::ui::stacks::section(ui, tab, &mut st, cmds);
                 remotes(ui, tab, &mut st, cmds);
                 tags(ui, tab, &mut st, cmds);
                 stashes(ui, tab, &mut st, cmds);
@@ -734,6 +735,7 @@ fn local_branch_menu(
         }
         crate::ui::sync_ui::branch_menu(ui, tab, b, cmds);
         crate::ui::gitflow::branch_menu(ui, tab, &name, cmds);
+        crate::ui::stacks::branch_menu(ui, tab, &name, cmds);
         if let Some(m) = &b.missing_upstream {
             ui.colored_label(
                 ui.visuals().warn_fg_color,

@@ -76,6 +76,8 @@ pub enum Dialog {
     Repo(crate::ui::repo_dialogs::RepoDialog),
     /// Form, confirmation or approval before a custom command.
     Custom(crate::ui::custom_commands::CustomDialog),
+    /// Stacks, absorb and moving hunks (`ui::stacks`).
+    Stack(crate::ui::stacks::StackDialog),
 }
 
 impl Dialog {
@@ -634,6 +636,7 @@ fn body(
         Dialog::Custom(d) => {
             crate::ui::custom_commands::show_dialog(ui, d, tab, settings, cmds, enter)
         }
+        Dialog::Stack(d) => crate::ui::stacks::show(ui, d, tab, settings, cmds, enter),
     }
 }
 

@@ -340,6 +340,7 @@ fn commands_for(t: &RepoTab, settings: &Settings, list: &mut Vec<Entry>) {
             move || Command::PlanRebase(base),
         ));
     }
+    list.extend(crate::ui::stacks::palette_entries(t));
     // Pinned refs (see the sidebar): jump to their commit.
     for refname in &t.sidebar.prefs.pinned {
         let short = ["refs/heads/", "refs/remotes/", "refs/tags/"]
