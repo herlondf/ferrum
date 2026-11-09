@@ -21,6 +21,7 @@ mod parts;
 mod preferences;
 mod refs;
 mod repos;
+mod safety;
 mod sidebar;
 mod sync;
 mod toolbar;
@@ -48,6 +49,7 @@ pub static TABLES: &[&[(&str, &str)]] = &[
     preferences::T,
     refs::T,
     repos::T,
+    safety::T,
     sidebar::T,
     sync::T,
     toolbar::T,
