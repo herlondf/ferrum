@@ -202,7 +202,9 @@ pub fn show(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
 
 /// All menus behind one ☰ button, for when the menu bar is hidden.
 pub fn compact(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
-    ui.menu_button("☰", |ui| {
+    let button = crate::ui::toolbar::Tool::icon(crate::icons::MENU, "☰").show(ui);
+    let resp = button.main.on_hover_text(t!("Menu"));
+    egui::Popup::menu(&resp).show(|ui| {
         for menu in MENUS {
             ui.menu_button(menu.title(), |ui| {
                 ui.set_min_width(300.0);
@@ -210,9 +212,7 @@ pub fn compact(ui: &mut egui::Ui, mut bar: Bar, cmds: &mut Commands) {
                 contents(ui, menu, &mut bar, cmds);
             });
         }
-    })
-    .response
-    .on_hover_text(t!("Menu"));
+    });
 }
 
 fn contents(ui: &mut egui::Ui, menu: Menu, bar: &mut Bar, cmds: &mut Commands) {

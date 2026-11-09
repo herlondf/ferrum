@@ -97,6 +97,8 @@ pub enum DevStep {
     Changes(String),
     /// Open a menu of the main menu bar (`menu:N`).
     Menu(usize),
+    /// `toast:success|info|error`: a sample toast (see `toasts::dev_step`).
+    Toast(String),
 }
 
 /// Collects commands while the UI is drawn.

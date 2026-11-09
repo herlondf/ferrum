@@ -27,6 +27,8 @@ pub enum RepoCmd {
     Scan,
     /// Show a tab in a window of its own.
     OpenInWindow(usize),
+    /// Move a tab to another place in the tab bar (drag and drop).
+    MoveTab(usize, usize),
     /// `git config --global --add safe.directory`, then open the folder.
     TrustFolder(PathBuf),
     /// Settings for the repository of the active tab.

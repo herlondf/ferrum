@@ -1,6 +1,5 @@
-//! The status control in the toolbar (repository, branch, running operation,
-//! ahead/behind) and the Activity window: every operation with the exact git
-//! commands it ran and their output.
+//! The Activity window: every operation with the exact git commands it ran
+//! and their output (opened from the status bar, see `status_bar.rs`).
 
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
@@ -9,9 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use eframe::egui::{self, Color32, RichText};
 use ferrum_core::cli::Stream;
 
-use crate::command::{Command, Commands};
-use crate::jobs::{self, Job, Operation, Outcome};
-use crate::tab::RepoTab;
+use crate::jobs::{self, Operation, Outcome};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Filter {
@@ -33,64 +30,6 @@ pub struct ActivityWindow {
 impl ActivityWindow {
     pub fn toggle(&mut self) {
         self.open = !self.open;
-    }
-}
-
-/// Toolbar box: repository and branch, the running operation with its
-/// progress (and a cancel button), ahead/behind. A click opens the Activity window.
-pub fn status_control(
-    ui: &mut egui::Ui,
-    tab: &RepoTab,
-    global_job: Option<&Job>,
-    cmds: &mut Commands,
-) {
-    let job = tab.job.as_ref().or(global_job);
-    let frame = egui::Frame::group(ui.style())
-        .inner_margin(egui::Margin::symmetric(8, 2))
-        .corner_radius(4.0);
-    let inner = frame.show(ui, |ui| {
-        ui.set_max_width(420.0);
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(&tab.name).strong());
-            let branch = tab.head.clone().unwrap_or_else(|| t!("detached"));
-            ui.weak(format!("🌿 {branch}"));
-            if let Some((a, b)) = tab.current_branch().and_then(|b| b.ahead_behind)
-                && (a > 0 || b > 0)
-            {
-                ui.weak(format!("⬆{a} ⬇{b}"));
-            }
-            if let Some(job) = job {
-                ui.separator();
-                ui.spinner();
-                let progress = job.progress();
-                let text = if progress.is_empty() {
-                    job.label.clone()
-                } else {
-                    format!("{} — {progress}", job.label)
-                };
-                ui.add(egui::Label::new(text).truncate());
-            } else if tab.live.refreshing() {
-                ui.separator();
-                ui.spinner();
-            }
-        });
-    });
-    let resp = inner
-        .response
-        .interact(egui::Sense::click())
-        .on_hover_text(t!("Activity: operations and their git commands"));
-    if resp.clicked() {
-        cmds.push(Command::ShowActivity);
-    }
-    if let Some(job) = job
-        && job.cancellable()
-        && !job.cancel_requested()
-        && ui
-            .small_button("✖")
-            .on_hover_text(t!("Cancel {}", job.label))
-            .clicked()
-    {
-        cmds.push(Command::CancelJob);
     }
 }
 

@@ -46,6 +46,8 @@ pub struct FerrumApp {
     startup: Vec<Command>,
     /// Repository Manager tab, closed tabs, workspaces, tab windows.
     repos: repos::State,
+    /// Notifications in the bottom-right corner.
+    toasts: crate::ui::toasts::Toasts,
 }
 
 /// Parses `FERRUM_START`, a `;`-separated list of steps used to open a specific
@@ -65,7 +67,8 @@ pub struct FerrumApp {
 /// `diff:OPTS` (see `diff_prefs::dev_step`), `details:STEP` (see `details::dev_step`),
 /// `flow:merge=REV|rebase=REV|pick=REV,REV|revert=REV|reword=REV|select=REV,REV` (see `flow::dev_steps`),
 /// `gitflow:init|start=KIND|finish=BRANCH`, `bisect:dialog|start=BAD,GOOD`, `patch:FILE`,
-/// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`).
+/// `manager`, `quick:TEXT`, `overview`, `repo-settings`, `workspace:NAME`, `vertical-tabs` (see `app/repos.rs`),
+/// `toast:success|info|error` (see `toasts::dev_step`).
 fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
     let tab = tabs.first();
     let mut out = Vec::new();
@@ -112,6 +115,7 @@ fn startup_commands(spec: &str, tabs: &[RepoTab]) -> Vec<Command> {
             "palette" => out.push(Command::DevStep(DevStep::Palette(arg.into()))),
             "activity" => out.push(Command::ShowActivity),
             "menu" => out.push(Command::DevStep(DevStep::Menu(arg.parse().unwrap_or(0)))),
+            "toast" => out.push(Command::DevStep(DevStep::Toast(step.into()))),
             "fetch" => out.push(Command::Run(Op::Fetch { remote: None })),
             "stats" => out.push(history_options::cmd(|t, _| crate::ui::stats::open(t))),
             "collapse-all" => out.push(history_options::cmd(|t, _| {
@@ -239,6 +243,7 @@ impl FerrumApp {
             screenshot,
             startup: Vec::new(),
             repos: Default::default(),
+            toasts: Default::default(),
         };
         // Repositories given on the command line replace the saved session.
         let (to_open, active) = if paths.is_empty() {
@@ -530,6 +535,7 @@ impl FerrumApp {
                 Some(Command::Run(op)) => {
                     let t = &mut self.tabs[self.active];
                     let op = crate::sync::with_options(op, &self.settings.sync);
+                    self.toasts.started(t, &op);
                     let then = crate::repo_parts::after(&op, t, &self.settings.submodules);
                     t.run(op, ctx);
                     if let Some(next) = then {
@@ -707,6 +713,7 @@ impl FerrumApp {
                 DevStep::Theme(theme) => self.settings.theme = theme,
                 DevStep::Density(d) => self.settings.prefs.density = d,
                 DevStep::Menu(i) => crate::ui::main_menu::open(ctx, i),
+                DevStep::Toast(step) => crate::ui::toasts::dev_step(&mut self.toasts, &step),
                 DevStep::Palette(q) => self.palette.open_with(&q),
                 DevStep::Search(q) => {
                     if let Some(t) = self.tab() {
@@ -861,89 +868,44 @@ impl FerrumApp {
     // ----- Layout -----
 
     fn toolbar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
+        use crate::ui::toolbar;
+        // Room for ☰ and the buttons on the right (with Update, when shown).
+        let mut reserve = 3.0 * 36.0;
+        if self.settings.prefs.hide_menu_bar {
+            reserve += 40.0;
+        }
+        if self.settings.background.update_available.is_some() {
+            reserve += 70.0;
+        }
+        let tab = self
+            .tabs
+            .get(self.active)
+            .filter(|_| !self.repos.home_active);
+        let labels = toolbar::labels_fit(ui, tab, &self.settings, reserve);
         ui.horizontal(|ui| {
+            // The same height without a repository (Repository Manager tab).
+            ui.set_min_height(toolbar::height(labels));
             if self.settings.prefs.hide_menu_bar {
                 crate::ui::main_menu::compact(ui, self.menu_bar(), cmds);
+                toolbar::group_separator(ui);
             }
-            let Some(tab) = self.tabs.get(self.active).filter(|_| !self.repos.home_active) else {
-                return;
-            };
-            ui.separator();
-            let busy = tab.busy();
-            use crate::prefs::ToolbarButton as Tb;
-            let show = |b| self.settings.prefs.shows(b);
-            ui.add_enabled_ui(!busy, |ui| {
-                crate::ui::sync_ui::toolbar(ui, tab, &self.settings, cmds);
-                ui.separator();
-                if show(Tb::Branch)
-                    && ui
-                        .button(icons::text(icons::BRANCH, "Branch"))
-                        .on_hover_text(t!("New branch (Ctrl+Shift+B)"))
-                        .clicked()
-                {
-                    let head = tab.head.clone().unwrap_or_else(|| "HEAD".into());
-                    cmds.push(Command::Dialog(Dialog::create_branch(&head, &head)));
-                }
-                if show(Tb::Stash) {
-                    let resp = ui
-                        .add_enabled(!tab.status.is_empty(), icons::button(icons::STASH, "Stash"))
-                        .on_hover_text(t!("Stash changes (Ctrl+Shift+S)\nCtrl/Alt+click: quick stash without the dialog"));
-                    if resp.clicked() {
-                        // Ctrl or Alt+click stashes everything right away.
-                        let quick = ui.input(|i| i.modifiers.command || i.modifiers.alt);
-                        cmds.push(if quick {
-                            Command::Run(crate::ui::ref_dialogs::quick_stash())
-                        } else {
-                            Command::Dialog(Dialog::stash())
-                        });
-                    }
-                    ui.menu_button("⏷", |ui| {
-                        crate::ui::ref_dialogs::stashes_dropdown(ui, tab, cmds)
-                    })
-                    .response
-                    .on_hover_text(t!("Stashes"));
-                }
-                if let Some(s) = tab.stashes.first().filter(|_| show(Tb::Pop))
-                    && ui
-                        .button(t!("📤 Pop"))
-                        .on_hover_text(t!("Apply and delete the latest stash: {}", s.message))
-                        .clicked()
-                {
-                    cmds.run(Op::StashApply {
-                        stash: s.clone(),
-                        pop: true,
-                    });
-                }
-                if show(Tb::Undo) {
-                    let undo = tab.undo.last().map(|u| u.label.clone());
-                    let resp = ui.add_enabled(undo.is_some(), icons::button(icons::UNDO, t!("Undo")));
-                    if let Some(label) = undo
-                        && resp.on_hover_text(t!("Undo: {} (Ctrl+Z)", label)).clicked()
-                    {
-                        cmds.push(Command::Undo);
-                    }
-                }
-            });
-            crate::ui::tools::toolbar_buttons(ui, &self.settings.prefs, tab.path(), cmds);
-            ui.separator();
-            crate::ui::activity::status_control(ui, tab, self.global_job.as_ref(), cmds);
+            if let Some(tab) = self
+                .tabs
+                .get(self.active)
+                .filter(|_| !self.repos.home_active)
+            {
+                toolbar::repo_buttons(ui, tab, &self.settings, labels, cmds);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .add(icons::icon_button(icons::SETTINGS))
-                    .on_hover_text(t!("Settings (Ctrl+,)"))
-                    .clicked()
-                {
+                if toolbar::icon_button(ui, icons::SETTINGS, t!("Settings (Ctrl+,)")).clicked() {
                     cmds.push(Command::ShowSettings);
                 }
-                if ui
-                    .add(icons::icon_button(icons::COMMAND_PALETTE))
-                    .on_hover_text(t!("Command palette (Ctrl+P)"))
-                    .clicked()
-                {
+                let tip = t!("Command palette (Ctrl+P)");
+                if toolbar::icon_button(ui, icons::COMMAND_PALETTE, tip).clicked() {
                     cmds.push(Command::ShowPalette);
                 }
                 self.notifications_button(ui, cmds);
-                self.update_link(ui);
+                self.update_link(ui, labels);
             });
         });
     }
@@ -963,74 +925,11 @@ impl FerrumApp {
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
-        ui.horizontal(|ui| {
-            let tab = self.tabs.get(self.active);
-            let job = tab
-                .and_then(|t| t.job.as_ref())
-                .or(self.global_job.as_ref());
-            if let Some(job) = job {
-                ui.spinner();
-                let progress = job.progress();
-                ui.label(if progress.is_empty() {
-                    job.label.clone()
-                } else {
-                    format!("{} — {progress}", job.label)
-                });
-                if let Some(t) = tab
-                    && !t.queue.is_empty()
-                {
-                    ui.weak(t!("(+{} queued)", t.queue.len()));
-                }
-            } else {
-                let msg = tab
-                    .and_then(|t| t.message.as_ref())
-                    .or(self.message.as_ref());
-                if let Some(m) = msg {
-                    let fresh = m.at.elapsed() < Duration::from_secs(10);
-                    if m.error {
-                        let first = m.text.lines().next().unwrap_or_default();
-                        let resp = ui.colored_label(
-                            ui.visuals().error_fg_color,
-                            icons::text(icons::WARNING, first),
-                        );
-                        if m.text.lines().count() > 1 {
-                            resp.on_hover_text(&m.text);
-                        }
-                        if ui.small_button(t!("Copy")).clicked() {
-                            cmds.push(Command::Copy(m.text.clone()));
-                        }
-                        crate::ui::repo_dialogs::error_actions(ui, &m.text, cmds);
-                    } else if fresh {
-                        ui.label(&m.text);
-                    }
-                }
-            }
-            let Some(tab) = tab else { return };
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                history_options::filter_status(ui, tab, cmds);
-                let id = &tab.identity;
-                let who = match (&id.name, &id.email) {
-                    (Some(n), Some(e)) => icons::text(icons::IDENTITY, format!("{n} <{e}>")),
-                    _ => t!("👤 No identity"),
-                };
-                if ui
-                    .small_button(who)
-                    .on_hover_text(t!("Author identity for this repository"))
-                    .clicked()
-                {
-                    cmds.push(Command::Dialog(Dialog::identity(&tab.identity)));
-                }
-                if tab.uses_lfs {
-                    ui.weak("LFS");
-                }
-                if let Some(b) = tab.current_branch()
-                    && let Some((a, bh)) = b.ahead_behind
-                    && (a > 0 || bh > 0)
-                {
-                    ui.weak(format!("{}{a} {}{bh}", icons::ARROW_UP, icons::ARROW_DOWN));
-                }
-            });
-        });
+        let tab = self
+            .tabs
+            .get(self.active)
+            .filter(|_| !self.repos.home_active);
+        crate::ui::status_bar::show(ui, tab, self.global_job.as_ref(), cmds);
     }
 
     fn banner(&mut self, ui: &mut egui::Ui, cmds: &mut Commands) {
@@ -1083,19 +982,39 @@ impl eframe::App for FerrumApp {
         let title = self.window_title();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(title));
 
+        let chrome = |ui: &egui::Ui, x: i8, y: i8| {
+            crate::ui::toolbar::chrome_frame(ui, egui::Margin::symmetric(x, y))
+        };
+        let strip = !self.tabs.is_empty() && !self.settings.library.vertical_tabs;
         if !self.settings.prefs.hide_menu_bar {
-            egui::Panel::top("main-menu").show(ui, |ui| self.main_menu(ui, &mut cmds));
+            egui::Panel::top("main-menu")
+                .frame(chrome(ui, 8, 2))
+                .show_separator_line(false)
+                .show(ui, |ui| self.main_menu(ui, &mut cmds));
         }
-        egui::Panel::top("toolbar").show(ui, |ui| {
-            ui.add_space(2.0);
-            self.toolbar(ui, &mut cmds);
-            if !self.tabs.is_empty() && !self.settings.library.vertical_tabs {
-                ui.separator();
-                self.tab_bar(ui, &mut cmds);
-            }
-            ui.add_space(2.0);
-        });
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui, &mut cmds));
+        egui::Panel::top("toolbar")
+            .frame(chrome(ui, 8, 4))
+            .show_separator_line(!strip)
+            .show(ui, |ui| self.toolbar(ui, &mut cmds));
+        if strip {
+            let frame = chrome(ui, 8, 0).inner_margin(egui::Margin {
+                left: 8,
+                right: 8,
+                top: 2,
+                bottom: 0,
+            });
+            egui::Panel::top("tab-strip")
+                .frame(frame)
+                .show_separator_line(false)
+                .show(ui, |ui| self.tab_bar(ui, &mut cmds));
+        }
+        let status = egui::Panel::bottom("status")
+            .frame(chrome(ui, 8, 3))
+            .show(ui, |ui| self.status_bar(ui, &mut cmds));
+        let tab = self.tabs.get(self.active).map(|_| self.active).unwrap_or(0);
+        self.toasts.observe(&self.tabs, tab, self.message.as_ref());
+        self.toasts
+            .show(&ctx, status.response.rect.top(), &mut cmds);
 
         self.tab_list(ui, &mut cmds);
         if self.showing_home() {

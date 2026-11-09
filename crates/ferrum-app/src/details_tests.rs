@@ -103,7 +103,8 @@ fn tabs_file_tree_and_containing_refs() {
     }
     assert!(found, "tags containing the commit were not shown");
     let chip = crate::icons::text(crate::icons::BRANCH, "main");
-    assert!(h.query_by_label(&chip).is_some());
+    // The status bar shows the branch too.
+    assert!(h.query_all_by_label(&chip).count() >= 2);
 
     // Files as a tree.
     h.get_by_label("Tree").click();
