@@ -4,8 +4,10 @@
 //! through the `git` command line, so hooks, credential helpers, SSH config
 //! and LFS behave exactly as in the terminal.
 
+pub mod absorb;
 pub mod askpass;
 pub mod avatar;
+pub mod backup;
 pub mod bisect;
 pub mod browse;
 pub mod cli;
@@ -18,6 +20,7 @@ pub mod gitflow;
 pub mod gitignore;
 pub mod glance;
 pub mod graph;
+pub mod hunk_move;
 pub mod integrate;
 pub mod lfs;
 pub mod library;
@@ -32,6 +35,7 @@ pub mod refs;
 mod repo;
 pub mod shell;
 pub mod ssh;
+pub mod stack;
 pub mod stats;
 pub mod submodule;
 pub mod sync;
