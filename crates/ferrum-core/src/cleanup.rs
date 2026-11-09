@@ -389,18 +389,26 @@ pub fn delete_branches(git: &Git, branches: &[Merged], progress: &dyn Fn(&str)) 
     Ok(())
 }
 
-/// Bytes used by the object database (`git count-objects -v`).
+/// Bytes used by the object database (loose objects and packs).
 pub fn object_size(git: &Git) -> Result<u64> {
-    let out = git.run(&["count-objects", "-v"])?;
-    let mut kib = 0u64;
-    for line in out.lines() {
-        if let Some((k, v)) = line.split_once(':')
-            && matches!(k.trim(), "size" | "size-pack" | "size-garbage")
-        {
-            kib += v.trim().parse::<u64>().unwrap_or(0);
-        }
+    // Sum the files under objects/ in bytes: `count-objects` rounds to KiB
+    // (and reports 0 for small loose objects on Windows).
+    let dir = git.run(&["rev-parse", "--git-common-dir"])?;
+    let dir = git.dir().join(dir.trim()).join("objects");
+    fn walk(p: &std::path::Path) -> u64 {
+        let Ok(entries) = std::fs::read_dir(p) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|e| match e.file_type() {
+                Ok(t) if t.is_dir() => walk(&e.path()),
+                Ok(t) if t.is_file() => e.metadata().map_or(0, |m| m.len()),
+                _ => 0,
+            })
+            .sum()
     }
-    Ok(kib * 1024)
+    Ok(walk(&dir))
 }
 
 /// `git gc` (with `--aggressive`); returns the sizes before and after.
