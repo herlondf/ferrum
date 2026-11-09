@@ -1,0 +1,8 @@
+# Windows: the C runtime goes inside ferrum.exe, so it runs on a clean Windows
+# without the Visual C++ Redistributable (no "VCRUNTIME140.dll was not found").
+# scripts/package-windows.ps1 checks it with dumpbin.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

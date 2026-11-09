@@ -1,3 +1,4 @@
 /target
 /.claude/
 /dist
+/packaging/flatpak/cargo-sources.json
