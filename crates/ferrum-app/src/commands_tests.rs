@@ -196,7 +196,7 @@ fn palette_finds_files_and_opens_their_history() {
     }
     text_field(&h, "Type a command, branch or file…").type_text("a.txt");
     frames(&mut h);
-    h.get_by_label("📄 a.txt").click();
+    h.get_by_label("a.txt").click();
     frames(&mut h);
     assert_eq!(h.state().tabs[0].view, crate::tab::View::File);
 }

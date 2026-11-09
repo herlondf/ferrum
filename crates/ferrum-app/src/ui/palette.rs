@@ -8,9 +8,11 @@ use eframe::egui;
 use ferrum_core::BranchKind;
 
 use crate::command::{Command, Commands, Op};
+use crate::icons;
 use crate::keymap::{self, Action};
 use crate::settings::Settings;
 use crate::tab::{RepoTab, View};
+use crate::theme;
 use crate::ui::dialogs::Dialog;
 
 /// Adds palette entries (see the module docs).
@@ -24,6 +26,9 @@ const PROVIDERS: &[Provider] = &[
 
 /// File matches shown at most.
 const MAX_FILES: usize = 30;
+/// Entries run last that are remembered, and shown first without a query.
+const MAX_RECENT: usize = 12;
+const SHOWN_RECENT: usize = 5;
 
 #[derive(Default)]
 pub struct Palette {
@@ -53,6 +58,8 @@ impl Palette {
 /// The kind of an entry; results are grouped under these headers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Group {
+    /// Run lately (shown first when nothing is typed).
+    Recent,
     Commands,
     Custom,
     Branches,
@@ -65,6 +72,7 @@ pub enum Group {
 impl Group {
     fn label(self) -> String {
         match self {
+            Group::Recent => t!("Recently used"),
             Group::Commands => t!("Commands"),
             Group::Custom => t!("Custom commands"),
             Group::Branches => t!("Branches"),
@@ -72,6 +80,19 @@ impl Group {
             Group::Files => t!("Files"),
             Group::Tabs => t!("Tabs"),
             Group::Workspaces => t!("Workspaces"),
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Group::Recent => icons::HISTORY,
+            Group::Commands => icons::COMMAND,
+            Group::Custom => icons::WRENCH,
+            Group::Branches => icons::BRANCH,
+            Group::Pinned => icons::PIN,
+            Group::Files => icons::FILE,
+            Group::Tabs => icons::BROWSERS,
+            Group::Workspaces => icons::REPOSITORIES,
         }
     }
 }
@@ -84,6 +105,8 @@ pub struct Entry {
     /// Also searched, not shown.
     pub keywords: String,
     pub shortcut: String,
+    /// Shown before the label (default: the group's icon).
+    pub icon: &'static str,
     make: Make,
 }
 
@@ -99,8 +122,14 @@ impl Entry {
             label: label.into(),
             keywords: String::new(),
             shortcut: shortcut.into(),
+            icon: group.icon(),
             make: Box::new(make),
         }
+    }
+
+    pub fn icon(mut self, icon: &'static str) -> Self {
+        self.icon = icon;
+        self
     }
 
     /// Shows the key of `a` (from the keymap).
@@ -314,7 +343,7 @@ fn commands_for(t: &RepoTab, settings: &Settings, list: &mut Vec<Entry>) {
         if let Ok(id) = t.repo.resolve(refname) {
             list.push(Entry::new(
                 Group::Pinned,
-                t!("📌 Show {}", short),
+                t!("Show {}", short),
                 "",
                 move || Command::SelectCommit(id),
             ));
@@ -386,24 +415,72 @@ fn entry_score(e: &Entry, q: &str) -> Option<i32> {
 }
 
 /// Entries matching `q`, grouped (best group first) and sorted by score.
-fn ranked(all: Vec<Entry>, q: &str) -> Vec<Entry> {
-    let mut scored: Vec<(i32, Entry)> = all
+/// `recent` (labels, newest first) come first without a query, and rank
+/// higher with one. Returns each entry with the group it is shown under.
+fn ranked(all: Vec<Entry>, q: &str, recent: &[String]) -> Vec<(Group, Entry)> {
+    let rank = |e: &Entry| recent.iter().position(|r| *r == e.label);
+    let mut scored: Vec<(Group, i32, Entry)> = all
         .into_iter()
-        .filter_map(|e| entry_score(&e, q).map(|s| (s, e)))
+        .filter_map(|e| {
+            let s = entry_score(&e, q)?;
+            Some(match rank(&e) {
+                Some(r) if q.is_empty() && r < SHOWN_RECENT => (Group::Recent, -(r as i32), e),
+                Some(r) => (e.group, s + 200 - 10 * r as i32, e),
+                None => (e.group, s, e),
+            })
+        })
         .collect();
-    scored.sort_by_key(|(s, e)| (e.group, std::cmp::Reverse(*s)));
+    scored.sort_by_key(|(g, s, _)| (*g, std::cmp::Reverse(*s)));
     let mut groups: Vec<(Group, i32, Vec<Entry>)> = Vec::new();
-    for (s, e) in scored {
+    for (g, s, e) in scored {
         match groups.last_mut() {
-            Some(g) if g.0 == e.group => g.2.push(e),
-            _ => groups.push((e.group, s, vec![e])),
+            Some(last) if last.0 == g => last.2.push(e),
+            _ => groups.push((g, s, vec![e])),
         }
     }
     if !q.is_empty() {
         // Stable: equal best scores keep the fixed group order.
         groups.sort_by_key(|g| std::cmp::Reverse(g.1));
     }
-    groups.into_iter().flat_map(|g| g.2).collect()
+    groups
+        .into_iter()
+        .flat_map(|(g, _, list)| list.into_iter().map(move |e| (g, e)))
+        .collect()
+}
+
+/// Character positions of `text` to highlight for `query` (lowercase): the
+/// first substring match, or else the characters matched in order.
+pub(crate) fn matched_chars(text: &str, query: &str) -> Vec<usize> {
+    let lower: Vec<char> = text
+        .chars()
+        .map(|c| c.to_lowercase().next().unwrap_or(c))
+        .collect();
+    let q: Vec<char> = query.chars().collect();
+    if q.is_empty() || q.len() > lower.len() {
+        return Vec::new();
+    }
+    if let Some(start) = (0..=lower.len() - q.len()).find(|&i| lower[i..i + q.len()] == q[..]) {
+        return (start..start + q.len()).collect();
+    }
+    let mut out = Vec::new();
+    let mut want = q.iter().peekable();
+    for (i, c) in lower.iter().enumerate() {
+        if want.peek() == Some(&c) {
+            out.push(i);
+            want.next();
+        }
+    }
+    if want.peek().is_some() {
+        return Vec::new();
+    }
+    out
+}
+
+/// Remembers that `label` was run.
+fn remember(recent: &mut Vec<String>, label: &str) {
+    recent.retain(|l| l != label);
+    recent.insert(0, label.to_owned());
+    recent.truncate(MAX_RECENT);
 }
 
 fn files(tab: &RepoTab, q: &str) -> Vec<Entry> {
@@ -421,10 +498,15 @@ fn files(tab: &RepoTab, q: &str) -> Vec<Entry> {
         .take(MAX_FILES)
         .map(|(_, p)| {
             let path = p.clone();
-            let icon = if p.ends_with('/') { "📁" } else { "📄" };
-            Entry::new(Group::Files, format!("{icon} {p}"), "", move || {
+            let icon = if p.ends_with('/') {
+                icons::FOLDER
+            } else {
+                icons::FILE
+            };
+            Entry::new(Group::Files, p.clone(), "", move || {
                 Command::FileHistory(path.clone())
             })
+            .icon(icon)
         })
         .collect()
 }
@@ -434,7 +516,7 @@ pub fn show(
     p: &mut Palette,
     mut tab: Option<&mut RepoTab>,
     tab_names: &[String],
-    settings: &Settings,
+    settings: &mut Settings,
     cmds: &mut Commands,
 ) {
     if !p.open {
@@ -450,7 +532,7 @@ pub fn show(
     if let Some(t) = tab {
         all.extend(files(t, &q));
     }
-    let matches = ranked(all, &q);
+    let matches = ranked(all, &q, &settings.palette_recent);
     p.selected = p.selected.min(matches.len().saturating_sub(1));
 
     let (up, down, enter, esc) = ctx.input(|i| {
@@ -470,65 +552,57 @@ pub fn show(
 
     let mut run = None;
     let screen = ctx.content_rect();
+    let width = WIDTH.min(screen.width() - 40.0);
     egui::Area::new(egui::Id::unique("palette"))
-        .fixed_pos(egui::pos2(screen.center().x - 260.0, screen.top() + 80.0))
+        .fixed_pos(egui::pos2(
+            screen.center().x - width / 2.0,
+            screen.top() + 72.0,
+        ))
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_width(520.0);
-                let resp = ui.add(
-                    egui::TextEdit::singleline(&mut p.query)
-                        .hint_text(t!("Type a command, branch or file…"))
-                        .desired_width(f32::INFINITY),
-                );
-                if p.just_opened {
-                    resp.request_focus();
-                    p.just_opened = false;
-                }
-                if resp.changed() {
+            let frame = egui::Frame::popup(ui.style())
+                .corner_radius(theme::RADIUS_LARGE)
+                .inner_margin(egui::Margin::same(theme::SPACE_M as i8));
+            frame.show(ui, |ui| {
+                ui.set_width(width);
+                if search_field(ui, p) {
                     p.selected = 0;
                 }
+                ui.add_space(theme::SPACE_S);
                 ui.separator();
                 egui::ScrollArea::vertical()
-                    .max_height(400.0)
+                    .max_height(420.0)
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 0.0;
                         // Leave room for the scroll bar.
                         let width = ui.available_width() - 12.0;
                         let mut group = None;
-                        for (i, e) in matches.iter().enumerate() {
-                            if group != Some(e.group) {
-                                group = Some(e.group);
-                                if i > 0 {
-                                    ui.add_space(4.0);
-                                }
-                                let (r, _) = ui.allocate_exact_size(
-                                    egui::vec2(width, 20.0),
-                                    egui::Sense::hover(),
-                                );
-                                ui.painter().text(
-                                    r.left_center() + egui::vec2(6.0, 0.0),
-                                    egui::Align2::LEFT_CENTER,
-                                    e.group.label(),
-                                    egui::FontId::proportional(11.0),
-                                    ui.visuals().weak_text_color(),
-                                );
+                        for (i, (g, e)) in matches.iter().enumerate() {
+                            if group != Some(*g) {
+                                group = Some(*g);
+                                group_header(ui, *g, width, i > 0);
                             }
-                            if row(ui, e, width, i == p.selected, up || down) {
+                            if row(ui, e, &q, width, i == p.selected, up || down) {
                                 run = Some(i);
                             }
                         }
                         if matches.is_empty() {
-                            ui.weak(t!("No matching command."));
+                            ui.add_space(theme::SPACE_L);
+                            ui.vertical_centered(|ui| ui.weak(t!("No matching command.")));
+                            ui.add_space(theme::SPACE_L);
                         }
                     });
+                ui.separator();
+                footer(ui);
             });
         });
     if enter && !matches.is_empty() {
         run = Some(p.selected);
     }
     if let Some(i) = run {
-        cmds.push((matches[i].make)());
+        let e = &matches[i].1;
+        remember(&mut settings.palette_recent, &e.label);
+        cmds.push((e.make)());
         p.open = false;
     }
     if esc {
@@ -536,40 +610,172 @@ pub fn show(
     }
 }
 
+/// Width of the palette.
+const WIDTH: f32 = 580.0;
+
+/// The query field with a search icon. Returns true when the text changed.
+fn search_field(ui: &mut egui::Ui, p: &mut Palette) -> bool {
+    ui.horizontal(|ui| {
+        ui.add_space(theme::SPACE_S);
+        ui.label(
+            egui::RichText::new(icons::SEARCH)
+                .size(17.0)
+                .color(ui.visuals().weak_text_color()),
+        );
+        let resp = ui.add(
+            egui::TextEdit::singleline(&mut p.query)
+                .hint_text(t!("Type a command, branch or file…"))
+                .font(egui::FontId::proportional(15.0))
+                .frame(egui::Frame::NONE)
+                .margin(egui::vec2(4.0, 6.0))
+                .desired_width(f32::INFINITY),
+        );
+        if p.just_opened {
+            resp.request_focus();
+            p.just_opened = false;
+        }
+        resp.changed()
+    })
+    .inner
+}
+
+fn group_header(ui: &mut egui::Ui, g: Group, width: f32, gap: bool) {
+    if gap {
+        ui.add_space(theme::SPACE_S);
+    }
+    let (r, _) = ui.allocate_exact_size(egui::vec2(width, 22.0), egui::Sense::hover());
+    ui.painter().text(
+        r.left_center() + egui::vec2(8.0, 1.0),
+        egui::Align2::LEFT_CENTER,
+        g.label().to_uppercase(),
+        theme::strong_font(10.5),
+        ui.visuals().weak_text_color(),
+    );
+}
+
+/// Keys of the palette, at the bottom.
+fn footer(ui: &mut egui::Ui) {
+    ui.horizontal(|ui| {
+        ui.add_space(theme::SPACE_S);
+        let weak = ui.visuals().weak_text_color();
+        for (key, what) in [
+            ("↑↓", t!("move")),
+            ("Enter", t!("run")),
+            ("Esc", t!("close")),
+        ] {
+            key_cap(ui, key);
+            ui.label(egui::RichText::new(what).size(11.5).color(weak));
+            ui.add_space(theme::SPACE_S);
+        }
+    });
+}
+
+/// A key name in a small rounded box.
+fn key_cap(ui: &mut egui::Ui, key: &str) {
+    let v = ui.visuals();
+    let font = egui::FontId::proportional(11.0);
+    let color = v.text_color();
+    let galley = ui.painter().layout_no_wrap(key.to_owned(), font, color);
+    let size = galley.size() + egui::vec2(10.0, 4.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let v = ui.visuals();
+    ui.painter().rect(
+        rect,
+        4.0,
+        v.widgets.inactive.weak_bg_fill,
+        v.widgets.noninteractive.bg_stroke,
+        egui::StrokeKind::Inside,
+    );
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, color);
+}
+
+/// The label with the characters matching `q` in `hl`, semibold.
+fn label_job(
+    text: &str,
+    q: &str,
+    color: egui::Color32,
+    hl: egui::Color32,
+) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let hits = matched_chars(text, q);
+    let mut part = String::new();
+    let mut part_hit = false;
+    let flush = |job: &mut egui::text::LayoutJob, part: &mut String, hit: bool| {
+        if part.is_empty() {
+            return;
+        }
+        let format = if hit {
+            egui::TextFormat::simple(theme::strong_font(13.5), hl)
+        } else {
+            egui::TextFormat::simple(egui::FontId::proportional(13.5), color)
+        };
+        job.append(part, 0.0, format);
+        part.clear();
+    };
+    for (i, ch) in text.chars().enumerate() {
+        let hit = hits.contains(&i);
+        if hit != part_hit {
+            flush(&mut job, &mut part, part_hit);
+            part_hit = hit;
+        }
+        part.push(ch);
+    }
+    flush(&mut job, &mut part, part_hit);
+    job
+}
+
 /// One result row. Returns true when clicked.
-fn row(ui: &mut egui::Ui, e: &Entry, width: f32, selected: bool, moved: bool) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, 24.0), egui::Sense::click());
+fn row(ui: &mut egui::Ui, e: &Entry, q: &str, width: f32, selected: bool, moved: bool) -> bool {
+    let height = theme::row_height() + 4.0;
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &e.label));
     let visuals = ui.visuals();
     if selected {
         ui.painter()
-            .rect_filled(rect, 4.0, visuals.selection.bg_fill);
+            .rect_filled(rect, theme::RADIUS, visuals.selection.bg_fill);
     } else if resp.hovered() {
         ui.painter()
-            .rect_filled(rect, 4.0, visuals.widgets.hovered.weak_bg_fill);
+            .rect_filled(rect, theme::RADIUS, visuals.widgets.hovered.weak_bg_fill);
     }
-    let color = if selected {
-        visuals.selection.stroke.color
+    let (color, weak, hl) = if selected {
+        let c = visuals.selection.stroke.color;
+        (c, c.gamma_multiply(0.75), c)
     } else {
-        visuals.text_color()
+        (
+            visuals.text_color(),
+            visuals.weak_text_color(),
+            theme::accent(ui),
+        )
     };
-    let label_area = rect.with_max_x(rect.right() - 110.0);
-    ui.painter().with_clip_rect(label_area).text(
-        rect.left_center() + egui::vec2(8.0, 0.0),
-        egui::Align2::LEFT_CENTER,
-        &e.label,
-        egui::FontId::proportional(13.5),
+    let painter = ui.painter();
+    painter.text(
+        rect.left_center() + egui::vec2(18.0, 0.0),
+        egui::Align2::CENTER_CENTER,
+        e.icon,
+        egui::FontId::proportional(15.0),
+        if selected { color } else { weak },
+    );
+    let mut right = rect.right() - 10.0;
+    if !e.shortcut.is_empty() {
+        let g = painter.layout_no_wrap(e.shortcut.clone(), egui::FontId::proportional(12.0), weak);
+        right -= g.size().x;
+        painter.galley(
+            egui::pos2(right, rect.center().y - g.size().y / 2.0),
+            g,
+            weak,
+        );
+        right -= 16.0;
+    }
+    let left = rect.left() + 36.0;
+    let mut job = label_job(&e.label, q, color, hl);
+    job.wrap = egui::text::TextWrapping::truncate_at_width((right - left).max(10.0));
+    let galley = ui.fonts_mut(|f| f.layout_job(job));
+    ui.painter().galley(
+        egui::pos2(left, rect.center().y - galley.size().y / 2.0),
+        galley,
         color,
     );
-    if !e.shortcut.is_empty() {
-        ui.painter().text(
-            rect.right_center() - egui::vec2(8.0, 0.0),
-            egui::Align2::RIGHT_CENTER,
-            &e.shortcut,
-            egui::FontId::proportional(12.0),
-            visuals.weak_text_color(),
-        );
-    }
     if selected && moved {
         resp.scroll_to_me(None);
     }
@@ -594,17 +800,59 @@ mod tests {
         let list = vec![
             e(Group::Commands, "Fetch all remotes"),
             e(Group::Branches, "Check out feature"),
-            e(Group::Files, "📄 feature.rs"),
+            e(Group::Files, "feature.rs"),
             e(Group::Commands, "New branch…"),
         ];
-        let out = ranked(list, "feature");
-        let labels: Vec<&str> = out.iter().map(|e| e.label.as_str()).collect();
-        assert_eq!(labels, ["📄 feature.rs", "Check out feature"]);
+        let out = ranked(list, "feature", &[]);
+        let labels: Vec<&str> = out.iter().map(|(_, e)| e.label.as_str()).collect();
+        assert_eq!(labels, ["feature.rs", "Check out feature"]);
         // Without a query: the fixed group order.
         let list = vec![e(Group::Tabs, "Switch to x"), e(Group::Commands, "Refresh")];
-        assert_eq!(ranked(list, "")[0].group, Group::Commands);
+        assert_eq!(ranked(list, "", &[])[0].1.group, Group::Commands);
         // Keywords are searched too.
         let list = vec![e(Group::Commands, "Add worktree…").keywords("create new worktree")];
-        assert_eq!(ranked(list, "create worktree").len(), 1);
+        assert_eq!(ranked(list, "create worktree", &[]).len(), 1);
+    }
+
+    #[test]
+    fn recent_entries_come_first() {
+        let e = |g, l: &str| Entry::new(g, l, "", || Command::Refresh);
+        let list = vec![
+            e(Group::Commands, "Fetch all"),
+            e(Group::Commands, "Pull"),
+            e(Group::Branches, "Check out topic"),
+        ];
+        let mut recent = Vec::new();
+        remember(&mut recent, "Pull");
+        remember(&mut recent, "Check out topic");
+        remember(&mut recent, "Pull");
+        assert_eq!(recent, ["Pull", "Check out topic"]);
+        // Without a query: a group of their own, newest first.
+        let out = ranked(list, "", &recent);
+        let shown: Vec<(Group, &str)> = out.iter().map(|(g, e)| (*g, e.label.as_str())).collect();
+        assert_eq!(
+            shown,
+            [
+                (Group::Recent, "Pull"),
+                (Group::Recent, "Check out topic"),
+                (Group::Commands, "Fetch all"),
+            ]
+        );
+        // With a query they rank higher in their group.
+        let list = vec![
+            e(Group::Commands, "Push…"),
+            e(Group::Commands, "Pull with options…"),
+        ];
+        let out = ranked(list, "pu", &["Pull with options…".to_owned()]);
+        assert_eq!(out[0].1.label, "Pull with options…");
+    }
+
+    #[test]
+    fn highlights_matched_characters() {
+        assert_eq!(matched_chars("Fetch all", "all"), [6, 7, 8]);
+        assert_eq!(matched_chars("Fetch all remotes", "far"), [0, 6, 10]);
+        assert_eq!(matched_chars("Ação rápida", "rá"), [5, 6]);
+        assert!(matched_chars("Pull", "xyz").is_empty());
+        assert!(matched_chars("Pull", "").is_empty());
     }
 }

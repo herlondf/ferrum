@@ -58,7 +58,7 @@ pub struct FerrumApp {
 /// submodule|submodule-update|lfs`,
 /// `dialog:fetch|pull|push-many|push-tags|track|remote`,
 /// `select:unstaged:PATH`, `select:staged:PATH`, `search:TEXT`,
-/// `sidebar:open:KEY|pin:REF|filter:TEXT|focus` (see `sidebar::dev_step`),
+/// `sidebar:open:KEY|pin:REF|filter:TEXT|focus|drop:SRC>DST` (see `sidebar::dev_step`),
 /// `activity`, `fetch`, `stats`, `collapse-all`, `vertical`,
 /// `graph:reflog|first-parent|topo|no-remotes|only=REF|hide=REF`,
 /// `local:tree|flat|combined|amend|templates|msg=TEXT` (local changes view),
@@ -1178,7 +1178,7 @@ impl eframe::App for FerrumApp {
             &mut self.palette,
             self.tabs.get_mut(self.active),
             &names,
-            &self.settings,
+            &mut self.settings,
             &mut cmds,
         );
 

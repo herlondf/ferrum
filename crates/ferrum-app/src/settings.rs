@@ -175,6 +175,9 @@ pub struct Settings {
     /// Hosted services: remote per repository, issue searches, review prompt.
     #[serde(default)]
     pub forge: crate::hosted::ForgePrefs,
+    /// Command palette entries run last, newest first.
+    #[serde(default)]
+    pub palette_recent: Vec<String>,
 }
 
 /// File watching, refreshes, notifications and update checks.
@@ -240,6 +243,7 @@ impl Default for Settings {
             keymap: Default::default(),
             custom: Default::default(),
             forge: Default::default(),
+            palette_recent: Vec::new(),
         }
     }
 }
